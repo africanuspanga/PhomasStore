@@ -30,7 +30,7 @@ export function ProductCard({ product, viewMode = "grid" }: ProductCardProps) {
         name: product.name,
         price: product.price,
         referenceNumber: product.referenceNumber,
-        imageUrl: product.imageUrl,
+        imageUrl: product.imageUrl || undefined,
       },
       quantity,
       product.availableQuantity

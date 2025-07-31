@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { useCart } from "@/contexts/CartContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { ecountService } from "@/services/ecountService";
-import { ShoppingCart, Plus, Minus, Trash2, Send, Package } from "lucide-react";
+import { ShoppingCart as ShoppingCartIcon, Plus, Minus, Trash2, Send, Package } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { OrderItem } from "@shared/schema";
@@ -91,7 +91,7 @@ export function ShoppingCart({ isOpen, onClose }: ShoppingCartProps) {
           <CardHeader className="border-b">
             <div className="flex items-center justify-between">
               <CardTitle className="flex items-center space-x-2">
-                <ShoppingCart className="h-5 w-5" />
+                <ShoppingCartIcon className="h-5 w-5" />
                 <span>Shopping Cart</span>
                 {itemCount > 0 && (
                   <Badge variant="secondary">{itemCount}</Badge>

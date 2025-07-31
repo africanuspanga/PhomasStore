@@ -148,7 +148,12 @@ export class MemStorage implements IStorage {
 
   async createProduct(product: InsertProduct): Promise<Product> {
     const id = `PROD${String(this.products.size + 1).padStart(3, '0')}`;
-    const newProduct: Product = { ...product, id };
+    const newProduct: Product = { 
+      ...product, 
+      id,
+      imageUrl: product.imageUrl || null,
+      category: product.category || null
+    };
     this.products.set(id, newProduct);
     return newProduct;
   }
@@ -176,6 +181,7 @@ export class MemStorage implements IStorage {
       ...insertOrder,
       id,
       orderNumber,
+      status: insertOrder.status || "processing",
       createdAt: new Date(),
     };
     
