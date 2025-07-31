@@ -152,7 +152,7 @@ export default function OrderHistory() {
                           </div>
                         </td>
                         <td className="py-4 px-4 font-semibold text-phomas-green">
-                          TZS {parseFloat(order.total).toLocaleString()}
+                          TZS {Math.round(parseFloat(order.total)).toLocaleString()}
                         </td>
                         <td className="py-4 px-4">
                           <Badge className={`flex items-center space-x-1 ${getStatusColor(order.status)}`}>

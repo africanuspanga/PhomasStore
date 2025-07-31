@@ -130,7 +130,7 @@ export default function Cart() {
                         <h3 className="font-semibold text-gray-800">{item.name}</h3>
                         <p className="text-sm text-gray-600">{item.referenceNumber}</p>
                         <p className="text-sm font-medium text-phomas-green">
-                          TZS {parseFloat(item.price).toLocaleString()} each
+                          TZS {parseInt(item.price).toLocaleString()} each
                         </p>
                       </div>
                     </div>
@@ -163,7 +163,7 @@ export default function Cart() {
 
                       <div className="text-right">
                         <p className="font-bold text-phomas-green">
-                          TZS {(parseFloat(item.price) * item.quantity).toLocaleString()}
+                          TZS {(parseInt(item.price) * item.quantity).toLocaleString()}
                         </p>
                         <Button
                           variant="ghost"
@@ -184,15 +184,15 @@ export default function Cart() {
                 <div className="space-y-2 mb-6">
                   <div className="flex justify-between">
                     <span className="text-gray-600">Subtotal:</span>
-                    <span className="font-medium">TZS {subtotal.toLocaleString()}</span>
+                    <span className="font-medium">TZS {Math.round(subtotal).toLocaleString()}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-600">Tax (18%):</span>
-                    <span className="font-medium">TZS {tax.toLocaleString()}</span>
+                    <span className="font-medium">TZS {Math.round(tax).toLocaleString()}</span>
                   </div>
                   <div className="flex justify-between text-lg font-bold text-phomas-green">
                     <span>Total:</span>
-                    <span>TZS {total.toLocaleString()}</span>
+                    <span>TZS {Math.round(total).toLocaleString()}</span>
                   </div>
                 </div>
 

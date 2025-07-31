@@ -42,7 +42,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   const itemCount = items.reduce((total, item) => total + item.quantity, 0);
 
-  const subtotal = items.reduce((total, item) => total + parseFloat(item.price) * item.quantity, 0);
+  const subtotal = items.reduce((total, item) => total + parseInt(item.price) * item.quantity, 0);
 
   const tax = subtotal * TAX_RATE;
 
