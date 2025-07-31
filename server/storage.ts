@@ -58,18 +58,18 @@ export class MemStorage implements IStorage {
       createdAt: new Date(),
     });
 
-    // Initialize products
+    // Initialize products with TZS prices (1 EUR = 3000 TZS conversion)
     const sampleProducts = [
-      { id: "PROD001", name: "Pain Reliever Tablets", packaging: "Box of 100", referenceNumber: "PHM-PRT-100", price: "12.50", imageUrl: "https://images.unsplash.com/photo-1584362917165-526a968579e8?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300", category: "Pain Relief" },
-      { id: "PROD002", name: "Antibiotic Capsules", packaging: "Bottle of 30", referenceNumber: "PHM-ABC-030", price: "24.99", imageUrl: "https://images.unsplash.com/photo-1559757148-5c350d0d3c56?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300", category: "Antibiotics" },
-      { id: "PROD003", name: "Digital Thermometer", packaging: "Professional grade", referenceNumber: "PHM-THM-001", price: "45.00", imageUrl: "https://images.unsplash.com/photo-1559757175-0eb30cd8c063?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300", category: "Diagnostic Tools" },
-      { id: "PROD004", name: "Blood Pressure Monitor", packaging: "Digital automatic", referenceNumber: "PHM-BPM-001", price: "89.99", imageUrl: "https://images.unsplash.com/photo-1559757148-5c350d0d3c56?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300", category: "Diagnostic Tools" },
-      { id: "PROD005", name: "Surgical Gloves", packaging: "Box of 100", referenceNumber: "PHM-GLV-100", price: "15.99", imageUrl: "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300", category: "Medical Supplies" },
-      { id: "PROD006", name: "Stethoscope", packaging: "Professional dual head", referenceNumber: "PHM-STH-001", price: "125.00", imageUrl: "https://images.unsplash.com/photo-1559757148-5c350d0d3c56?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300", category: "Diagnostic Tools" },
-      { id: "PROD007", name: "Bandages Assorted", packaging: "Pack of 50", referenceNumber: "PHM-BND-050", price: "8.75", imageUrl: "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300", category: "Medical Supplies" },
-      { id: "PROD008", name: "IV Catheter Set", packaging: "Sterile pack of 10", referenceNumber: "PHM-IVC-010", price: "32.50", imageUrl: "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300", category: "Medical Supplies" },
-      { id: "PROD009", name: "Insulin Syringes", packaging: "Box of 100", referenceNumber: "PHM-INS-100", price: "18.99", imageUrl: "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300", category: "Medical Supplies" },
-      { id: "PROD010", name: "Antiseptic Solution", packaging: "500ml bottle", referenceNumber: "PHM-ANT-500", price: "9.99", imageUrl: "https://images.unsplash.com/photo-1559757148-5c350d0d3c56?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300", category: "Antibiotics" },
+      { id: "PROD001", name: "Pain Reliever Tablets", packaging: "Box of 100", referenceNumber: "PHM-PRT-100", price: "37500", imageUrl: "https://images.unsplash.com/photo-1584362917165-526a968579e8?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300", category: "Pain Relief" },
+      { id: "PROD002", name: "Antibiotic Capsules", packaging: "Bottle of 30", referenceNumber: "PHM-ABC-030", price: "74970", imageUrl: "https://images.unsplash.com/photo-1559757148-5c350d0d3c56?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300", category: "Antibiotics" },
+      { id: "PROD003", name: "Digital Thermometer", packaging: "Professional grade", referenceNumber: "PHM-THM-001", price: "135000", imageUrl: "https://images.unsplash.com/photo-1559757175-0eb30cd8c063?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300", category: "Diagnostic Tools" },
+      { id: "PROD004", name: "Blood Pressure Monitor", packaging: "Digital automatic", referenceNumber: "PHM-BPM-001", price: "269970", imageUrl: "https://images.unsplash.com/photo-1559757148-5c350d0d3c56?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300", category: "Diagnostic Tools" },
+      { id: "PROD005", name: "Surgical Gloves", packaging: "Box of 100", referenceNumber: "PHM-GLV-100", price: "47970", imageUrl: "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300", category: "Medical Supplies" },
+      { id: "PROD006", name: "Stethoscope", packaging: "Professional dual head", referenceNumber: "PHM-STH-001", price: "375000", imageUrl: "https://images.unsplash.com/photo-1559757148-5c350d0d3c56?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300", category: "Diagnostic Tools" },
+      { id: "PROD007", name: "Bandages Assorted", packaging: "Pack of 50", referenceNumber: "PHM-BND-050", price: "26250", imageUrl: "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300", category: "Medical Supplies" },
+      { id: "PROD008", name: "IV Catheter Set", packaging: "Sterile pack of 10", referenceNumber: "PHM-IVC-010", price: "97500", imageUrl: "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300", category: "Medical Supplies" },
+      { id: "PROD009", name: "Insulin Syringes", packaging: "Box of 100", referenceNumber: "PHM-INS-100", price: "56970", imageUrl: "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300", category: "Medical Supplies" },
+      { id: "PROD010", name: "Antiseptic Solution", packaging: "500ml bottle", referenceNumber: "PHM-ANT-500", price: "29970", imageUrl: "https://images.unsplash.com/photo-1559757148-5c350d0d3c56?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300", category: "Antibiotics" },
     ];
 
     sampleProducts.forEach(product => {
