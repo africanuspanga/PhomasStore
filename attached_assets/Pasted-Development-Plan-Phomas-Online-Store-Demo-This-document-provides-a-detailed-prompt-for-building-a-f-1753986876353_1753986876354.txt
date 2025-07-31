@@ -1,0 +1,146 @@
+Development Plan: Phomas Online Store Demo
+This document provides a detailed prompt for building a fully-functional demo of the "Phomas Online Store" system. The primary goal is to create a high-fidelity prototype that perfectly mirrors the requested functionality and visual design, but uses static, mock data instead of a live API.
+
+The architecture is designed to be modular, so once the necessary credentials are provided by the store owner, the mock data layer can be easily and quickly swapped out for real API calls to the eCOUNT system.
+
+1. Technical Stack
+The project should be built using a modern full-stack JavaScript environment. This provides a unified language for both the front-end and back-end, making the transition to API integration seamless.
+
+Front-End: React.js
+
+Back-End: Node.js with Express.js (or use Next.js API routes for a unified solution)
+
+Styling: Tailwind CSS for rapid and responsive UI development. The design must be mobile-first and look professional.
+
+Local Data Storage: For the demo, all data will be stored in simple JSON files in a dedicated src/data directory.
+
+2. Visual Design & Branding
+Store Name: Phomas Online Store
+
+Color Palette: The primary brand colors are derived from the provided logo and screenshots.
+
+Primary Brand Color (Green): #015a5a (a deep, professional medical green)
+
+Accent Color (Blue): #007bff (a standard blue for links and actions)
+
+Text/UI: bg-gray-100 for backgrounds, text-gray-800 for primary text.
+
+Layout: The layout should be clean, responsive, and follow the design cues from the provided screenshots, including the left-side navigation bar.
+
+3. Back-End Development (Mock API & Logic)
+The back-end's role is to simulate the eCOUNT API and manage user accounts for the demo.
+
+Mock Data: Create the following JSON files within a src/data directory:
+
+products.json: An array of at least 20 sample products. Each product object must include the following fields to match the expected eCOUNT data structure:
+
+id (e.g., "PROD001")
+
+name (e.g., "Pain Reliever Tablets")
+
+packaging (e.g., "Box of 100")
+
+referenceNumber (e.g., "PHM-PRT-100")
+
+price (e.g., 12.50)
+
+imageUrl (use a placeholder, like a https://placehold.co/200x200 URL)
+
+inventory.json: An array of inventory records, linked to products by productId. This file must include:
+
+productId
+
+availableQuantity (e.g., 50). For the demo, ensure some items have low stock.
+
+expirationDate (e.g., "2026-03-15"). Include some dates that are near the current date to demonstrate the "Shelf Life Notice" functionality.
+
+users.json: An array of mock user accounts. This must include at least one client and one admin account.
+
+id, email, password, companyName, role ("client" or "admin")
+
+orders.json: An array to temporarily store placed orders.
+
+Mock API Endpoints: Build a Node.js/Express server with the following endpoints. These will be the only part of the code that needs to be changed when integrating with eCOUNT.
+
+GET /api/products: Returns a list of all products combined with their inventory data.
+
+POST /api/auth/register: Takes companyName, email, and password. Validates the input and saves the new user to users.json. The role should be "client".
+
+POST /api/auth/login: Takes email and password. Authenticates against users.json and returns a simple mock JWT or a success message.
+
+POST /api/orders: Accepts an order payload from the front-end, saves it to orders.json, and returns a mock order number.
+
+GET /api/orders/:userId: Returns a list of orders from orders.json filtered by the user's ID.
+
+4. Front-End Development (React & Tailwind CSS)
+The front-end should be a single-page application that interacts with the mock back-end API.
+
+Pages & Components:
+
+Login/Registration: Create a clean, branded page with forms for both login and registration.
+
+Main Store Page (/):
+
+Display the "Phomas Online Store" logo and branding prominently.
+
+Implement the two-column layout from the screenshots, with a left-side navigation bar and a main product grid/list on the right.
+
+Product Display: Fetch products from the /api/products endpoint. For each product, show the image (placeholder), name, packaging, reference number, and available quantity.
+
+Dynamic UI: Implement a toggle to switch between a grid and list view.
+
+"Shelf Life Notice": Products with an expirationDate less than 90 days away should have a distinct visual indicator (e.g., a colored border, a small icon, or text).
+
+Search Functionality: A working search bar that filters the displayed products in real-time based on name or referenceNumber.
+
+"Add to Cart" Button: This button must be functional. When clicked, it adds the product to a local state management solution (e.g., React Context or a simple useState hook). It must validate that the requested quantity does not exceed the availableQuantity.
+
+Shopping Cart Page (/cart):
+
+Display all items in the cart, with options to adjust quantities or remove items.
+
+Show a running total.
+
+A prominent "Send to E-count" button. For the demo, this button will call the mock POST /api/orders endpoint, clear the cart, and display a success message with the mock order number.
+
+User Dashboard:
+
+A page with all the navigation links from the screenshot (Home Page, Shopping Cart, Orders history, Invoices, Delivery notes, Packing-list, Complaint, Logout).
+
+Only Orders history and Shopping Cart need to be fully functional for the demo.
+
+Orders history should fetch and display orders from the mock /api/orders/:userId endpoint.
+
+Admin Panel (/admin):
+
+A simple, password-protected page accessible only by the admin user.
+
+It should display a list of all registered users from the users.json file.
+
+It could also display a list of all products and their mock inventory.
+
+5. Future-Proofing for eCOUNT Integration
+This is the most crucial part of the architecture.
+
+Create a services/ecountService.js file. All back-end logic related to fetching data and placing orders should be contained within functions in this file.
+
+Example initial function:
+
+export const getProducts = async () => {
+  // For demo, fetch from local mock API
+  const response = await fetch('/api/products');
+  const data = await response.json();
+  return data;
+};
+
+export const placeOrder = async (orderPayload) => {
+  // For demo, post to local mock API
+  const response = await fetch('/api/orders', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(orderPayload)
+  });
+  return await response.json();
+};
+
+Easy Swap: Once eCOUNT API credentials are provided, the developer only needs to modify the functions in this one file to make the real API calls. The rest of the front-end and back-end logic will remain the same. The data returned by the real API calls should be transformed to match the same structure as the mock data, ensuring a seamless transition.
