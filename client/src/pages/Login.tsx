@@ -1,0 +1,239 @@
+import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Checkbox } from "@/components/ui/checkbox";
+import { useAuth } from "@/contexts/AuthContext";
+import { insertUserSchema, loginSchema } from "@shared/schema";
+import { useLocation } from "wouter";
+import { z } from "zod";
+
+const registerFormSchema = insertUserSchema.extend({
+  terms: z.boolean().refine((val) => val === true, {
+    message: "You must accept the terms and conditions",
+  }),
+});
+
+type LoginFormData = z.infer<typeof loginSchema>;
+type RegisterFormData = z.infer<typeof registerFormSchema>;
+
+export default function Login() {
+  const [isLogin, setIsLogin] = useState(true);
+  const { login, register, isLoading } = useAuth();
+  const [, setLocation] = useLocation();
+
+  const loginForm = useForm<LoginFormData>({
+    resolver: zodResolver(loginSchema),
+    defaultValues: {
+      email: "",
+      password: "",
+    },
+  });
+
+  const registerForm = useForm<RegisterFormData>({
+    resolver: zodResolver(registerFormSchema),
+    defaultValues: {
+      email: "",
+      password: "",
+      companyName: "",
+      terms: false,
+    },
+  });
+
+  const onLoginSubmit = async (data: LoginFormData) => {
+    const success = await login(data);
+    if (success) {
+      setLocation("/");
+    }
+  };
+
+  const onRegisterSubmit = async (data: RegisterFormData) => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { terms, ...userData } = data;
+    const success = await register(userData);
+    if (success) {
+      setLocation("/");
+    }
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-100 p-4">
+      <Card className="w-full max-w-md">
+        <CardHeader className="text-center">
+          {/* Company Logo */}
+          <div className="flex items-center justify-center mb-4">
+            <div className="w-12 h-12 bg-phomas-green rounded-lg flex items-center justify-center mr-3">
+              <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+              </svg>
+            </div>
+            <div>
+              <h2 className="text-2xl font-bold text-phomas-green">PHOMAS</h2>
+              <p className="text-sm text-gray-600">Diagnostics</p>
+            </div>
+          </div>
+          <CardTitle className="text-xl">
+            {isLogin ? "Welcome Back" : "Create Account"}
+          </CardTitle>
+          <p className="text-gray-600">
+            {isLogin ? "Sign in to your medical supply account" : "Join our medical supply platform"}
+          </p>
+        </CardHeader>
+
+        <CardContent>
+          {isLogin ? (
+            <Form {...loginForm}>
+              <form onSubmit={loginForm.handleSubmit(onLoginSubmit)} className="space-y-4">
+                <FormField
+                  control={loginForm.control}
+                  name="email"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Email Address</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="email"
+                          placeholder="your.email@company.com"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={loginForm.control}
+                  name="password"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Password</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="password"
+                          placeholder="Enter your password"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <Button
+                  type="submit"
+                  className="w-full bg-phomas-green hover:bg-phomas-green/90"
+                  disabled={isLoading}
+                >
+                  {isLoading ? "Signing In..." : "Sign In"}
+                </Button>
+              </form>
+            </Form>
+          ) : (
+            <Form {...registerForm}>
+              <form onSubmit={registerForm.handleSubmit(onRegisterSubmit)} className="space-y-4">
+                <FormField
+                  control={registerForm.control}
+                  name="companyName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Company Name</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="Your Medical Practice"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={registerForm.control}
+                  name="email"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Email Address</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="email"
+                          placeholder="admin@yourpractice.com"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={registerForm.control}
+                  name="password"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Password</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="password"
+                          placeholder="Create a secure password"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={registerForm.control}
+                  name="terms"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                      <FormControl>
+                        <Checkbox
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                        />
+                      </FormControl>
+                      <div className="space-y-1 leading-none">
+                        <FormLabel className="text-sm">
+                          I agree to the Terms of Service and Privacy Policy
+                        </FormLabel>
+                        <FormMessage />
+                      </div>
+                    </FormItem>
+                  )}
+                />
+
+                <Button
+                  type="submit"
+                  className="w-full bg-phomas-green hover:bg-phomas-green/90"
+                  disabled={isLoading}
+                >
+                  {isLoading ? "Creating Account..." : "Create Account"}
+                </Button>
+              </form>
+            </Form>
+          )}
+
+          <div className="text-center mt-6">
+            <p className="text-gray-600">
+              {isLogin ? "Don't have an account? " : "Already have an account? "}
+              <Button
+                variant="link"
+                className="text-phomas-blue hover:underline p-0"
+                onClick={() => setIsLogin(!isLogin)}
+              >
+                {isLogin ? "Register here" : "Sign in here"}
+              </Button>
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}

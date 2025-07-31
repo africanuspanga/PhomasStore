@@ -1,0 +1,182 @@
+[
+  {
+    "id": "PROD001",
+    "name": "Pain Reliever Tablets",
+    "packaging": "Box of 100 tablets",
+    "referenceNumber": "PHM-PRT-100",
+    "price": "12.50",
+    "imageUrl": "https://images.unsplash.com/photo-1584362917165-526a968579e8?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300",
+    "category": "Pain Relief"
+  },
+  {
+    "id": "PROD002",
+    "name": "Antibiotic Capsules",
+    "packaging": "Bottle of 30 capsules",
+    "referenceNumber": "PHM-ABC-030",
+    "price": "24.99",
+    "imageUrl": "https://images.unsplash.com/photo-1559757148-5c350d0d3c56?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300",
+    "category": "Antibiotics"
+  },
+  {
+    "id": "PROD003",
+    "name": "Digital Thermometer",
+    "packaging": "Professional grade",
+    "referenceNumber": "PHM-THM-001",
+    "price": "45.00",
+    "imageUrl": "https://images.unsplash.com/photo-1559757175-0eb30cd8c063?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300",
+    "category": "Diagnostic Tools"
+  },
+  {
+    "id": "PROD004",
+    "name": "Blood Pressure Monitor",
+    "packaging": "Digital automatic",
+    "referenceNumber": "PHM-BPM-001",
+    "price": "89.99",
+    "imageUrl": "https://images.unsplash.com/photo-1559757148-5c350d0d3c56?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300",
+    "category": "Diagnostic Tools"
+  },
+  {
+    "id": "PROD005",
+    "name": "Surgical Gloves",
+    "packaging": "Box of 100 pairs",
+    "referenceNumber": "PHM-GLV-100",
+    "price": "15.99",
+    "imageUrl": "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300",
+    "category": "Medical Supplies"
+  },
+  {
+    "id": "PROD006",
+    "name": "Stethoscope",
+    "packaging": "Professional dual head",
+    "referenceNumber": "PHM-STH-001",
+    "price": "125.00",
+    "imageUrl": "https://images.unsplash.com/photo-1559757148-5c350d0d3c56?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300",
+    "category": "Diagnostic Tools"
+  },
+  {
+    "id": "PROD007",
+    "name": "Bandages Assorted",
+    "packaging": "Pack of 50",
+    "referenceNumber": "PHM-BND-050",
+    "price": "8.75",
+    "imageUrl": "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300",
+    "category": "Medical Supplies"
+  },
+  {
+    "id": "PROD008",
+    "name": "IV Catheter Set",
+    "packaging": "Sterile pack of 10",
+    "referenceNumber": "PHM-IVC-010",
+    "price": "32.50",
+    "imageUrl": "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300",
+    "category": "Medical Supplies"
+  },
+  {
+    "id": "PROD009",
+    "name": "Insulin Syringes",
+    "packaging": "Box of 100",
+    "referenceNumber": "PHM-INS-100",
+    "price": "18.99",
+    "imageUrl": "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300",
+    "category": "Medical Supplies"
+  },
+  {
+    "id": "PROD010",
+    "name": "Antiseptic Solution",
+    "packaging": "500ml bottle",
+    "referenceNumber": "PHM-ANT-500",
+    "price": "9.99",
+    "imageUrl": "https://images.unsplash.com/photo-1559757148-5c350d0d3c56?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300",
+    "category": "Antibiotics"
+  },
+  {
+    "id": "PROD011",
+    "name": "ECG Electrodes",
+    "packaging": "Pack of 100",
+    "referenceNumber": "PHM-ECG-100",
+    "price": "22.50",
+    "imageUrl": "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300",
+    "category": "Diagnostic Tools"
+  },
+  {
+    "id": "PROD012",
+    "name": "Pulse Oximeter",
+    "packaging": "Digital fingertip",
+    "referenceNumber": "PHM-POX-001",
+    "price": "65.00",
+    "imageUrl": "https://images.unsplash.com/photo-1559757175-0eb30cd8c063?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300",
+    "category": "Diagnostic Tools"
+  },
+  {
+    "id": "PROD013",
+    "name": "Gauze Pads",
+    "packaging": "Sterile pack of 100",
+    "referenceNumber": "PHM-GAU-100",
+    "price": "11.25",
+    "imageUrl": "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300",
+    "category": "Medical Supplies"
+  },
+  {
+    "id": "PROD014",
+    "name": "Alcohol Wipes",
+    "packaging": "Box of 200",
+    "referenceNumber": "PHM-ALC-200",
+    "price": "14.99",
+    "imageUrl": "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300",
+    "category": "Medical Supplies"
+  },
+  {
+    "id": "PROD015",
+    "name": "Nebulizer Machine",
+    "packaging": "Portable compressor",
+    "referenceNumber": "PHM-NEB-001",
+    "price": "156.00",
+    "imageUrl": "https://images.unsplash.com/photo-1559757175-0eb30cd8c063?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300",
+    "category": "Diagnostic Tools"
+  },
+  {
+    "id": "PROD016",
+    "name": "Disposable Masks",
+    "packaging": "Box of 50",
+    "referenceNumber": "PHM-MSK-050",
+    "price": "19.99",
+    "imageUrl": "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300",
+    "category": "Medical Supplies"
+  },
+  {
+    "id": "PROD017",
+    "name": "Blood Glucose Meter",
+    "packaging": "Digital with strips",
+    "referenceNumber": "PHM-BGM-001",
+    "price": "42.50",
+    "imageUrl": "https://images.unsplash.com/photo-1559757175-0eb30cd8c063?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300",
+    "category": "Diagnostic Tools"
+  },
+  {
+    "id": "PROD018",
+    "name": "Medical Tape",
+    "packaging": "Roll of 12mm x 10m",
+    "referenceNumber": "PHM-TAP-010",
+    "price": "6.75",
+    "imageUrl": "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300",
+    "category": "Medical Supplies"
+  },
+  {
+    "id": "PROD019",
+    "name": "Otoscope",
+    "packaging": "Professional diagnostic",
+    "referenceNumber": "PHM-OTO-001",
+    "price": "98.00",
+    "imageUrl": "https://images.unsplash.com/photo-1559757175-0eb30cd8c063?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300",
+    "category": "Diagnostic Tools"
+  },
+  {
+    "id": "PROD020",
+    "name": "Specimen Containers",
+    "packaging": "Sterile pack of 50",
+    "referenceNumber": "PHM-SPC-050",
+    "price": "16.50",
+    "imageUrl": "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300",
+    "category": "Medical Supplies"
+  }
+]

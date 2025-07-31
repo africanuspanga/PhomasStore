@@ -1,0 +1,57 @@
+[
+  {
+    "id": "order_001",
+    "userId": "user_002",
+    "orderNumber": "ORD-20241201-001",
+    "items": "[{\"productId\":\"PROD001\",\"name\":\"Pain Reliever Tablets\",\"price\":\"12.50\",\"quantity\":2,\"referenceNumber\":\"PHM-PRT-100\"},{\"productId\":\"PROD004\",\"name\":\"Blood Pressure Monitor\",\"price\":\"89.99\",\"quantity\":1,\"referenceNumber\":\"PHM-BPM-001\"},{\"productId\":\"PROD010\",\"name\":\"Antiseptic Solution\",\"price\":\"9.99\",\"quantity\":3,\"referenceNumber\":\"PHM-ANT-500\"}]",
+    "subtotal": "144.97",
+    "tax": "11.60",
+    "total": "156.57",
+    "status": "delivered",
+    "createdAt": "2024-12-01T10:30:00.000Z"
+  },
+  {
+    "id": "order_002",
+    "userId": "user_002",
+    "orderNumber": "ORD-20241128-003",
+    "items": "[{\"productId\":\"PROD003\",\"name\":\"Digital Thermometer\",\"price\":\"45.00\",\"quantity\":1,\"referenceNumber\":\"PHM-THM-001\"},{\"productId\":\"PROD007\",\"name\":\"Bandages Assorted\",\"price\":\"8.75\",\"quantity\":2,\"referenceNumber\":\"PHM-BND-050\"}]",
+    "subtotal": "62.50",
+    "tax": "5.00",
+    "total": "67.50",
+    "status": "shipped",
+    "createdAt": "2024-11-28T14:15:00.000Z"
+  },
+  {
+    "id": "order_003",
+    "userId": "user_002",
+    "orderNumber": "ORD-20241125-007",
+    "items": "[{\"productId\":\"PROD004\",\"name\":\"Blood Pressure Monitor\",\"price\":\"89.99\",\"quantity\":1,\"referenceNumber\":\"PHM-BPM-001\"}]",
+    "subtotal": "89.99",
+    "tax": "7.20",
+    "total": "97.19",
+    "status": "processing",
+    "createdAt": "2024-11-25T09:45:00.000Z"
+  },
+  {
+    "id": "order_004",
+    "userId": "user_003",
+    "orderNumber": "ORD-20241120-015",
+    "items": "[{\"productId\":\"PROD005\",\"name\":\"Surgical Gloves\",\"price\":\"15.99\",\"quantity\":5,\"referenceNumber\":\"PHM-GLV-100\"},{\"productId\":\"PROD014\",\"name\":\"Alcohol Wipes\",\"price\":\"14.99\",\"quantity\":2,\"referenceNumber\":\"PHM-ALC-200\"}]",
+    "subtotal": "109.93",
+    "tax": "8.79",
+    "total": "118.72",
+    "status": "delivered",
+    "createdAt": "2024-11-20T16:20:00.000Z"
+  },
+  {
+    "id": "order_005",
+    "userId": "user_004",
+    "orderNumber": "ORD-20241118-022",
+    "items": "[{\"productId\":\"PROD006\",\"name\":\"Stethoscope\",\"price\":\"125.00\",\"quantity\":1,\"referenceNumber\":\"PHM-STH-001\"},{\"productId\":\"PROD017\",\"name\":\"Blood Glucose Meter\",\"price\":\"42.50\",\"quantity\":1,\"referenceNumber\":\"PHM-BGM-001\"}]",
+    "subtotal": "167.50",
+    "tax": "13.40",
+    "total": "180.90",
+    "status": "shipped",
+    "createdAt": "2024-11-18T11:30:00.000Z"
+  }
+]

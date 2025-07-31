@@ -1,0 +1,37 @@
+[
+  {
+    "id": "user_001",
+    "email": "admin@phomas.com",
+    "password": "admin123",
+    "companyName": "Phomas Diagnostics",
+    "role": "admin"
+  },
+  {
+    "id": "user_002",
+    "email": "admin@medcare.com",
+    "password": "medcare123",
+    "companyName": "MedCare Clinic",
+    "role": "client"
+  },
+  {
+    "id": "user_003",
+    "email": "contact@healthfirst.com",
+    "password": "health123",
+    "companyName": "HealthFirst Practice",
+    "role": "client"
+  },
+  {
+    "id": "user_004",
+    "email": "info@citymedical.com",
+    "password": "city123",
+    "companyName": "City Medical Center",
+    "role": "client"
+  },
+  {
+    "id": "user_005",
+    "email": "admin@wellnessclinic.com",
+    "password": "wellness123",
+    "companyName": "Wellness Clinic Group",
+    "role": "client"
+  }
+]
