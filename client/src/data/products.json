@@ -4,7 +4,7 @@
     "name": "Pain Reliever Tablets",
     "packaging": "Box of 100 tablets",
     "referenceNumber": "PHM-PRT-100",
-    "price": "12.50",
+    "price": "37500",
     "imageUrl": "https://images.unsplash.com/photo-1584362917165-526a968579e8?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300",
     "category": "Pain Relief"
   },
@@ -13,7 +13,7 @@
     "name": "Antibiotic Capsules",
     "packaging": "Bottle of 30 capsules",
     "referenceNumber": "PHM-ABC-030",
-    "price": "24.99",
+    "price": "74970",
     "imageUrl": "https://images.unsplash.com/photo-1559757148-5c350d0d3c56?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300",
     "category": "Antibiotics"
   },
@@ -22,7 +22,7 @@
     "name": "Digital Thermometer",
     "packaging": "Professional grade",
     "referenceNumber": "PHM-THM-001",
-    "price": "45.00",
+    "price": "135000",
     "imageUrl": "https://images.unsplash.com/photo-1559757175-0eb30cd8c063?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300",
     "category": "Diagnostic Tools"
   },
@@ -31,7 +31,7 @@
     "name": "Blood Pressure Monitor",
     "packaging": "Digital automatic",
     "referenceNumber": "PHM-BPM-001",
-    "price": "89.99",
+    "price": "269970",
     "imageUrl": "https://images.unsplash.com/photo-1559757148-5c350d0d3c56?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300",
     "category": "Diagnostic Tools"
   },
@@ -40,7 +40,7 @@
     "name": "Surgical Gloves",
     "packaging": "Box of 100 pairs",
     "referenceNumber": "PHM-GLV-100",
-    "price": "15.99",
+    "price": "47970",
     "imageUrl": "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300",
     "category": "Medical Supplies"
   },
@@ -49,7 +49,7 @@
     "name": "Stethoscope",
     "packaging": "Professional dual head",
     "referenceNumber": "PHM-STH-001",
-    "price": "125.00",
+    "price": "375000",
     "imageUrl": "https://images.unsplash.com/photo-1559757148-5c350d0d3c56?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300",
     "category": "Diagnostic Tools"
   },
@@ -58,7 +58,7 @@
     "name": "Bandages Assorted",
     "packaging": "Pack of 50",
     "referenceNumber": "PHM-BND-050",
-    "price": "8.75",
+    "price": "26250",
     "imageUrl": "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300",
     "category": "Medical Supplies"
   },
@@ -67,7 +67,7 @@
     "name": "IV Catheter Set",
     "packaging": "Sterile pack of 10",
     "referenceNumber": "PHM-IVC-010",
-    "price": "32.50",
+    "price": "97500",
     "imageUrl": "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300",
     "category": "Medical Supplies"
   },
@@ -76,7 +76,7 @@
     "name": "Insulin Syringes",
     "packaging": "Box of 100",
     "referenceNumber": "PHM-INS-100",
-    "price": "18.99",
+    "price": "56970",
     "imageUrl": "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300",
     "category": "Medical Supplies"
   },
@@ -85,7 +85,7 @@
     "name": "Antiseptic Solution",
     "packaging": "500ml bottle",
     "referenceNumber": "PHM-ANT-500",
-    "price": "9.99",
+    "price": "29970",
     "imageUrl": "https://images.unsplash.com/photo-1559757148-5c350d0d3c56?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300",
     "category": "Antibiotics"
   },
@@ -94,7 +94,7 @@
     "name": "ECG Electrodes",
     "packaging": "Pack of 100",
     "referenceNumber": "PHM-ECG-100",
-    "price": "22.50",
+    "price": "67500",
     "imageUrl": "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300",
     "category": "Diagnostic Tools"
   },
@@ -103,7 +103,7 @@
     "name": "Pulse Oximeter",
     "packaging": "Digital fingertip",
     "referenceNumber": "PHM-POX-001",
-    "price": "65.00",
+    "price": "195000",
     "imageUrl": "https://images.unsplash.com/photo-1559757175-0eb30cd8c063?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300",
     "category": "Diagnostic Tools"
   },
@@ -112,7 +112,7 @@
     "name": "Gauze Pads",
     "packaging": "Sterile pack of 100",
     "referenceNumber": "PHM-GAU-100",
-    "price": "11.25",
+    "price": "33750",
     "imageUrl": "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300",
     "category": "Medical Supplies"
   },
@@ -121,7 +121,7 @@
     "name": "Alcohol Wipes",
     "packaging": "Box of 200",
     "referenceNumber": "PHM-ALC-200",
-    "price": "14.99",
+    "price": "44970",
     "imageUrl": "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300",
     "category": "Medical Supplies"
   },
@@ -130,7 +130,7 @@
     "name": "Nebulizer Machine",
     "packaging": "Portable compressor",
     "referenceNumber": "PHM-NEB-001",
-    "price": "156.00",
+    "price": "468000",
     "imageUrl": "https://images.unsplash.com/photo-1559757175-0eb30cd8c063?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300",
     "category": "Diagnostic Tools"
   },
@@ -139,7 +139,7 @@
     "name": "Disposable Masks",
     "packaging": "Box of 50",
     "referenceNumber": "PHM-MSK-050",
-    "price": "19.99",
+    "price": "59970",
     "imageUrl": "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300",
     "category": "Medical Supplies"
   },
@@ -148,7 +148,7 @@
     "name": "Blood Glucose Meter",
     "packaging": "Digital with strips",
     "referenceNumber": "PHM-BGM-001",
-    "price": "42.50",
+    "price": "127500",
     "imageUrl": "https://images.unsplash.com/photo-1559757175-0eb30cd8c063?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300",
     "category": "Diagnostic Tools"
   },
@@ -157,7 +157,7 @@
     "name": "Medical Tape",
     "packaging": "Roll of 12mm x 10m",
     "referenceNumber": "PHM-TAP-010",
-    "price": "6.75",
+    "price": "20250",
     "imageUrl": "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300",
     "category": "Medical Supplies"
   },
@@ -166,7 +166,7 @@
     "name": "Otoscope",
     "packaging": "Professional diagnostic",
     "referenceNumber": "PHM-OTO-001",
-    "price": "98.00",
+    "price": "294000",
     "imageUrl": "https://images.unsplash.com/photo-1559757175-0eb30cd8c063?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300",
     "category": "Diagnostic Tools"
   },
@@ -175,7 +175,7 @@
     "name": "Specimen Containers",
     "packaging": "Sterile pack of 50",
     "referenceNumber": "PHM-SPC-050",
-    "price": "16.50",
+    "price": "49500",
     "imageUrl": "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300",
     "category": "Medical Supplies"
   }

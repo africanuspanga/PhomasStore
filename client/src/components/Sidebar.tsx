@@ -71,8 +71,8 @@ export function Sidebar({ open, onClose }: SidebarProps) {
           </div>
 
           <div className="space-y-2">
-            {navItems.map((item) => (
-              <Link key={item.href} href={item.href}>
+            {navItems.map((item, index) => (
+              <Link key={`${item.href}-${index}`} href={item.href}>
                 <div
                   className={cn(
                     "flex items-center px-4 py-3 rounded-lg transition-colors",
@@ -99,8 +99,8 @@ export function Sidebar({ open, onClose }: SidebarProps) {
 
             {isAdmin && (
               <div className="border-t border-gray-200 mt-6 pt-6">
-                {adminItems.map((item) => (
-                  <Link key={item.href} href={item.href}>
+                {adminItems.map((item, index) => (
+                  <Link key={`admin-${item.href}-${index}`} href={item.href}>
                     <div
                       className={cn(
                         "flex items-center px-4 py-3 rounded-lg transition-colors",

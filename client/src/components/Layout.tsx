@@ -6,6 +6,7 @@ import { ShoppingCart, LogOut, Menu } from "lucide-react";
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { Sidebar } from "./Sidebar";
+import logoImage from "@assets/Screenshot 2025-07-31 at 21.36.28_1753988684264.png";
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -30,15 +31,11 @@ export function Layout({ children }: LayoutProps) {
             <div className="flex items-center">
               {/* Company Logo */}
               <div className="flex items-center">
-                <div className="w-10 h-10 bg-phomas-green rounded-lg flex items-center justify-center mr-3">
-                  <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
-                  </svg>
-                </div>
-                <div>
-                  <h1 className="text-xl font-bold text-phomas-green">PHOMAS</h1>
-                  <p className="text-xs text-gray-600">Online Store</p>
-                </div>
+                <img 
+                  src={logoImage} 
+                  alt="Phomas Diagnostics Logo" 
+                  className="h-10 w-auto"
+                />
               </div>
             </div>
 

@@ -44,7 +44,7 @@ export function ProductCard({ product, viewMode = "grid" }: ProductCardProps) {
   };
 
   const formatPrice = (price: string) => {
-    return `$${parseFloat(price).toFixed(2)}`;
+    return `TZS ${parseFloat(price).toLocaleString()}`;
   };
 
   if (viewMode === "list") {

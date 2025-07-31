@@ -128,7 +128,7 @@ export function ShoppingCart({ isOpen, onClose }: ShoppingCartProps) {
                         <h4 className="font-medium text-sm text-gray-800 truncate">{item.name}</h4>
                         <p className="text-xs text-gray-500">{item.referenceNumber}</p>
                         <p className="text-sm font-medium text-phomas-green">
-                          ${parseFloat(item.price).toFixed(2)}
+                          TZS {parseFloat(item.price).toLocaleString()}
                         </p>
                         
                         <div className="flex items-center space-x-2 mt-2">
@@ -163,7 +163,7 @@ export function ShoppingCart({ isOpen, onClose }: ShoppingCartProps) {
                       
                       <div className="text-right">
                         <p className="font-bold text-sm text-phomas-green">
-                          ${(parseFloat(item.price) * item.quantity).toFixed(2)}
+                          TZS {(parseFloat(item.price) * item.quantity).toLocaleString()}
                         </p>
                       </div>
                     </div>
@@ -174,15 +174,15 @@ export function ShoppingCart({ isOpen, onClose }: ShoppingCartProps) {
                   <div className="space-y-2 mb-4">
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-600">Subtotal:</span>
-                      <span className="font-medium">${subtotal.toFixed(2)}</span>
+                      <span className="font-medium">TZS {subtotal.toLocaleString()}</span>
                     </div>
                     <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">Tax (8%):</span>
-                      <span className="font-medium">${tax.toFixed(2)}</span>
+                      <span className="text-gray-600">Tax (18%):</span>
+                      <span className="font-medium">TZS {tax.toLocaleString()}</span>
                     </div>
                     <div className="flex justify-between text-base font-bold text-phomas-green">
                       <span>Total:</span>
-                      <span>${total.toFixed(2)}</span>
+                      <span>TZS {total.toLocaleString()}</span>
                     </div>
                   </div>
 
@@ -196,7 +196,7 @@ export function ShoppingCart({ isOpen, onClose }: ShoppingCartProps) {
                     ) : (
                       <>
                         <Send className="w-4 h-4 mr-2" />
-                        Send to E-count
+                        PAY NOW
                       </>
                     )}
                   </Button>
