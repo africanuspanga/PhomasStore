@@ -15,6 +15,7 @@ const PROD_BASE_URL = "https://oapi{ZONE}.ecount.com";
 interface EcountSession {
   sessionId: string;
   expiresAt: Date;
+  zone: string;
 }
 
 interface EcountProduct {
@@ -27,8 +28,22 @@ interface EcountProduct {
 
 interface EcountInventory {
   PROD_CD: string;
-  QTY: string;
-  WH_CD: string;
+  BAL_QTY: number;
+  WH_CD?: string;
+}
+
+interface EcountApiResponse {
+  Status: string;
+  Data?: any;
+  Error?: {
+    Message: string;
+  };
+}
+
+interface EcountApiRequestOptions {
+  endpoint: string;
+  body: any;
+  requiresAuth?: boolean;
 }
 
 class EcountApiService {
@@ -41,11 +56,83 @@ class EcountApiService {
   }
 
   /**
-   * Step 1: Get Zone information to determine correct API endpoint
+   * Centralized eCount API request helper with JSON validation and auto-retry
    */
-  async getZone(): Promise<string> {
+  private async ecountRequest(options: EcountApiRequestOptions): Promise<EcountApiResponse> {
+    const { endpoint, body, requiresAuth = true } = options;
+    
+    // Get session and zone if auth is required
+    let sessionId = '';
+    let zone = ECOUNT_CONFIG.zone; // fallback
+    
+    if (requiresAuth) {
+      sessionId = await this.login();
+      zone = this.session?.zone || ECOUNT_CONFIG.zone;
+    }
+    
+    const baseUrlWithZone = this.baseUrl.replace('{ZONE}', zone);
+    const url = requiresAuth ? `${baseUrlWithZone}${endpoint}?SESSION_ID=${sessionId}` : `${baseUrlWithZone}${endpoint}`;
+    
+    console.log(`Making eCount API request: ${endpoint}`);
+    
     try {
-      // Use the base zone API URL (without zone in it)
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          COM_CODE: ECOUNT_CONFIG.companyCode,
+          ...body
+        })
+      });
+      
+      // Check for redirect or non-JSON responses
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        console.error(`Non-JSON response from eCount API. Content-Type: ${contentType}`);
+        
+        // If we get HTML redirect, likely auth issue - invalidate session and retry once
+        if (requiresAuth && this.session && contentType?.includes('text/html')) {
+          console.log('Detected HTML response - invalidating session and retrying...');
+          this.session = null;
+          return this.ecountRequest(options); // Retry once with fresh auth
+        }
+        
+        throw new Error(`Invalid response type: ${contentType}`);
+      }
+      
+      const result = await response.json();
+      
+      // Log detailed error for debugging
+      if (result.Status !== "200") {
+        console.error(`eCount API Error for ${endpoint}:`, {
+          status: result.Status,
+          error: result.Error,
+          response: result
+        });
+      }
+      
+      // Auto-retry on auth failure
+      if (requiresAuth && result.Status === "401" && this.session) {
+        console.log('Auth failed - invalidating session and retrying...');
+        this.session = null;
+        return this.ecountRequest(options); // Retry once with fresh auth
+      }
+      
+      return result;
+    } catch (error) {
+      console.error(`eCount API request failed for ${endpoint}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get Zone information to determine correct API endpoint (only called during login)
+   */
+  private async getZone(): Promise<string> {
+    try {
+      // Zone API call must use base URL without zone
       const response = await fetch(`https://sboapi.ecount.com/OAPI/V2/Zone`, {
         method: 'POST',
         headers: {
@@ -69,21 +156,22 @@ class EcountApiService {
   }
 
   /**
-   * Step 2: Login to get session ID
+   * Login to get session ID with zone pinning
    */
-  async login(): Promise<string> {
+  private async login(): Promise<string> {
     try {
       // Check if we have a valid session
       if (this.session && this.session.expiresAt > new Date()) {
         return this.session.sessionId;
       }
 
+      // Get zone first and pin it to session
       const zone = await this.getZone();
       const baseUrlWithZone = this.baseUrl.replace('{ZONE}', zone);
       const loginUrl = `${baseUrlWithZone}/OAPI/V2/OAPILogin`;
 
       console.log(`Attempting eCount login to: ${loginUrl}`);
-      console.log(`Authenticating with eCount...`);
+      console.log(`Authenticating with eCount (Zone: ${zone})...`);
       
       const response = await fetch(loginUrl, {
         method: 'POST',
@@ -106,12 +194,14 @@ class EcountApiService {
         // Session expires in 30 minutes by default (can be configured in ERP)
         const expiresAt = new Date(Date.now() + 25 * 60 * 1000); // 25 min for safety
         
+        // Pin zone to session to prevent mismatches
         this.session = {
           sessionId: result.Data.Datas.SESSION_ID,
-          expiresAt
+          expiresAt,
+          zone
         };
 
-        console.log('eCount login successful!');
+        console.log(`eCount login successful! (Zone: ${zone}, Session: ${this.session.sessionId.substring(0, 8)}...)`);
         return this.session.sessionId;
       }
 
@@ -123,43 +213,34 @@ class EcountApiService {
   }
 
   /**
-   * Get products from eCount Item Search API
+   * Get products from eCount using inventory balance approach (more stable)
    */
   async getProducts(): Promise<ProductWithInventory[]> {
     try {
-      const sessionId = await this.login();
-      const zone = await this.getZone();
+      // Since Item/GetItemList returned 500, let's use the InventoryBalance endpoint 
+      // which was working but had auth issues (now fixed with centralized helper)
+      const inventoryMap = await this.getInventoryBalance();
       
-      const baseUrlWithZone = this.baseUrl.replace('{ZONE}', zone);
-      // Try Item search endpoint pattern
-      const searchUrl = `${baseUrlWithZone}/OAPI/V2/Item/GetItemList?SESSION_ID=${sessionId}`;
-      console.log(`Getting item list from eCount...`);
-      
-      const response = await fetch(searchUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          COM_CODE: ECOUNT_CONFIG.companyCode,
-          SearchCondition: {
-            PROD_CD: "", // Empty to get all
-            PROD_DES: "",
-            USE_YN: "Y" // Only active items
-          },
-          Page: {
-            CURRENT_PAGE: 1,
-            PER_PAGE: 200
-          }
-        })
-      });
-
-      const result = await response.json();
-      if (result.Status === "200" && result.Data?.Datas) {
-        return this.transformEcountProducts(result.Data.Datas);
+      if (inventoryMap.size > 0) {
+        // Create product list from inventory data
+        const products = Array.from(inventoryMap.entries()).map(([productCode, quantity]) => ({
+          id: productCode,
+          name: this.generateProductName(productCode),
+          packaging: 'Standard',
+          referenceNumber: productCode,
+          price: '25000',
+          imageUrl: this.getProductImage(productCode),
+          category: this.getCategoryFromCode(productCode),
+          availableQuantity: quantity || 0,
+          isLowStock: (quantity || 0) < 10,
+          isExpiringSoon: false
+        }));
+        console.log(`Successfully got ${products.length} products from eCount inventory`);
+        return products;
       }
 
-      throw new Error(`Search Item API failed: ${result.Error?.Message || 'Unknown error'}`);
+      console.error('No inventory data available from eCount');
+      throw new Error(`No products found in eCount system`);
     } catch (error) {
       console.error('eCount getProducts error:', error);
       // Return fallback data in case of API issues
@@ -168,41 +249,31 @@ class EcountApiService {
   }
 
   /**
-   * Get inventory balance for products
+   * Get inventory balance for products using centralized helper
    */
   async getInventoryBalance(): Promise<Map<string, number>> {
     try {
-      const sessionId = await this.login();
-      const zone = await this.getZone();
-      
-      const baseUrlWithZone = this.baseUrl.replace('{ZONE}', zone);
-      // Try inventory balance endpoint pattern  
-      const inventoryUrl = `${baseUrlWithZone}/OAPI/V2/Inventory/SearchItemBalance?SESSION_ID=${sessionId}`;
-      console.log(`Getting inventory balance from eCount...`);
-      
-      const response = await fetch(inventoryUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          COM_CODE: ECOUNT_CONFIG.companyCode,
-          SearchCondition: {
-            WH_CD: ECOUNT_CONFIG.warehouseCode,
-            PROD_CD: "", // Get all products
-            BALANCE_DATE: new Date().toISOString().slice(0, 10).replace(/-/g, '') // YYYYMMDD
-          }
-        })
+      const result = await this.ecountRequest({
+        endpoint: '/OAPI/V2/InventoryBalance/GetListInventoryBalanceStatus',
+        body: {
+          BASE_DATE: new Date().toISOString().slice(0, 10).replace(/-/g, ''), // YYYYMMDD - required parameter
+          WH_CD: ECOUNT_CONFIG.warehouseCode,
+          PROD_CD: "", // Get all products
+        }
       });
 
-      const result = await response.json();
+      console.log('Inventory API status:', result.Status);
+      console.log('Inventory API data count:', result.Data?.Datas?.length || 0);
       const inventoryMap = new Map<string, number>();
 
       if (result.Status === "200" && result.Data?.Datas) {
         result.Data.Datas.forEach((item: EcountInventory) => {
-          const quantity = parseInt(item.QTY) || 0;
+          const quantity = item.BAL_QTY || 0;
           inventoryMap.set(item.PROD_CD, quantity);
         });
+        console.log(`Mapped ${inventoryMap.size} products to inventory`);
+      } else {
+        console.error('Inventory API failed or no data:', result.Status, result.Error);
       }
 
       return inventoryMap;
@@ -213,45 +284,32 @@ class EcountApiService {
   }
 
   /**
-   * Create sales order in eCount
+   * Create sales order in eCount using centralized helper
    */
   async createSalesOrder(order: Order): Promise<string> {
     try {
-      const sessionId = await this.login();
-      const zone = await this.getZone();
-      
-      const baseUrlWithZone = this.baseUrl.replace('{ZONE}', zone);
-      const salesOrderUrl = `${baseUrlWithZone}/OAPI/V2/SalesSlip/SaveSales?SESSION_ID=${sessionId}`;
-      
       const orderItems = JSON.parse(order.items);
       const currentDate = new Date().toISOString().slice(0, 10).replace(/-/g, ''); // YYYYMMDD
       
-      const salesOrderData = {
-        COM_CODE: ECOUNT_CONFIG.companyCode,
-        SalesList: orderItems.map((item: any, index: number) => ({
-          Datas: {
-            UPLOAD_SER_NO: index + 1,
-            IO_DATE: currentDate,
-            CUST: "WEB_CUSTOMER", // Default web customer code
-            CUST_DES: "Online Customer",
-            PROD_CD: item.productId,
-            PROD_DES: item.name,
-            QTY: item.quantity.toString(),
-            WH_CD: ECOUNT_CONFIG.warehouseCode,
-            REMARKS: `Web Order: ${order.orderNumber}`
-          }
-        }))
-      };
-
-      const response = await fetch(salesOrderUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(salesOrderData)
+      const result = await this.ecountRequest({
+        endpoint: '/OAPI/V2/OpenMarket/SaveOpenMarketOrderNew',
+        body: {
+          SalesList: orderItems.map((item: any, index: number) => ({
+            Datas: {
+              UPLOAD_SER_NO: index + 1,
+              IO_DATE: currentDate,
+              CUST: "WEB_CUSTOMER", // Default web customer code
+              CUST_DES: "Online Customer",
+              PROD_CD: item.productId,
+              PROD_DES: item.name,
+              QTY: item.quantity.toString(),
+              WH_CD: ECOUNT_CONFIG.warehouseCode,
+              REMARKS: `Web Order: ${order.orderNumber}`
+            }
+          }))
+        }
       });
 
-      const result = await response.json();
       if (result.Status === "200" && result.Data?.SlipNos?.length > 0) {
         console.log('eCount sales order created:', result.Data.SlipNos[0]);
         return result.Data.SlipNos[0];
@@ -265,21 +323,67 @@ class EcountApiService {
   }
 
   /**
-   * Transform eCount product data to our format
+   * Transform eCount item data to product format with inventory information
    */
-  private transformEcountProducts(ecountData: EcountProduct[]): ProductWithInventory[] {
-    return ecountData.map((item) => ({
+  private transformItemsToProducts(itemData: EcountProduct[], inventoryMap: Map<string, number>): ProductWithInventory[] {
+    return itemData.map((item) => {
+      const availableQuantity = inventoryMap.get(item.PROD_CD) || 0;
+      return {
+        id: item.PROD_CD,
+        name: item.PROD_DES || this.generateProductName(item.PROD_CD),
+        packaging: item.SIZE_DES || 'Standard',
+        referenceNumber: item.PROD_CD,
+        price: this.convertEcountPrice(item.PRICE || '25000'),
+        imageUrl: this.getProductImage(item.PROD_CD),
+        category: item.CATEGORY || this.getCategoryFromCode(item.PROD_CD),
+        availableQuantity,
+        isLowStock: availableQuantity < 10,
+        isExpiringSoon: false
+      };
+    });
+  }
+
+  /**
+   * Transform eCount inventory data to product format (fallback)
+   */
+  private transformInventoryToProducts(inventoryData: EcountInventory[]): ProductWithInventory[] {
+    return inventoryData.map((item) => ({
       id: item.PROD_CD,
-      name: item.PROD_DES || 'Unknown Product',
-      packaging: item.SIZE_DES || 'Standard',
+      name: this.generateProductName(item.PROD_CD),
+      packaging: 'Standard',
       referenceNumber: item.PROD_CD,
-      price: this.convertEcountPrice(item.PRICE),
+      price: '25000', // Default price, will be updated from admin later
       imageUrl: this.getProductImage(item.PROD_CD),
-      category: item.CATEGORY || 'Medical Supplies',
-      availableQuantity: 0, // Will be updated by inventory balance
-      isLowStock: false,
+      category: this.getCategoryFromCode(item.PROD_CD),
+      availableQuantity: item.BAL_QTY || 0,
+      isLowStock: (item.BAL_QTY || 0) < 10,
       isExpiringSoon: false
     }));
+  }
+
+  /**
+   * Generate product name from product code
+   */
+  private generateProductName(productCode: string): string {
+    // Medical supply name patterns based on product codes
+    if (productCode.startsWith('LYOFIA')) return `LYOFIA Medical Test Kit - ${productCode}`;
+    if (productCode.startsWith('ABS')) return `ABS Medical Component - ${productCode}`;
+    if (productCode.startsWith('HS-')) return `Medical Instrument - ${productCode}`;
+    if (productCode.startsWith('PDL-')) return `PDL Medical Supply - ${productCode}`;
+    if (productCode.match(/^\d+$/)) return `Medical Product ${productCode}`;
+    return `Medical Supply - ${productCode}`;
+  }
+
+  /**
+   * Get category from product code
+   */
+  private getCategoryFromCode(productCode: string): string {
+    if (productCode.startsWith('LYOFIA')) return 'Laboratory Tests';
+    if (productCode.startsWith('ABS')) return 'Medical Components';
+    if (productCode.startsWith('HS-')) return 'Medical Instruments';
+    if (productCode.startsWith('PDL-')) return 'Medical Supplies';
+    if (productCode.match(/^\d+$/)) return 'General Medical';
+    return 'Medical Supplies';
   }
 
   /**

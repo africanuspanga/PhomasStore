@@ -4,6 +4,31 @@ import { storage } from "./storage";
 import { ecountApi } from "./ecountApi";
 import { insertUserSchema, loginSchema, insertOrderSchema } from "@shared/schema";
 
+// Helper functions for product transformation
+function generateProductName(productCode: string): string {
+  // Medical supply name patterns based on product codes
+  if (productCode.startsWith('LYOFIA')) return `LYOFIA Medical Test Kit - ${productCode}`;
+  if (productCode.startsWith('ABS')) return `ABS Medical Component - ${productCode}`;
+  if (productCode.startsWith('HS-')) return `Medical Instrument - ${productCode}`;
+  if (productCode.startsWith('PDL-')) return `PDL Medical Supply - ${productCode}`;
+  if (productCode.match(/^\d+$/)) return `Medical Product ${productCode}`;
+  return `Medical Supply - ${productCode}`;
+}
+
+function getCategoryFromCode(productCode: string): string {
+  if (productCode.startsWith('LYOFIA')) return 'Laboratory Tests';
+  if (productCode.startsWith('ABS')) return 'Medical Components';
+  if (productCode.startsWith('HS-')) return 'Medical Instruments';
+  if (productCode.startsWith('PDL-')) return 'Medical Supplies';
+  if (productCode.match(/^\d+$/)) return 'General Medical';
+  return 'Medical Supplies';
+}
+
+function getProductImage(productCode: string): string {
+  // Default medical supply image
+  return 'https://images.unsplash.com/photo-1559757148-5c350d0d3c56?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300';
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
   // Authentication routes
   app.post("/api/auth/register", async (req, res) => {
@@ -54,33 +79,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Product routes - now using eCount API
+  // Product routes - Hybrid approach: local metadata + eCount inventory
   app.get("/api/products", async (req, res) => {
     try {
-      // Get products from eCount API
-      const products = await ecountApi.getProducts();
+      // Get base products from storage (rich metadata: names, descriptions, images)
+      const baseProducts = await storage.getProductsWithInventory();
       
-      // Get real-time inventory levels
-      const inventoryMap = await ecountApi.getInventoryBalance();
-      
-      // Merge product data with inventory
-      const productsWithInventory = products.map(product => ({
-        ...product,
-        availableQuantity: inventoryMap.get(product.id) || 0,
-        isLowStock: (inventoryMap.get(product.id) || 0) < 10,
-        isExpiringSoon: false // Can be enhanced later
-      }));
-      
-      res.json(productsWithInventory);
-    } catch (error) {
-      console.error('Failed to fetch products from eCount:', error);
-      // Fallback to mock data if eCount API fails
+      // Get real-time inventory quantities from eCount
       try {
-        const fallbackProducts = await storage.getProductsWithInventory();
-        res.json(fallbackProducts);
-      } catch (fallbackError) {
-        res.status(500).json({ message: "Failed to fetch products", error });
+        const inventoryMap = await ecountApi.getInventoryBalance();
+        console.log(`📊 Got real-time inventory for ${inventoryMap.size} items from eCount`);
+        
+        // Merge: Use storage metadata + eCount quantities
+        const hybridProducts = baseProducts.map(product => {
+          const ecountQuantity = inventoryMap.get(product.id);
+          return {
+            ...product,
+            availableQuantity: ecountQuantity !== undefined ? ecountQuantity : product.availableQuantity,
+            isLowStock: ecountQuantity !== undefined ? ecountQuantity < 10 : product.isLowStock,
+            // Mark products that have real eCount data
+            hasRealTimeData: ecountQuantity !== undefined
+          };
+        });
+        
+        // Also add any eCount-only products not in our catalog
+        inventoryMap.forEach((quantity, productCode) => {
+          const existsInCatalog = baseProducts.some(p => p.id === productCode);
+          if (!existsInCatalog && quantity > 0) {
+            hybridProducts.push({
+              id: productCode,
+              name: generateProductName(productCode),
+              packaging: 'Standard',
+              referenceNumber: productCode,
+              price: '25000',
+              imageUrl: getProductImage(productCode),
+              category: getCategoryFromCode(productCode),
+              availableQuantity: quantity,
+              isLowStock: quantity < 10,
+              isExpiringSoon: false,
+              hasRealTimeData: true
+            });
+          }
+        });
+        
+        console.log(`✅ Hybrid catalog: ${hybridProducts.length} products (${hybridProducts.filter(p => p.hasRealTimeData).length} with live eCount data)`);
+        res.json(hybridProducts);
+        
+      } catch (ecountError) {
+        console.error('eCount inventory failed, using storage data only:', ecountError);
+        res.json(baseProducts);
       }
+    } catch (error) {
+      console.error('Failed to fetch products:', error);
+      res.status(500).json({ message: "Failed to fetch products", error });
     }
   });
 
