@@ -1,6 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
+import { ecountApi } from "./ecountApi";
 import { insertUserSchema, loginSchema, insertOrderSchema } from "@shared/schema";
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -53,40 +54,103 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Product routes
+  // Product routes - now using eCount API
   app.get("/api/products", async (req, res) => {
     try {
-      const products = await storage.getProductsWithInventory();
-      res.json(products);
+      // Get products from eCount API
+      const products = await ecountApi.getProducts();
+      
+      // Get real-time inventory levels
+      const inventoryMap = await ecountApi.getInventoryBalance();
+      
+      // Merge product data with inventory
+      const productsWithInventory = products.map(product => ({
+        ...product,
+        availableQuantity: inventoryMap.get(product.id) || 0,
+        isLowStock: (inventoryMap.get(product.id) || 0) < 10,
+        isExpiringSoon: false // Can be enhanced later
+      }));
+      
+      res.json(productsWithInventory);
     } catch (error) {
-      res.status(500).json({ message: "Failed to fetch products", error });
+      console.error('Failed to fetch products from eCount:', error);
+      // Fallback to mock data if eCount API fails
+      try {
+        const fallbackProducts = await storage.getProductsWithInventory();
+        res.json(fallbackProducts);
+      } catch (fallbackError) {
+        res.status(500).json({ message: "Failed to fetch products", error });
+      }
     }
   });
 
   app.get("/api/products/:id", async (req, res) => {
     try {
-      const product = await storage.getProduct(req.params.id);
+      // Get all products from eCount and find the specific one
+      const products = await ecountApi.getProducts();
+      const product = products.find(p => p.id === req.params.id);
+      
       if (!product) {
-        return res.status(404).json({ message: "Product not found" });
+        // Fallback to storage if not found in eCount
+        const fallbackProduct = await storage.getProduct(req.params.id);
+        if (!fallbackProduct) {
+          return res.status(404).json({ message: "Product not found" });
+        }
+        
+        const inventory = await storage.getInventoryByProductId(fallbackProduct.id);
+        return res.json({
+          ...fallbackProduct,
+          availableQuantity: inventory?.availableQuantity || 0,
+          expirationDate: inventory?.expirationDate?.toISOString(),
+        });
       }
       
-      const inventory = await storage.getInventoryByProductId(product.id);
+      // Get real-time inventory for this product
+      const inventoryMap = await ecountApi.getInventoryBalance();
+      const availableQuantity = inventoryMap.get(product.id) || 0;
+      
       res.json({
         ...product,
-        availableQuantity: inventory?.availableQuantity || 0,
-        expirationDate: inventory?.expirationDate?.toISOString(),
+        availableQuantity,
+        isLowStock: availableQuantity < 10,
+        isExpiringSoon: false
       });
     } catch (error) {
+      console.error('Failed to fetch product from eCount:', error);
       res.status(500).json({ message: "Failed to fetch product", error });
     }
   });
 
-  // Order routes
+  // Order routes - now with eCount integration
   app.post("/api/orders", async (req, res) => {
     try {
       const orderData = insertOrderSchema.parse(req.body);
+      
+      // Create order in local storage first
       const order = await storage.createOrder(orderData);
-      res.json({ success: true, order });
+      
+      // Then try to create it in eCount ERP
+      try {
+        const ecountOrderId = await ecountApi.createSalesOrder(order);
+        console.log(`Order ${order.orderNumber} created in eCount with ID: ${ecountOrderId}`);
+        
+        // Could update order status to indicate eCount sync success
+        res.json({ 
+          success: true, 
+          order: {
+            ...order,
+            ecountOrderId
+          }
+        });
+      } catch (ecountError) {
+        console.error('Failed to create order in eCount:', ecountError);
+        // Still return success for local order, but log the eCount failure
+        res.json({ 
+          success: true, 
+          order,
+          warning: "Order created locally but failed to sync with ERP"
+        });
+      }
     } catch (error) {
       res.status(400).json({ message: "Failed to create order", error });
     }
