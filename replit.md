@@ -1,6 +1,12 @@
 # Overview
 
-This is a full-stack e-commerce application called "Phomas Online Store" built as a demo system for medical supply ordering. The application serves as a high-fidelity prototype that mirrors a real medical supply store interface, designed to be easily integrated with the eCOUNT API system once credentials are provided. It features a complete product catalog, shopping cart functionality, order management, and admin panel for inventory oversight.
+This is a full-stack e-commerce application called "Phomas Online Store" built for PHOMAS DIAGNOSTICS, a medical supplier in Tanzania. The application has been successfully transformed from a demo system into a **real-time integrated platform** connected to their eCount ERP system. It features live product inventory, automated order processing, and administrative oversight with direct ERP connectivity.
+
+## Integration Status ✅
+- **eCount ERP Integration**: Successfully connected and operational
+- **Live Authentication**: Zone-pinned session management with auto-retry
+- **Hybrid Product Catalog**: Real product metadata merged with live inventory data
+- **Order Processing**: Ready for end-to-end ERP order submission
 
 # User Preferences
 
@@ -32,10 +38,12 @@ The server is built with Express.js and uses an in-memory storage system for the
 - Local storage persistence for cart items and user sessions
 
 ## API Layer
-- Service layer abstraction (ecountService) designed for easy eCOUNT API integration
+- **Live eCount ERP Integration**: Production-ready connection with authentication
+- **Zone-Pinned Sessions**: Solves zone/session mismatch with consistent API calls
+- **Hybrid Data Strategy**: Local metadata merged with real-time ERP inventory
+- **Centralized Request Handler**: JSON validation, auto-retry, and session management
 - RESTful endpoints following standard HTTP conventions
 - Consistent error handling and response formatting
-- Request/response logging middleware
 
 ## Build System
 - Vite for frontend build tooling with React plugin
