@@ -131,9 +131,9 @@ class EcountApiService {
       const zone = await this.getZone();
       
       const baseUrlWithZone = this.baseUrl.replace('{ZONE}', zone);
-      // Use correct endpoint pattern for Item Search
-      const searchUrl = `${baseUrlWithZone}/OAPI/V2/Item/SearchItemList?SESSION_ID=${sessionId}`;
-      console.log(`Searching items in eCount...`);
+      // Try Item search endpoint pattern
+      const searchUrl = `${baseUrlWithZone}/OAPI/V2/Item/GetItemList?SESSION_ID=${sessionId}`;
+      console.log(`Getting item list from eCount...`);
       
       const response = await fetch(searchUrl, {
         method: 'POST',
@@ -176,8 +176,8 @@ class EcountApiService {
       const zone = await this.getZone();
       
       const baseUrlWithZone = this.baseUrl.replace('{ZONE}', zone);
-      // Use correct endpoint pattern for Inventory Balance
-      const inventoryUrl = `${baseUrlWithZone}/OAPI/V2/Inventory/GetInventoryBalance?SESSION_ID=${sessionId}`;
+      // Try inventory balance endpoint pattern  
+      const inventoryUrl = `${baseUrlWithZone}/OAPI/V2/Inventory/SearchItemBalance?SESSION_ID=${sessionId}`;
       console.log(`Getting inventory balance from eCount...`);
       
       const response = await fetch(inventoryUrl, {
