@@ -19,6 +19,9 @@ export interface IStorage {
   getAllInventory(): Promise<Inventory[]>;
   updateInventory(productId: string, quantity: number): Promise<void>;
 
+  // Product image management
+  updateProductImage(productId: string, imageUrl: string): Promise<void>;
+
   // Order management
   createOrder(order: InsertOrder): Promise<Order>;
   getOrdersByUserId(userId: string): Promise<Order[]>;
@@ -170,6 +173,39 @@ export class MemStorage implements IStorage {
     const current = this.inventory.get(productId);
     if (current) {
       current.availableQuantity = Math.max(0, current.availableQuantity - quantity);
+    }
+  }
+
+  async updateProductImage(productId: string, imageUrl: string): Promise<void> {
+    const product = this.products.get(productId);
+    if (product) {
+      // Update existing product in storage
+      product.imageUrl = imageUrl;
+    } else {
+      // Handle eCount-only products by creating a metadata record
+      // This allows us to store custom images for products that come from eCount API
+      const newProduct: Product = {
+        id: productId,
+        name: `eCount Product - ${productId}`, // Placeholder name
+        packaging: 'Standard',
+        referenceNumber: productId,
+        price: '0', // Price will come from eCount
+        imageUrl: imageUrl,
+        category: 'Medical Supplies'
+      };
+      this.products.set(productId, newProduct);
+      
+      // Also create a default inventory record
+      const inventoryId = randomUUID();
+      const defaultInventory: Inventory = {
+        id: inventoryId,
+        productId: productId,
+        availableQuantity: 0, // Quantity will come from eCount
+        expirationDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000) // 1 year from now as default
+      };
+      this.inventory.set(productId, defaultInventory);
+      
+      console.log(`✅ Created metadata record for eCount-only product: ${productId}`);
     }
   }
 

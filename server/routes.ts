@@ -1,8 +1,78 @@
-import type { Express } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { ecountApi } from "./ecountApi";
 import { insertUserSchema, loginSchema, insertOrderSchema } from "@shared/schema";
+import { v2 as cloudinary } from 'cloudinary';
+import multer from 'multer';
+import { randomUUID } from "crypto";
+
+// Validate and configure Cloudinary
+if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
+  console.warn('⚠️  Cloudinary environment variables not set. Image uploads will fail.');
+}
+
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
+
+// Session store for authentication
+const activeSessions = new Map<string, { userId: string; role: string; createdAt: Date }>();
+
+// Configure multer with proper validation
+const upload = multer({ 
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB limit
+    files: 1 // Only one file at a time
+  },
+  fileFilter: (req, file, cb) => {
+    // Only allow image files
+    if (file.mimetype.startsWith('image/')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only image files are allowed'));
+    }
+  }
+});
+
+// Authentication middleware
+const requireAuth = async (req: Request, res: Response, next: NextFunction) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ message: 'Authentication required' });
+  }
+
+  const token = authHeader.substring(7);
+  const session = activeSessions.get(token);
+  
+  if (!session) {
+    return res.status(401).json({ message: 'Invalid or expired session' });
+  }
+
+  // Check if session is older than 24 hours
+  const now = new Date();
+  const sessionAge = now.getTime() - session.createdAt.getTime();
+  if (sessionAge > 24 * 60 * 60 * 1000) {
+    activeSessions.delete(token);
+    return res.status(401).json({ message: 'Session expired' });
+  }
+
+  // Attach user info to request
+  (req as any).userId = session.userId;
+  (req as any).userRole = session.role;
+  next();
+};
+
+// Admin authorization middleware
+const requireAdmin = (req: Request, res: Response, next: NextFunction) => {
+  if ((req as any).userRole !== 'admin') {
+    return res.status(403).json({ message: 'Admin access required' });
+  }
+  next();
+};
 
 // Helper functions for product transformation
 function generateProductName(productCode: string): string {
@@ -65,8 +135,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ message: "Invalid credentials" });
       }
       
+      // Create session token
+      const token = randomUUID();
+      activeSessions.set(token, {
+        userId: user.id,
+        role: user.role,
+        createdAt: new Date()
+      });
+      
       res.json({ 
         success: true, 
+        token, // Send token to client
         user: { 
           id: user.id, 
           email: user.email, 
@@ -225,8 +304,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Admin routes
-  app.get("/api/admin/users", async (req, res) => {
+  // Logout route
+  app.post("/api/auth/logout", requireAuth, async (req, res) => {
+    try {
+      const authHeader = req.headers.authorization!;
+      const token = authHeader.substring(7);
+      activeSessions.delete(token);
+      res.json({ success: true, message: "Logged out successfully" });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to logout", error });
+    }
+  });
+
+  // Admin routes - all protected with authentication and admin authorization
+  app.get("/api/admin/users", requireAuth, requireAdmin, async (req, res) => {
     try {
       const users = await storage.getAllUsers();
       // Remove passwords from response
@@ -243,12 +334,71 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/admin/inventory", async (req, res) => {
+  app.get("/api/admin/inventory", requireAuth, requireAdmin, async (req, res) => {
     try {
       const inventory = await storage.getAllInventory();
       res.json(inventory);
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch inventory", error });
+    }
+  });
+
+  // Image upload route for admin - protected
+  app.post("/api/admin/upload-image", requireAuth, requireAdmin, upload.single('image'), async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ message: "No image file provided" });
+      }
+
+      // Upload to Cloudinary
+      const result = await new Promise<any>((resolve, reject) => {
+        cloudinary.uploader.upload_stream(
+          {
+            resource_type: "image",
+            folder: "phomas-products", // Organize images in a folder
+            transformation: [
+              { width: 800, height: 600, crop: "limit" }, // Optimize size
+              { quality: "auto" }, // Auto quality
+              { format: "auto" } // Auto format (WebP when supported)
+            ]
+          },
+          (error, result) => {
+            if (error) reject(error);
+            else resolve(result);
+          }
+        ).end(req.file!.buffer);
+      });
+
+      res.json({
+        success: true,
+        imageUrl: result.secure_url,
+        publicId: result.public_id,
+        width: result.width,
+        height: result.height
+      });
+    } catch (error) {
+      console.error('Image upload error:', error);
+      res.status(500).json({ message: "Failed to upload image", error });
+    }
+  });
+
+  // Update product image route for admin - protected
+  app.put("/api/admin/products/:id/image", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { imageUrl } = req.body;
+
+      if (!imageUrl) {
+        return res.status(400).json({ message: "Image URL is required" });
+      }
+
+      // Update product image in storage
+      await storage.updateProductImage(id, imageUrl);
+      
+      res.json({ success: true, message: "Product image updated successfully" });
+    } catch (error) {
+      console.error('Update product image error:', error);
+      res.status(500).json({ message: "Failed to update product image", error });
     }
   });
 

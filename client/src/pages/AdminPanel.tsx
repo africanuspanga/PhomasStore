@@ -2,11 +2,13 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/contexts/AuthContext";
 import { ecountService } from "@/services/ecountService";
-import { Users, Package, AlertTriangle, Clock, CheckCircle, Edit, Trash2, Plus } from "lucide-react";
+import { Users, Package, AlertTriangle, Clock, CheckCircle, Edit, Trash2, Plus, Upload } from "lucide-react";
 import { format } from "date-fns";
 import { useLocation } from "wouter";
+import { AdminProductManager } from "@/components/AdminProductManager";
 import type { User } from "@shared/schema";
 
 export default function AdminPanel() {
@@ -72,8 +74,15 @@ export default function AdminPanel() {
           <p className="text-gray-600 mt-2">Manage users, products, and inventory</p>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* User Management */}
+        <Tabs defaultValue="overview" className="w-full">
+          <TabsList className="mb-6">
+            <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="products">Product Management</TabsTrigger>
+          </TabsList>
+          
+          <TabsContent value="overview">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              {/* User Management */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center space-x-2">
@@ -186,10 +195,10 @@ export default function AdminPanel() {
               </Button>
             </CardContent>
           </Card>
-        </div>
+            </div>
 
-        {/* Quick Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
+            {/* Quick Stats */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
           <Card>
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
@@ -225,7 +234,13 @@ export default function AdminPanel() {
               </div>
             </CardContent>
           </Card>
-        </div>
+            </div>
+          </TabsContent>
+          
+          <TabsContent value="products">
+            <AdminProductManager />
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   );

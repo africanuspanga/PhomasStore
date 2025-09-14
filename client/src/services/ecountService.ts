@@ -22,8 +22,13 @@ export const ecountService = {
     return await response.json();
   },
 
-  async login(credentials: LoginUser): Promise<{ success: boolean; user: User }> {
+  async login(credentials: LoginUser): Promise<{ success: boolean; user: User; token: string }> {
     const response = await apiRequest("POST", "/api/auth/login", credentials);
+    return await response.json();
+  },
+
+  async logout(): Promise<{ success: boolean; message: string }> {
+    const response = await apiRequest("POST", "/api/auth/logout", {});
     return await response.json();
   },
 

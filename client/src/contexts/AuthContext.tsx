@@ -21,14 +21,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const { toast } = useToast();
 
   useEffect(() => {
-    // Check for stored user session
+    // Check for stored user session and token
     const storedUser = localStorage.getItem("phomas_user");
-    if (storedUser) {
+    const storedToken = localStorage.getItem("phomas_token");
+    
+    if (storedUser && storedToken) {
       try {
         setUser(JSON.parse(storedUser));
       } catch (error) {
         localStorage.removeItem("phomas_user");
+        localStorage.removeItem("phomas_token");
       }
+    } else {
+      // Clear incomplete session data
+      localStorage.removeItem("phomas_user");
+      localStorage.removeItem("phomas_token");
     }
     setIsLoading(false);
   }, []);
@@ -38,9 +45,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setIsLoading(true);
       const response = await ecountService.login(credentials);
       
-      if (response.success) {
+      if (response.success && response.token) {
         setUser(response.user);
         localStorage.setItem("phomas_user", JSON.stringify(response.user));
+        localStorage.setItem("phomas_token", response.token);
         toast({
           title: "Welcome back!",
           description: `Logged in as ${response.user.companyName}`,
@@ -87,13 +95,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const logout = () => {
-    setUser(null);
-    localStorage.removeItem("phomas_user");
-    toast({
-      title: "Logged out",
-      description: "You have been successfully logged out",
-    });
+  const logout = async () => {
+    try {
+      // Call logout endpoint to invalidate server-side session
+      const token = localStorage.getItem("phomas_token");
+      if (token) {
+        await ecountService.logout();
+      }
+    } catch (error) {
+      console.warn("Failed to logout from server:", error);
+    } finally {
+      // Always clear client-side session
+      setUser(null);
+      localStorage.removeItem("phomas_user");
+      localStorage.removeItem("phomas_token");
+      toast({
+        title: "Logged out",
+        description: "You have been successfully logged out",
+      });
+    }
   };
 
   const value: AuthContextType = {
