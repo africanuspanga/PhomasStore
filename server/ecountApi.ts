@@ -51,11 +51,19 @@ class EcountApiService {
   private baseUrl: string;
   private inventoryCache = new Map<string, { data: any, timestamp: number }>();
   private readonly CACHE_DURATION = 60 * 60 * 1000; // 1 hour in milliseconds
+  
+  // Rate limiting for eCount APIs (per documentation)
+  private bulkSyncLastCall = 0;
+  private readonly BULK_RATE_LIMIT = 10 * 60 * 1000; // 10 minutes in milliseconds
+  private backgroundScheduler: NodeJS.Timeout | null = null;
 
   constructor() {
     // Use production URL with real API key
     this.baseUrl = PROD_BASE_URL;
     console.log('🚀 eCount API configured for PRODUCTION environment');
+    
+    // Start background bulk sync scheduler (every 10 minutes)
+    this.startBackgroundScheduler();
   }
 
   /**
@@ -711,6 +719,85 @@ class EcountApiService {
 
   private getProductImage(productCode: string): string {
     return 'https://images.unsplash.com/photo-1559757148-5c350d0d3c56?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300';
+  }
+
+  /**
+   * Background Scheduler: Automatic 10-minute bulk sync cycles
+   * This respects eCount rate limits and keeps cache fresh
+   */
+  private startBackgroundScheduler(): void {
+    console.log('⏰ Starting eCount background scheduler (10-minute cycles)');
+    
+    // Initial sync after 30 seconds
+    setTimeout(() => {
+      this.performBackgroundBulkSync();
+    }, 30000);
+    
+    // Then sync every 10 minutes
+    this.backgroundScheduler = setInterval(() => {
+      this.performBackgroundBulkSync();
+    }, this.BULK_RATE_LIMIT); // 10 minutes
+  }
+
+  /**
+   * Perform background bulk sync with rate limiting
+   */
+  private async performBackgroundBulkSync(): Promise<void> {
+    const now = Date.now();
+    const timeSinceLastCall = now - this.bulkSyncLastCall;
+    
+    // Respect 10-minute rate limit
+    if (timeSinceLastCall < this.BULK_RATE_LIMIT) {
+      const waitTime = this.BULK_RATE_LIMIT - timeSinceLastCall;
+      console.log(`⏳ Rate limit: waiting ${Math.round(waitTime / 1000)}s before next bulk sync`);
+      return;
+    }
+    
+    try {
+      console.log('🔄 Background bulk sync started (Production eCount)');
+      
+      // Update rate limit tracker
+      this.bulkSyncLastCall = now;
+      
+      // Perform bulk sync operations in sequence
+      await this.bulkSyncProductsAndInventory();
+      
+      console.log('✅ Background bulk sync completed successfully');
+    } catch (error) {
+      console.error('❌ Background bulk sync failed:', error);
+    }
+  }
+
+  /**
+   * Bulk sync products and inventory data from eCount
+   */
+  private async bulkSyncProductsAndInventory(): Promise<void> {
+    try {
+      // Sync inventory data (this will update the cache)
+      const inventoryData = await this.getInventoryBalance();
+      
+      // Cache the fresh data with timestamp
+      this.inventoryCache.set('inventory_balance', {
+        data: inventoryData,
+        timestamp: Date.now()
+      });
+      
+      console.log(`📦 Bulk sync complete: ${inventoryData.size} products cached from eCount`);
+    } catch (error) {
+      console.error('Bulk sync error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Stop background scheduler (for cleanup)
+   */
+  stopBackgroundScheduler(): void {
+    if (this.backgroundScheduler) {
+      clearInterval(this.backgroundScheduler);
+      this.backgroundScheduler = null;
+      console.log('⏹️ eCount background scheduler stopped');
+    }
   }
 
   /**
