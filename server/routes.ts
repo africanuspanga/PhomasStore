@@ -20,8 +20,15 @@ cloudinary.config({
 });
 
 // Initialize Supabase client for server-side auth verification
-const supabaseUrl = process.env.SUPABASE_URL || 'https://xvomxojbfhovbhbbkuoh.supabase.co'
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh2b214b2piZmhvdmJoYmJrdW9oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTc5NjY5NTksImV4cCI6MjA3MzU0Mjk1OX0.Th3j5bG7kDgJC9J8jHezRzPVLoI0DhPnE5KB_Fb2f10'
+if (!process.env.SUPABASE_URL) {
+  throw new Error('SUPABASE_URL environment variable is required');
+}
+if (!process.env.SUPABASE_SERVICE_ROLE_KEY && !process.env.SUPABASE_ANON_KEY) {
+  throw new Error('SUPABASE_SERVICE_ROLE_KEY or SUPABASE_ANON_KEY environment variable is required');
+}
+
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY!;
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey, {
   auth: {
@@ -80,10 +87,10 @@ const requireAuth = async (req: Request, res: Response, next: NextFunction) => {
     // Attach user info to request
     (req as any).userId = user.id;
     (req as any).userEmail = user.email;
-    (req as any).userRole = profile.user_type === 'admin' ? 'admin' : 'client';
+    (req as any).userRole = profile.name === 'PHOMAS DIAGNOSTICS' ? 'admin' : 'client';
     (req as any).userProfile = profile;
     
-    console.log(`🔐 Auth successful for user: ${user.email} (${profile.user_type})`);
+    console.log(`🔐 Auth successful for user: ${user.email} (${profile.name === 'PHOMAS DIAGNOSTICS' ? 'admin' : 'client'})`);
     next();
   } catch (error) {
     console.error('🔐 Auth middleware error:', error);
@@ -205,8 +212,8 @@ function getProductImage(productCode: string): string {
 export async function registerRoutes(app: Express): Promise<Server> {
   // Note: Authentication is now handled by Supabase on the frontend
 
-  // Products - Pure eCount Integration (No Hybrid System)
-  app.get("/api/products", requireAuth, async (req, res) => {
+  // Products - Pure eCount Integration (Public catalog browsing)
+  app.get("/api/products", async (req, res) => {
     try {
       // Get ALL product data directly from eCount - no local storage
       const ecountProducts = await ecountApi.getAllProductsFromEcount();
