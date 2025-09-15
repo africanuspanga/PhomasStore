@@ -339,35 +339,41 @@ class EcountApiService {
    */
   async getProductList(): Promise<any[]> {
     try {
-      console.log('🔍 Using CORRECT endpoint: /OAPI/V2/InventoryBasic/GetBasicProductList');
+      console.log('🔍 Using InventoryBalance endpoint for products (fixing data parsing)');
       
-      // Use the inventory endpoint that was working with proper parameters
+      // Use the inventory endpoint that was working with proper parameters AND warehouse code
       const result = await this.ecountRequest({
         endpoint: '/OAPI/V2/InventoryBalance/GetListInventoryBalanceStatus',
         body: {
           BASE_DATE: new Date().toISOString().slice(0, 10).replace(/-/g, ''),
-          // WH_CD: ECOUNT_CONFIG.warehouseCode,  // Try without warehouse filter first
+          WH_CD: ECOUNT_CONFIG.warehouseCode,  // Include warehouse code for proper filtering
           PROD_CD: '',       // Empty = get all products
           Page: '1',
           PageSize: '1000'
         }
       });
 
-      console.log('📊 InventoryBasic API status:', result.Status);
-      console.log('📊 InventoryBasic API data count:', result.Data?.Result?.length || 0);
+      console.log('📊 InventoryBalance API status:', result.Status);
       
-      if (result.Status === "200" && result.Data && result.Data.Result && result.Data.Result.length > 0) {
-        console.log('✅ Successfully retrieved products from InventoryBasic!');
-        console.log(`🎉 REAL eCount data: ${result.Data.Result.length} products found!`);
-        return result.Data.Result;
+      // FIX: Check for Data.Datas first, then Data.Result as fallback
+      const products = result.Data?.Datas || result.Data?.Result || [];
+      console.log('📊 InventoryBalance API data count:', products.length);
+      
+      if (result.Status === "200" && products.length > 0) {
+        console.log('✅ Successfully retrieved products from InventoryBalance!');
+        console.log(`🎉 REAL eCount data: ${products.length} products found!`);
+        return products;
       } else {
-        console.error('❌ InventoryBasic API failed:', result.Status, result.Error?.Message);
+        console.error('❌ InventoryBalance API failed or returned empty:', result.Status, result.Error?.Message);
         console.error('🔍 Debug - Data structure:', { 
           status: result.Status, 
           hasData: !!result.Data, 
           hasDatas: !!result.Data?.Datas,
-          datasLength: result.Data?.Datas?.length 
+          datasLength: result.Data?.Datas?.length,
+          hasResult: !!result.Data?.Result,
+          resultLength: result.Data?.Result?.length
         });
+        // Return empty array but don't overwrite cache - let cache safety handle this
         return [];
       }
     } catch (error) {
@@ -582,10 +588,11 @@ class EcountApiService {
    */
   async getProductMasterData(): Promise<Map<string, any>> {
     try {
-      console.log('📋 Fetching product master data from eCount...');
+      console.log('📋 Fetching product master data from eCount using correct endpoint...');
       
+      // Try the standard eCount product master endpoint
       const result = await this.ecountRequest({
-        endpoint: '/OAPI/V2/Product/GetProductList',
+        endpoint: '/OAPI/V2/InventoryBasic/GetBasicProductList',
         body: {
           PROD_CD: '', // Empty = get all products
           Page: '1',
@@ -594,9 +601,20 @@ class EcountApiService {
       });
 
       const productMasterMap = new Map<string, any>();
+      
+      // Parse the response correctly
+      const products = result.Data?.Datas || result.Data?.Result || [];
+      console.log(`📊 Product master data structure:`, {
+        status: result.Status,
+        hasDatas: !!result.Data?.Datas,
+        datasLength: result.Data?.Datas?.length,
+        hasResult: !!result.Data?.Result,
+        resultLength: result.Data?.Result?.length,
+        totalProducts: products.length
+      });
 
-      if (result.Status === "200" && result.Data?.Datas) {
-        result.Data.Datas.forEach((product: any) => {
+      if (result.Status === "200" && products.length > 0) {
+        products.forEach((product: any) => {
           productMasterMap.set(product.PROD_CD, {
             name: product.PROD_NM || product.PROD_DES || `Product ${product.PROD_CD}`,
             description: product.PROD_DES || product.PROD_NM || '',
@@ -719,8 +737,19 @@ class EcountApiService {
         }
       });
 
+      // FIX: Check for Data.Datas first, then Data.Result as fallback
+      const products = result.Data?.Datas || result.Data?.Result || [];
+      console.log(`📊 Bulk sync data structure:`, {
+        status: result.Status,
+        hasDatas: !!result.Data?.Datas,
+        datasLength: result.Data?.Datas?.length,
+        hasResult: !!result.Data?.Result,
+        resultLength: result.Data?.Result?.length,
+        totalProducts: products.length
+      });
+      
       if (result.Status === "200") {
-        console.log(`✅ Bulk product sync completed: ${result.Data?.Datas?.length || 0} products retrieved`);
+        console.log(`✅ Bulk product sync completed: ${products.length} products retrieved`);
         return result;
       }
 
@@ -751,8 +780,19 @@ class EcountApiService {
         }
       });
 
+      // FIX: Check for Data.Datas first, then Data.Result as fallback
+      const inventory = result.Data?.Datas || result.Data?.Result || [];
+      console.log(`📊 Bulk inventory data structure:`, {
+        status: result.Status,
+        hasDatas: !!result.Data?.Datas,
+        datasLength: result.Data?.Datas?.length,
+        hasResult: !!result.Data?.Result,
+        resultLength: result.Data?.Result?.length,
+        totalInventory: inventory.length
+      });
+      
       if (result.Status === "200") {
-        console.log(`✅ Bulk inventory sync completed: ${result.Data?.Datas?.length || 0} inventory records retrieved`);
+        console.log(`✅ Bulk inventory sync completed: ${inventory.length} inventory records retrieved`);
         return result;
       }
 
@@ -917,13 +957,17 @@ class EcountApiService {
         };
       });
       
-      // Cache the products for future requests
-      this.inventoryCache.set(cacheKey, {
-        data: products,
-        timestamp: Date.now()
-      });
+      // Cache safety: Only cache if we have products (prevent overwriting good cache with empty results)
+      if (products.length > 0) {
+        this.inventoryCache.set(cacheKey, {
+          data: products,
+          timestamp: Date.now()
+        });
+        console.log(`✅ Pure eCount integration: ${products.length} products loaded from ERP and cached`);
+      } else {
+        console.log(`⚠️ No products returned from eCount, keeping existing cache to prevent data loss`);
+      }
       
-      console.log(`✅ Pure eCount integration: ${products.length} products loaded from ERP and cached`);
       return products;
       
     } catch (error) {
