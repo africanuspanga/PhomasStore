@@ -1,4 +1,5 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
+import { supabase } from "@/lib/supabase";
 
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
@@ -18,10 +19,14 @@ export async function apiRequest(
     headers["Content-Type"] = "application/json";
   }
   
-  // Add authentication token if available
-  const token = localStorage.getItem("phomas_token");
-  if (token) {
-    headers["Authorization"] = `Bearer ${token}`;
+  // Add Supabase JWT token if available
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.access_token) {
+      headers["Authorization"] = `Bearer ${session.access_token}`;
+    }
+  } catch (error) {
+    console.warn('🔐 Failed to get Supabase session for API request:', error);
   }
   
   const res = await fetch(url, {
@@ -43,10 +48,14 @@ export const getQueryFn: <T>(options: {
   async ({ queryKey }) => {
     const headers: Record<string, string> = {};
     
-    // Add authentication token if available
-    const token = localStorage.getItem("phomas_token");
-    if (token) {
-      headers["Authorization"] = `Bearer ${token}`;
+    // Add Supabase JWT token if available
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        headers["Authorization"] = `Bearer ${session.access_token}`;
+      }
+    } catch (error) {
+      console.warn('🔐 Failed to get Supabase session for query:', error);
     }
     
     const res = await fetch(queryKey.join("/") as string, {

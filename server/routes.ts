@@ -6,6 +6,7 @@ import { insertUserSchema, loginSchema, insertOrderSchema } from "@shared/schema
 import { v2 as cloudinary } from 'cloudinary';
 import multer from 'multer';
 import { randomUUID } from "crypto";
+import { createClient } from '@supabase/supabase-js';
 
 // Validate and configure Cloudinary
 if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
@@ -18,8 +19,16 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-// Session store for authentication
-const activeSessions = new Map<string, { userId: string; role: string; createdAt: Date }>();
+// Initialize Supabase client for server-side auth verification
+const supabaseUrl = process.env.SUPABASE_URL || 'https://xvomxojbfhovbhbbkuoh.supabase.co'
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh2b214b2piZmhvdmJoYmJrdW9oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTc5NjY5NTksImV4cCI6MjA3MzU0Mjk1OX0.Th3j5bG7kDgJC9J8jHezRzPVLoI0DhPnE5KB_Fb2f10'
+
+const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+  auth: {
+    autoRefreshToken: false,
+    persistSession: false
+  }
+})
 
 // Configure multer with proper validation
 const upload = multer({ 
@@ -38,7 +47,7 @@ const upload = multer({
   }
 });
 
-// Authentication middleware
+// Authentication middleware using Supabase JWT verification
 const requireAuth = async (req: Request, res: Response, next: NextFunction) => {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -46,24 +55,40 @@ const requireAuth = async (req: Request, res: Response, next: NextFunction) => {
   }
 
   const token = authHeader.substring(7);
-  const session = activeSessions.get(token);
   
-  if (!session) {
-    return res.status(401).json({ message: 'Invalid or expired session' });
-  }
+  try {
+    // Verify JWT token with Supabase
+    const { data: { user }, error } = await supabase.auth.getUser(token);
+    
+    if (error || !user) {
+      console.log('🔐 Auth verification failed:', error?.message || 'No user');
+      return res.status(401).json({ message: 'Invalid or expired session' });
+    }
 
-  // Check if session is older than 24 hours
-  const now = new Date();
-  const sessionAge = now.getTime() - session.createdAt.getTime();
-  if (sessionAge > 24 * 60 * 60 * 1000) {
-    activeSessions.delete(token);
-    return res.status(401).json({ message: 'Session expired' });
-  }
+    // Fetch user profile from database to get role and additional info
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('user_id', user.id)
+      .single();
 
-  // Attach user info to request
-  (req as any).userId = session.userId;
-  (req as any).userRole = session.role;
-  next();
+    if (profileError || !profile) {
+      console.log('🔐 Profile fetch failed:', profileError?.message || 'No profile');
+      return res.status(401).json({ message: 'User profile not found' });
+    }
+
+    // Attach user info to request
+    (req as any).userId = user.id;
+    (req as any).userEmail = user.email;
+    (req as any).userRole = profile.user_type === 'admin' ? 'admin' : 'client';
+    (req as any).userProfile = profile;
+    
+    console.log(`🔐 Auth successful for user: ${user.email} (${profile.user_type})`);
+    next();
+  } catch (error) {
+    console.error('🔐 Auth middleware error:', error);
+    return res.status(401).json({ message: 'Authentication failed' });
+  }
 };
 
 // Admin authorization middleware
@@ -178,63 +203,7 @@ function getProductImage(productCode: string): string {
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Authentication routes
-  app.post("/api/auth/register", async (req, res) => {
-    try {
-      const userData = insertUserSchema.parse(req.body);
-      
-      // Check if user already exists
-      const existingUser = await storage.getUserByEmail(userData.email);
-      if (existingUser) {
-        return res.status(400).json({ message: "User with this email already exists" });
-      }
-      
-      const user = await storage.createUser(userData);
-      res.json({ 
-        success: true, 
-        user: { 
-          id: user.id, 
-          email: user.email, 
-          companyName: user.companyName, 
-          role: user.role 
-        } 
-      });
-    } catch (error) {
-      res.status(400).json({ message: "Invalid user data", error });
-    }
-  });
-
-  app.post("/api/auth/login", async (req, res) => {
-    try {
-      const { email, password } = loginSchema.parse(req.body);
-      
-      const user = await storage.getUserByEmail(email);
-      if (!user || user.password !== password) {
-        return res.status(401).json({ message: "Invalid credentials" });
-      }
-      
-      // Create session token
-      const token = randomUUID();
-      activeSessions.set(token, {
-        userId: user.id,
-        role: user.role,
-        createdAt: new Date()
-      });
-      
-      res.json({ 
-        success: true, 
-        token, // Send token to client
-        user: { 
-          id: user.id, 
-          email: user.email, 
-          companyName: user.companyName, 
-          role: user.role 
-        } 
-      });
-    } catch (error) {
-      res.status(400).json({ message: "Invalid login data", error });
-    }
-  });
+  // Note: Authentication is now handled by Supabase on the frontend
 
   // Products - Pure eCount Integration (No Hybrid System)
   app.get("/api/products", requireAuth, async (req, res) => {
@@ -329,17 +298,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Logout route
-  app.post("/api/auth/logout", requireAuth, async (req, res) => {
-    try {
-      const authHeader = req.headers.authorization!;
-      const token = authHeader.substring(7);
-      activeSessions.delete(token);
-      res.json({ success: true, message: "Logged out successfully" });
-    } catch (error) {
-      res.status(500).json({ message: "Failed to logout", error });
-    }
-  });
+  // Note: Logout is now handled by Supabase on the frontend
 
   // Admin routes - all protected with authentication and admin authorization
   app.get("/api/admin/users", requireAuth, requireAdmin, async (req, res) => {
