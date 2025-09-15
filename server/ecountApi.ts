@@ -16,6 +16,7 @@ interface EcountSession {
   sessionId: string;
   expiresAt: Date;
   zone: string;
+  cookies: string; // Store cookies from login response
 }
 
 interface EcountProduct {
@@ -57,6 +58,18 @@ class EcountApiService {
   private readonly BULK_RATE_LIMIT = 10 * 60 * 1000; // 10 minutes in milliseconds
   private backgroundScheduler: NodeJS.Timeout | null = null;
 
+  // Circuit breaker for handling 412 errors and lockouts
+  private circuitBreakerState: 'CLOSED' | 'OPEN' | 'HALF_OPEN' = 'CLOSED';
+  private failureCount = 0;
+  private lastFailureTime = 0;
+  private readonly FAILURE_THRESHOLD = 3;
+  private readonly CIRCUIT_TIMEOUT = 30000; // 30 seconds
+  
+  // Exponential backoff tracking
+  private backoffDelays = new Map<string, number>();
+  private readonly MAX_BACKOFF = 60000; // 60 seconds max
+  private readonly BASE_BACKOFF = 1000; // 1 second base
+
   constructor() {
     // Use production URL with real API key
     this.baseUrl = PROD_BASE_URL;
@@ -67,53 +80,107 @@ class EcountApiService {
   }
 
   /**
-   * Centralized eCount API request helper with JSON validation and auto-retry
+   * Centralized eCount API request helper with cookie auth, circuit breaker, and exponential backoff
    */
   private async ecountRequest(options: EcountApiRequestOptions): Promise<EcountApiResponse> {
     const { endpoint, body, requiresAuth = true } = options;
     
+    // Check circuit breaker state
+    if (this.circuitBreakerState === 'OPEN') {
+      if (Date.now() - this.lastFailureTime > this.CIRCUIT_TIMEOUT) {
+        console.log('🔄 Circuit breaker: transitioning to HALF_OPEN');
+        this.circuitBreakerState = 'HALF_OPEN';
+      } else {
+        const waitTime = this.CIRCUIT_TIMEOUT - (Date.now() - this.lastFailureTime);
+        throw new Error(`Circuit breaker OPEN: wait ${Math.round(waitTime / 1000)}s before retry`);
+      }
+    }
+    
+    // Apply exponential backoff if there was a previous failure
+    const backoffKey = endpoint;
+    const backoffDelay = this.backoffDelays.get(backoffKey) || 0;
+    if (backoffDelay > 0) {
+      const jitter = Math.random() * 0.3 * backoffDelay; // 30% jitter
+      const totalDelay = backoffDelay + jitter;
+      console.log(`⏳ Exponential backoff: waiting ${Math.round(totalDelay)}ms for ${endpoint}`);
+      await new Promise(resolve => setTimeout(resolve, totalDelay));
+    }
+    
     // Get session and zone if auth is required
     let sessionId = '';
-    let zone = ECOUNT_CONFIG.zone; // fallback
+    let zone = ECOUNT_CONFIG.zone;
+    let cookies = '';
     
     if (requiresAuth) {
       sessionId = await this.login();
       zone = this.session?.zone || ECOUNT_CONFIG.zone;
+      cookies = this.session?.cookies || '';
     }
     
     const baseUrlWithZone = this.baseUrl.replace('{ZONE}', zone);
     const url = requiresAuth ? `${baseUrlWithZone}${endpoint}?SESSION_ID=${sessionId}` : `${baseUrlWithZone}${endpoint}`;
     
-    console.log(`Making eCount API request: ${endpoint}`);
+    console.log(`Making eCount API request: ${endpoint} (Zone: ${zone})`);
     
     try {
+      // Production-ready headers with cookie support
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache'
+      };
+      
+      // Add cookies if we have them from login
+      if (cookies) {
+        headers['Cookie'] = cookies;
+        console.log(`🍪 Using cookies from session: ${cookies.substring(0, 50)}...`);
+      }
+      
       const response = await fetch(url, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
         body: JSON.stringify({
           COM_CODE: ECOUNT_CONFIG.companyCode,
           ...body
         })
       });
       
+      console.log(`Response status: ${response.status}, Content-Type: ${response.headers.get('content-type')}`);
+      
+      // Handle 412 Precondition Failed specifically
+      if (response.status === 412) {
+        console.error('⚠️ Got 412 Precondition Failed - triggering circuit breaker');
+        this.handleFailure(endpoint);
+        throw new Error('eCount API returned 412 Precondition Failed - rate limited');
+      }
+      
       // Check for redirect or non-JSON responses
       const contentType = response.headers.get('content-type');
       if (!contentType || !contentType.includes('application/json')) {
-        console.error(`Non-JSON response from eCount API. Content-Type: ${contentType}`);
+        console.error(`Non-JSON response from eCount API. Status: ${response.status}, Content-Type: ${contentType}`);
+        
+        // Handle non-JSON responses with backoff
+        if (response.status >= 400) {
+          this.handleFailure(endpoint);
+        }
         
         // If we get HTML redirect, likely auth issue - invalidate session and retry once
         if (requiresAuth && this.session && contentType?.includes('text/html')) {
-          console.log('Detected HTML response - invalidating session and retrying...');
+          console.log('🔄 Detected HTML response - invalidating session and retrying...');
           this.session = null;
-          return this.ecountRequest(options); // Retry once with fresh auth
+          return this.ecountRequest(options);
         }
         
-        throw new Error(`Invalid response type: ${contentType}`);
+        throw new Error(`Invalid response type: ${contentType} (Status: ${response.status})`);
       }
       
       const result = await response.json();
+      
+      // Success - reset circuit breaker and backoff
+      this.handleSuccess(endpoint);
       
       // Log detailed error for debugging
       if (result.Status !== "200") {
@@ -122,41 +189,51 @@ class EcountApiService {
           error: result.Error,
           response: result
         });
-      }
-      
-      // Auto-retry on auth failure
-      if (requiresAuth && result.Status === "401" && this.session) {
-        console.log('Auth failed - invalidating session and retrying...');
-        this.session = null;
-        return this.ecountRequest(options); // Retry once with fresh auth
+        
+        // Handle specific error statuses
+        if (result.Status === "401" || result.Status === "403") {
+          if (requiresAuth && this.session) {
+            console.log('🔄 Auth failed - invalidating session and retrying...');
+            this.session = null;
+            return this.ecountRequest(options);
+          }
+        }
       }
       
       return result;
     } catch (error) {
       console.error(`eCount API request failed for ${endpoint}:`, error);
+      this.handleFailure(endpoint);
       throw error;
     }
   }
 
   /**
-   * Get Zone information to determine correct API endpoint (only called during login)
+   * Get Zone information using production endpoint
    */
   private async getZone(): Promise<string> {
     try {
-      // Zone API call must use base URL without zone
-      const response = await fetch(`https://sboapi.ecount.com/OAPI/V2/Zone`, {
+      // Use production endpoint for zone API
+      const response = await fetch(`https://oapi.ecount.com/OAPI/V2/Zone`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Accept-Language': 'en-US,en;q=0.9',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Cache-Control': 'no-cache'
         },
         body: JSON.stringify({
           COM_CODE: ECOUNT_CONFIG.companyCode
         })
       });
 
+      console.log(`Zone API response status: ${response.status}`);
       const result = await response.json();
       if (result.Status === "200") {
-        return result.Data?.Zone || ECOUNT_CONFIG.zone;
+        const zone = result.Data?.Zone || ECOUNT_CONFIG.zone;
+        console.log(`✅ Zone API successful: ${zone}`);
+        return zone;
       }
       throw new Error(`Zone API failed: ${result.Error?.Message || 'Unknown error'}`);
     } catch (error) {
@@ -167,7 +244,7 @@ class EcountApiService {
   }
 
   /**
-   * Login to get session ID with zone pinning
+   * Login with cookie capture and production headers
    */
   private async login(): Promise<string> {
     try {
@@ -181,44 +258,73 @@ class EcountApiService {
       const baseUrlWithZone = this.baseUrl.replace('{ZONE}', zone);
       const loginUrl = `${baseUrlWithZone}/OAPI/V2/OAPILogin`;
 
-      console.log(`Attempting eCount login to: ${loginUrl}`);
-      console.log(`Authenticating with eCount (Zone: ${zone})...`);
+      console.log(`🔐 Attempting eCount login to: ${loginUrl}`);
+      console.log(`🔐 Authenticating with eCount (Zone: ${zone})...`);
       
       const response = await fetch(loginUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Accept-Language': 'en-US,en;q=0.9',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
         },
         body: JSON.stringify({
           COM_CODE: ECOUNT_CONFIG.companyCode,
           USER_ID: ECOUNT_CONFIG.userId,
-          API_CERT_KEY: ECOUNT_CONFIG.authKey, // Production authentication key
+          API_CERT_KEY: ECOUNT_CONFIG.authKey,
           LAN_TYPE: "en-US",
           ZONE: zone
         })
       });
 
       console.log(`Login response status: ${response.status}`);
+      
+      // Handle 412 Precondition Failed on login specifically
+      if (response.status === 412) {
+        console.error('⚠️ Login got 412 Precondition Failed - rate limited, adding delay');
+        // Add delay to prevent further rate limiting
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        throw new Error('Login rate limited (412) - please wait before retry');
+      }
+      
+      // Capture cookies from login response
+      const setCookieHeaders = response.headers.get('set-cookie') || '';
+      console.log(`🍪 Login Set-Cookie headers: ${setCookieHeaders}`);
+      
+      // Check content type before parsing JSON
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        console.error(`Non-JSON login response. Status: ${response.status}, Content-Type: ${contentType}`);
+        throw new Error(`Login returned non-JSON response: ${contentType} (Status: ${response.status})`);
+      }
+      
       const result = await response.json();
       
       if (result.Status === "200" && result.Data?.Datas?.SESSION_ID) {
         // Session expires in 30 minutes by default (can be configured in ERP)
         const expiresAt = new Date(Date.now() + 25 * 60 * 1000); // 25 min for safety
         
-        // Pin zone to session to prevent mismatches
+        // Store session with cookies for subsequent requests
         this.session = {
           sessionId: result.Data.Datas.SESSION_ID,
           expiresAt,
-          zone
+          zone,
+          cookies: setCookieHeaders // Store cookies for auth
         };
 
-        console.log(`eCount login successful! (Zone: ${zone}, Session: ${this.session.sessionId.substring(0, 8)}...)`);
+        console.log(`✅ eCount login successful! (Zone: ${zone}, Session: ${this.session.sessionId.substring(0, 8)}...)`);
+        if (setCookieHeaders) {
+          console.log(`🍪 Stored cookies for session authentication`);
+        }
         return this.session.sessionId;
       }
 
       throw new Error(`Login failed: ${result.Error?.Message || 'Unknown error'}`);
     } catch (error) {
-      console.error('eCount login error:', error);
+      console.error('❌ eCount login error:', error);
       throw error;
     }
   }
@@ -653,7 +759,7 @@ class EcountApiService {
       
       // Transform eCount data to our product format
       const products = productList.map((product: any) => {
-        const inventory = inventoryData[product.PROD_CD] || {};
+        const inventory = inventoryData.get?.(product.PROD_CD) || inventoryData[product.PROD_CD] || {};
         
         return {
           id: product.PROD_CD,
@@ -686,41 +792,20 @@ class EcountApiService {
   private async getProductList(): Promise<any[]> {
     try {
       const endpoint = '/OAPI/V2/Item/GetItemList';
-      const response = await this.makeEcountRequest(endpoint, {
-        PROD_GB: 'Y' // Get products only
+      const response = await this.ecountRequest({
+        endpoint,
+        body: {
+          PROD_GB: 'Y' // Get products only
+        }
       });
       
-      return response?.ItemList || [];
+      return response?.Data?.Datas || [];
     } catch (error) {
       console.error('Failed to get eCount product list:', error);
       return [];
     }
   }
 
-  /**
-   * Helper functions for product data transformation
-   */
-  private generateProductName(productCode: string): string {
-    if (productCode.startsWith('LYOFIA')) return `LYOFIA Medical Test Kit - ${productCode}`;
-    if (productCode.startsWith('ABS')) return `ABS Medical Component - ${productCode}`;
-    if (productCode.startsWith('HS-')) return `Medical Instrument - ${productCode}`;
-    if (productCode.startsWith('PDL-')) return `PDL Medical Supply - ${productCode}`;
-    if (productCode.match(/^\d+$/)) return `Medical Product ${productCode}`;
-    return `Medical Supply - ${productCode}`;
-  }
-
-  private getCategoryFromCode(productCode: string): string {
-    if (productCode.startsWith('LYOFIA')) return 'Laboratory Tests';
-    if (productCode.startsWith('ABS')) return 'Medical Components';
-    if (productCode.startsWith('HS-')) return 'Medical Instruments';
-    if (productCode.startsWith('PDL-')) return 'Medical Supplies';
-    if (productCode.match(/^\d+$/)) return 'General Medical';
-    return 'Medical Supplies';
-  }
-
-  private getProductImage(productCode: string): string {
-    return 'https://images.unsplash.com/photo-1559757148-5c350d0d3c56?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300';
-  }
 
   /**
    * Background Scheduler: Automatic 10-minute bulk sync cycles
@@ -802,8 +887,51 @@ class EcountApiService {
   }
 
   /**
-   * Fallback products in case eCount API is unavailable
+   * Handle successful API call - reset circuit breaker and backoff
    */
+  private handleSuccess(endpoint: string): void {
+    // Reset circuit breaker
+    if (this.circuitBreakerState === 'HALF_OPEN') {
+      console.log('✅ Circuit breaker: transitioning to CLOSED');
+      this.circuitBreakerState = 'CLOSED';
+    }
+    this.failureCount = 0;
+    
+    // Reset backoff for this endpoint
+    this.backoffDelays.delete(endpoint);
+  }
+  
+  /**
+   * Handle API failure - update circuit breaker and backoff
+   */
+  private handleFailure(endpoint: string): void {
+    this.failureCount++;
+    this.lastFailureTime = Date.now();
+    
+    // Update exponential backoff for this endpoint
+    const currentBackoff = this.backoffDelays.get(endpoint) || this.BASE_BACKOFF;
+    const newBackoff = Math.min(currentBackoff * 2, this.MAX_BACKOFF);
+    this.backoffDelays.set(endpoint, newBackoff);
+    
+    console.log(`⚠️ API failure #${this.failureCount} for ${endpoint}, next backoff: ${newBackoff}ms`);
+    
+    // Trigger circuit breaker if threshold reached
+    if (this.failureCount >= this.FAILURE_THRESHOLD && this.circuitBreakerState === 'CLOSED') {
+      console.log('🔴 Circuit breaker: transitioning to OPEN');
+      this.circuitBreakerState = 'OPEN';
+    }
+  }
+  
+  /**
+   * Get circuit breaker status for monitoring
+   */
+  getCircuitBreakerStatus(): { state: string, failures: number, backoffEndpoints: string[] } {
+    return {
+      state: this.circuitBreakerState,
+      failures: this.failureCount,
+      backoffEndpoints: Array.from(this.backoffDelays.keys())
+    };
+  }
 }
 
 // Export singleton instance
