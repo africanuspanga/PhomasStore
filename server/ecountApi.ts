@@ -333,35 +333,74 @@ class EcountApiService {
    * Get products from eCount using inventory balance approach (Pure eCount Integration)
    * No fallbacks - throws error if eCount API is unavailable
    */
+  /**
+   * Get complete product list from eCount using the correct GetProductList endpoint
+   */
+  async getProductList(): Promise<any[]> {
+    try {
+      console.log('🔍 Fetching products from eCount GetProductList endpoint...');
+      
+      // Use GET request with correct endpoint structure as provided by user
+      const response = await fetch(`https://oapi${this.currentSession?.zone || 'IA'}.ecount.com/OAPI/V2/Product/GetProductList?SESSION_ID=${this.currentSession?.sessionId}`, {
+        method: 'GET',
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+          'Accept': 'application/json',
+          'Accept-Language': 'en-US,en;q=0.9',
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache',
+          'Cookie': this.currentSession?.cookies || ''
+        }
+      });
+
+      console.log(`Product API response status: ${response.status}`);
+      
+      if (response.status === 200) {
+        const result = await response.json();
+        console.log('Product API success! Data count:', result.Data?.Datas?.length || 0);
+        return result.Data?.Datas || [];
+      } else {
+        console.error('Product API failed with status:', response.status);
+        return [];
+      }
+    } catch (error) {
+      console.error('❌ eCount getProductList error:', error);
+      return [];
+    }
+  }
+
   async getProducts(): Promise<ProductWithInventory[]> {
     try {
-      // Since Item/GetItemList returned 500, let's use the InventoryBalance endpoint 
-      // which was working but had auth issues (now fixed with centralized helper)
-      const inventoryMap = await this.getInventoryBalance();
+      console.log('🚀 Getting products using correct eCount GetProductList endpoint');
       
-      if (inventoryMap.size > 0) {
-        // Create product list from inventory data
-        const products = Array.from(inventoryMap.entries()).map(([productCode, quantity]) => ({
-          id: productCode,
-          name: this.generateProductName(productCode),
-          packaging: 'Standard',
-          referenceNumber: productCode,
-          price: '25000',
-          imageUrl: this.getProductImage(productCode),
-          category: this.getCategoryFromCode(productCode),
-          availableQuantity: quantity || 0,
-          isLowStock: (quantity || 0) < 10,
-          isExpiringSoon: false
+      // Get products using the correct endpoint
+      const productList = await this.getProductList();
+      
+      if (productList && productList.length > 0) {
+        // Transform eCount product data to our format
+        const products = productList.map((product: any) => ({
+          id: product.PROD_CD || product.ProductCode,
+          name: product.PROD_NM || product.ProductName || this.generateProductName(product.PROD_CD),
+          packaging: product.UNIT || 'Standard',
+          referenceNumber: product.PROD_CD || product.ProductCode,
+          price: product.PRICE || '25000',
+          imageUrl: this.getProductImage(product.PROD_CD),
+          category: product.CATEGORY || this.getCategoryFromCode(product.PROD_CD),
+          availableQuantity: parseInt(product.QTY || product.STOCK_QTY || '0'),
+          isLowStock: parseInt(product.QTY || product.STOCK_QTY || '0') < 10,
+          isExpiringSoon: false,
+          hasRealTimeData: true,
+          lastUpdated: new Date().toISOString()
         }));
-        console.log(`Successfully got ${products.length} products from eCount inventory`);
+        
+        console.log(`✅ Successfully got ${products.length} products from eCount GetProductList`);
         return products;
       }
 
-      console.error('❌ No inventory data available from eCount ERP');
+      console.error('❌ No products returned from eCount GetProductList endpoint');
       throw new Error('No products found in eCount ERP system');
     } catch (error) {
       console.error('❌ eCount getProducts error:', error);
-      // Pure eCount integration - no fallbacks allowed
       throw new Error(`Failed to fetch products from eCount ERP: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -583,16 +622,10 @@ class EcountApiService {
     console.log('🔄 Starting bulk product sync (Rate limit: 1 per 10 minutes)...');
     
     try {
-      // Use proper eCount request format for bulk product sync
+      // Use correct GetProductList endpoint as specified by user
       const result = await this.ecountRequest({
-        endpoint: '/OAPI/V2/Item/GetItemList',
-        body: {
-          // eCount-specific parameters
-          Page: "1",
-          PageSize: "1000", // Max products per call - adjust as needed
-          IsIncludeDel: "false", // Don't include deleted items
-          WH_CD: ECOUNT_CONFIG.warehouseCode
-        }
+        endpoint: '/OAPI/V2/Product/GetProductList',
+        body: {} // GET request - no body needed
       });
 
       if (result.Status === "200") {
@@ -787,24 +820,9 @@ class EcountApiService {
   }
 
   /**
-   * Get product list from eCount
+   * REMOVED: This function is replaced by the new getProductList() function above
+   * which uses the correct /OAPI/V2/Product/GetProductList endpoint
    */
-  private async getProductList(): Promise<any[]> {
-    try {
-      const endpoint = '/OAPI/V2/Item/GetItemList';
-      const response = await this.ecountRequest({
-        endpoint,
-        body: {
-          PROD_GB: 'Y' // Get products only
-        }
-      });
-      
-      return response?.Data?.Datas || [];
-    } catch (error) {
-      console.error('Failed to get eCount product list:', error);
-      return [];
-    }
-  }
 
 
   /**
@@ -859,16 +877,18 @@ class EcountApiService {
    */
   private async bulkSyncProductsAndInventory(): Promise<void> {
     try {
-      // Sync inventory data (this will update the cache)
-      const inventoryData = await this.getInventoryBalance();
+      console.log('🔄 Syncing products using GetProductList endpoint...');
       
-      // Cache the fresh data with timestamp
-      this.inventoryCache.set('inventory_balance', {
-        data: inventoryData,
+      // Get products using the correct endpoint
+      const productList = await this.getProductList();
+      
+      // Cache the product data with timestamp
+      this.inventoryCache.set('product_list', {
+        data: productList,
         timestamp: Date.now()
       });
       
-      console.log(`📦 Bulk sync complete: ${inventoryData.size} products cached from eCount`);
+      console.log(`📦 Bulk sync complete: ${productList.length} products cached from eCount`);
     } catch (error) {
       console.error('Bulk sync error:', error);
       throw error;
