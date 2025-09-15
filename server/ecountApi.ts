@@ -885,28 +885,35 @@ class EcountApiService {
     }
     
     try {
-      // Get both product list and inventory in parallel
-      const [productList, inventoryData] = await Promise.all([
+      // Get product list, inventory, master data, and pricing in parallel for complete eCount integration
+      const [productList, inventoryData, productMasterData, productPricing] = await Promise.all([
         this.getProductList(),
-        this.getCachedInventoryData()
+        this.getCachedInventoryData(),
+        this.getProductMasterData(),
+        this.getProductPricing()
       ]);
       
-      // Transform eCount inventory data to our product format  
-      // Note: productList actually contains inventory balance data with PROD_CD and BAL_QTY
+      // Transform eCount data to our product format using REAL product names and prices
       const products = productList.map((product: any) => {
+        const productCode = product.PROD_CD;
+        const masterData = productMasterData.get(productCode);
+        const realPrice = productPricing.get(productCode);
+        
         return {
-          id: product.PROD_CD,
-          name: this.generateProductName(product.PROD_CD), // Generate name from product code since we have inventory data
-          packaging: 'Standard',
-          referenceNumber: product.PROD_CD,
-          price: '25000', // Default price, will be updated from admin later
-          imageUrl: this.getProductImage(product.PROD_CD),
-          category: this.getCategoryFromCode(product.PROD_CD),
-          availableQuantity: parseInt(product.BAL_QTY || '0'), // Use BAL_QTY from inventory data
+          id: productCode,
+          name: masterData?.name || this.generateProductName(productCode), // Use REAL name from eCount or fallback
+          packaging: masterData?.unit || 'Standard',
+          referenceNumber: productCode,
+          price: realPrice ? realPrice.toString() : '25000', // Use REAL price from eCount or default
+          imageUrl: this.getProductImage(productCode),
+          category: masterData?.category || this.getCategoryFromCode(productCode),
+          availableQuantity: parseInt(product.BAL_QTY || '0'), // Real inventory from eCount
           isLowStock: parseInt(product.BAL_QTY || '0') < 10,
           isExpiringSoon: false,
           hasRealTimeData: true,
-          lastUpdated: new Date().toISOString()
+          lastUpdated: new Date().toISOString(),
+          description: masterData?.description || '', // Add real product description
+          specification: masterData?.specification || '' // Add real product specifications
         };
       });
       
