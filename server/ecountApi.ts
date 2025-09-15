@@ -150,10 +150,11 @@ class EcountApiService {
       
       console.log(`Response status: ${response.status}, Content-Type: ${response.headers.get('content-type')}`);
       
-      // Handle 412 Precondition Failed specifically
+      // Handle 412 Precondition Failed specifically  
       if (response.status === 412) {
-        console.error('⚠️ Got 412 Precondition Failed - triggering circuit breaker');
+        console.log('⚠️ Got 412 Precondition Failed - triggering circuit breaker');
         this.handleFailure(endpoint);
+        // Don't throw immediately - let the caller handle gracefully with cache fallback
         throw new Error('eCount API returned 412 Precondition Failed - rate limited');
       }
       
@@ -284,9 +285,9 @@ class EcountApiService {
       
       // Handle 412 Precondition Failed on login specifically
       if (response.status === 412) {
-        console.error('⚠️ Login got 412 Precondition Failed - rate limited, adding delay');
-        // Add delay to prevent further rate limiting
-        await new Promise(resolve => setTimeout(resolve, 5000));
+        console.log('⚠️ Login got 412 Precondition Failed - rate limited, adding delay');
+        // Add longer delay to prevent further rate limiting
+        await new Promise(resolve => setTimeout(resolve, 8000));
         throw new Error('Login rate limited (412) - please wait before retry');
       }
       
@@ -795,6 +796,16 @@ class EcountApiService {
   async getAllProductsFromEcount(): Promise<any[]> {
     console.log('🚀 Fetching ALL products from eCount ERP (Pure Integration)');
     
+    const cacheKey = 'all_products';
+    const cached = this.inventoryCache.get(cacheKey);
+    
+    // Check if we have valid cached data (less than 1 hour old)
+    if (cached && (Date.now() - cached.timestamp) < this.CACHE_DURATION) {
+      const ageMinutes = Math.round((Date.now() - cached.timestamp) / 1000 / 60);
+      console.log(`📦 Using cached products (age: ${ageMinutes} minutes, count: ${cached.data.length})`);
+      return cached.data;
+    }
+    
     try {
       // Get both product list and inventory in parallel
       const [productList, inventoryData] = await Promise.all([
@@ -821,12 +832,28 @@ class EcountApiService {
         };
       });
       
-      console.log(`✅ Pure eCount integration: ${products.length} products loaded from ERP`);
+      // Cache the products for future requests
+      this.inventoryCache.set(cacheKey, {
+        data: products,
+        timestamp: Date.now()
+      });
+      
+      console.log(`✅ Pure eCount integration: ${products.length} products loaded from ERP and cached`);
       return products;
       
     } catch (error) {
       console.error('❌ Failed to get products from eCount:', error);
-      throw new Error('Failed to fetch products from eCount ERP');
+      
+      // If fresh fetch fails and we have expired cache, use it as fallback
+      if (cached) {
+        const ageMinutes = Math.round((Date.now() - cached.timestamp) / 1000 / 60);
+        console.log(`⚠️ Fresh fetch failed, using expired cache as fallback (age: ${ageMinutes} minutes, count: ${cached.data.length})`);
+        return cached.data;
+      }
+      
+      // Only throw if we have no cached data at all
+      console.log('💥 No products available: Fresh fetch failed and no cache available');
+      return []; // Return empty array instead of throwing to prevent frontend crashes
     }
   }
 
