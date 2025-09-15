@@ -1,9 +1,9 @@
 import type { ProductWithInventory, Order } from "@shared/schema";
 
-// eCount API Configuration
+// eCount API Configuration - Production Ready
 const ECOUNT_CONFIG = {
   companyCode: process.env.ECOUNT_COMPANY_CODE!,
-  testAuthKey: process.env.ECOUNT_TEST_AUTH_KEY!,
+  authKey: process.env.ECOUNT_AUTH_KEY!, // Production key with 1-year validity
   userId: process.env.ECOUNT_USER_ID!,
   zone: process.env.ECOUNT_ZONE!,
   warehouseCode: process.env.ECOUNT_WAREHOUSE_CODE!,
@@ -53,8 +53,9 @@ class EcountApiService {
   private readonly CACHE_DURATION = 60 * 60 * 1000; // 1 hour in milliseconds
 
   constructor() {
-    // Use test URL for now
-    this.baseUrl = TEST_BASE_URL;
+    // Use production URL with real API key
+    this.baseUrl = PROD_BASE_URL;
+    console.log('🚀 eCount API configured for PRODUCTION environment');
   }
 
   /**
@@ -183,7 +184,7 @@ class EcountApiService {
         body: JSON.stringify({
           COM_CODE: ECOUNT_CONFIG.companyCode,
           USER_ID: ECOUNT_CONFIG.userId,
-          API_CERT_KEY: ECOUNT_CONFIG.testAuthKey,
+          API_CERT_KEY: ECOUNT_CONFIG.authKey, // Production authentication key
           LAN_TYPE: "en-US",
           ZONE: zone
         })
