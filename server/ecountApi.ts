@@ -353,16 +353,20 @@ class EcountApiService {
       });
 
       console.log('📊 InventoryBasic API status:', result.Status);
-      console.log('📊 InventoryBasic API data count:', result.Data?.Datas?.length || 0);
-      console.log('🔍 Full API response:', JSON.stringify(result, null, 2));
-      console.log('🏭 Warehouse code used:', ECOUNT_CONFIG.warehouseCode);
+      console.log('📊 InventoryBasic API data count:', result.Data?.Result?.length || 0);
       
-      if (result.Status === "200" && result.Data?.Datas) {
+      if (result.Status === "200" && result.Data && result.Data.Result && result.Data.Result.length > 0) {
         console.log('✅ Successfully retrieved products from InventoryBasic!');
-        console.log(`🎉 REAL eCount data: ${result.Data.Datas.length} products found!`);
-        return result.Data.Datas;
+        console.log(`🎉 REAL eCount data: ${result.Data.Result.length} products found!`);
+        return result.Data.Result;
       } else {
         console.error('❌ InventoryBasic API failed:', result.Status, result.Error?.Message);
+        console.error('🔍 Debug - Data structure:', { 
+          status: result.Status, 
+          hasData: !!result.Data, 
+          hasDatas: !!result.Data?.Datas,
+          datasLength: result.Data?.Datas?.length 
+        });
         return [];
       }
     } catch (error) {
@@ -798,20 +802,19 @@ class EcountApiService {
         this.getCachedInventoryData()
       ]);
       
-      // Transform eCount data to our product format
+      // Transform eCount inventory data to our product format  
+      // Note: productList actually contains inventory balance data with PROD_CD and BAL_QTY
       const products = productList.map((product: any) => {
-        const inventory = inventoryData instanceof Map ? inventoryData.get(product.PROD_CD) : inventoryData[product.PROD_CD] || {};
-        
         return {
           id: product.PROD_CD,
-          name: product.PROD_NM || this.generateProductName(product.PROD_CD),
-          packaging: product.UNIT || 'Standard',
+          name: this.generateProductName(product.PROD_CD), // Generate name from product code since we have inventory data
+          packaging: 'Standard',
           referenceNumber: product.PROD_CD,
-          price: inventory.PRICE || product.PRICE || '25000',
+          price: '25000', // Default price, will be updated from admin later
           imageUrl: this.getProductImage(product.PROD_CD),
           category: this.getCategoryFromCode(product.PROD_CD),
-          availableQuantity: parseInt(inventory.QTY || '0'),
-          isLowStock: parseInt(inventory.QTY || '0') < 10,
+          availableQuantity: parseInt(product.BAL_QTY || '0'), // Use BAL_QTY from inventory data
+          isLowStock: parseInt(product.BAL_QTY || '0') < 10,
           isExpiringSoon: false,
           hasRealTimeData: true,
           lastUpdated: new Date().toISOString()
