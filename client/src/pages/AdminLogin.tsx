@@ -46,7 +46,8 @@ export default function AdminLogin() {
           description: "Admin login successful",
         });
         
-        setLocation("/admin");
+        // Force page refresh to trigger AuthContext re-initialization
+        window.location.href = "/";
       }
     } catch (error) {
       console.error("Admin login failed:", error);
@@ -142,7 +143,7 @@ export default function AdminLogin() {
                 onClick={() => setLocation("/login")}
                 data-testid="link-regular-login"
               >
-                Sign in here
+                Customer login here
               </Button>
             </p>
           </div>

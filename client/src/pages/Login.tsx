@@ -143,7 +143,10 @@ export default function Login() {
                       <FormLabel>Company Name</FormLabel>
                       <FormControl>
                         <Input
+                          type="text"
                           placeholder="Your Medical Practice"
+                          data-testid="input-company-name"
+                          autoComplete="organization"
                           {...field}
                         />
                       </FormControl>
@@ -180,7 +183,10 @@ export default function Login() {
                       <FormLabel>Phone Number</FormLabel>
                       <FormControl>
                         <Input
+                          type="tel"
                           placeholder="+255754231267 or 0754231267"
+                          data-testid="input-phone"
+                          autoComplete="tel"
                           {...field}
                         />
                       </FormControl>
@@ -197,7 +203,10 @@ export default function Login() {
                       <FormLabel>Address</FormLabel>
                       <FormControl>
                         <Input
+                          type="text"
                           placeholder="Street, City, Region"
+                          data-testid="input-address"
+                          autoComplete="address-line1"
                           {...field}
                         />
                       </FormControl>
@@ -216,6 +225,8 @@ export default function Login() {
                         <Input
                           type="email"
                           placeholder="admin@yourpractice.com"
+                          data-testid="input-register-email"
+                          autoComplete="email"
                           {...field}
                         />
                       </FormControl>
