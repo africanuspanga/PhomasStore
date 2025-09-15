@@ -2,7 +2,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { ecountApi } from "./ecountApi";
-import { insertUserSchema, loginSchema, insertOrderSchema } from "@shared/schema";
+import { insertUserSchema, loginSchema, insertOrderSchema, supabaseSignUpSchema } from "@shared/schema";
 import { v2 as cloudinary } from 'cloudinary';
 import multer from 'multer';
 import { randomUUID } from "crypto";
@@ -235,6 +235,80 @@ const requireAdminAuth = async (req: Request, res: Response, next: NextFunction)
 };
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Customer registration endpoint using Supabase
+  app.post("/api/auth/register", async (req, res) => {
+    try {
+      console.log('🔐 Registration request received:', req.body);
+      
+      const validatedData = supabaseSignUpSchema.parse(req.body);
+      const { email, password, name, phone, address, user_type } = validatedData;
+
+      // Create user in Supabase Auth
+      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+        email,
+        password,
+        email_confirm: true, // Auto-confirm email for demo
+      });
+
+      if (authError) {
+        console.error('🔐 Supabase auth registration failed:', authError);
+        return res.status(400).json({ 
+          message: 'Registration failed', 
+          error: authError.message 
+        });
+      }
+
+      if (!authData.user) {
+        console.error('🔐 No user data returned from Supabase');
+        return res.status(500).json({ message: 'Registration failed - no user created' });
+      }
+
+      // Create user profile in database
+      const { data: profileData, error: profileError } = await supabase
+        .from('profiles')
+        .insert({
+          user_id: authData.user.id,
+          email,
+          name,
+          phone,
+          address,
+          user_type,
+          role: 'customer'
+        })
+        .select()
+        .single();
+
+      if (profileError) {
+        console.error('🔐 Profile creation failed:', profileError);
+        // Clean up the auth user if profile creation fails
+        await supabase.auth.admin.deleteUser(authData.user.id);
+        return res.status(500).json({ 
+          message: 'Registration failed - profile creation error',
+          error: profileError.message 
+        });
+      }
+
+      console.log('🔐 Registration successful:', { email, name, user_type });
+      
+      res.json({ 
+        success: true, 
+        message: 'Registration successful',
+        user: {
+          id: authData.user.id,
+          email,
+          name,
+          role: 'customer'
+        }
+      });
+    } catch (error) {
+      console.error('🔐 Registration error:', error);
+      res.status(400).json({ 
+        message: "Registration failed", 
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
   // Admin authentication endpoint for company admin
   app.post("/api/admin/login", async (req, res) => {
     try {
