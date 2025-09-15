@@ -759,7 +759,7 @@ class EcountApiService {
       
       // Transform eCount data to our product format
       const products = productList.map((product: any) => {
-        const inventory = inventoryData.get?.(product.PROD_CD) || inventoryData[product.PROD_CD] || {};
+        const inventory = inventoryData instanceof Map ? inventoryData.get(product.PROD_CD) : inventoryData[product.PROD_CD] || {};
         
         return {
           id: product.PROD_CD,
