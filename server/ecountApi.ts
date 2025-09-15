@@ -578,10 +578,88 @@ class EcountApiService {
   }
 
   /**
-   * Generate product name from product code
+   * Get real product master data from eCount including names, descriptions
+   */
+  async getProductMasterData(): Promise<Map<string, any>> {
+    try {
+      console.log('📋 Fetching product master data from eCount...');
+      
+      const result = await this.ecountRequest({
+        endpoint: '/OAPI/V2/Product/GetProductList',
+        body: {
+          PROD_CD: '', // Empty = get all products
+          Page: '1',
+          PageSize: '1000'
+        }
+      });
+
+      const productMasterMap = new Map<string, any>();
+
+      if (result.Status === "200" && result.Data?.Datas) {
+        result.Data.Datas.forEach((product: any) => {
+          productMasterMap.set(product.PROD_CD, {
+            name: product.PROD_NM || product.PROD_DES || `Product ${product.PROD_CD}`,
+            description: product.PROD_DES || product.PROD_NM || '',
+            specification: product.SPEC || '',
+            category: product.ITEM_GRP_CD || this.getCategoryFromCode(product.PROD_CD),
+            unit: product.UNIT || 'PCS'
+          });
+        });
+        console.log(`✅ Retrieved master data for ${productMasterMap.size} products`);
+      } else {
+        console.log('⚠️ No product master data available, will use generated names');
+      }
+
+      return productMasterMap;
+    } catch (error) {
+      console.error('❌ Failed to get product master data:', error);
+      return new Map(); // Return empty map on error
+    }
+  }
+
+  /**
+   * Get real pricing data from eCount price lists
+   */
+  async getProductPricing(): Promise<Map<string, number>> {
+    try {
+      console.log('💰 Fetching product pricing from eCount...');
+      
+      const result = await this.ecountRequest({
+        endpoint: '/OAPI/V2/Price/GetPriceList',
+        body: {
+          PROD_CD: '', // Empty = get all products
+          PRICE_TYPE: '1', // Standard selling price
+          Page: '1',
+          PageSize: '1000'
+        }
+      });
+
+      const pricingMap = new Map<string, number>();
+
+      if (result.Status === "200" && result.Data?.Datas) {
+        result.Data.Datas.forEach((priceItem: any) => {
+          const price = parseFloat(priceItem.PRICE || priceItem.UNIT_PRICE || '0');
+          if (price > 0) {
+            pricingMap.set(priceItem.PROD_CD, price);
+          }
+        });
+        console.log(`✅ Retrieved pricing for ${pricingMap.size} products`);
+      } else {
+        console.log('⚠️ No pricing data available, will use default prices');
+      }
+
+      return pricingMap;
+    } catch (error) {
+      console.error('❌ Failed to get product pricing:', error);
+      return new Map(); // Return empty map on error
+    }
+  }
+
+  /**
+   * Generate product name from product code (fallback only)
    */
   private generateProductName(productCode: string): string {
-    // Medical supply name patterns based on product codes
+    // Medical supply name patterns based on product codes (fallback when real name unavailable)
     if (productCode.startsWith('LYOFIA')) return `LYOFIA Medical Test Kit - ${productCode}`;
     if (productCode.startsWith('ABS')) return `ABS Medical Component - ${productCode}`;
     if (productCode.startsWith('HS-')) return `Medical Instrument - ${productCode}`;
