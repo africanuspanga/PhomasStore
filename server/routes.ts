@@ -158,59 +158,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Product routes - Hybrid approach: local metadata + cached eCount inventory
-  app.get("/api/products", async (req, res) => {
+  // Products - Pure eCount Integration (No Hybrid System)
+  app.get("/api/products", requireAuth, async (req, res) => {
     try {
-      // Get base products from storage (rich metadata: names, descriptions, images)
-      const baseProducts = await storage.getProductsWithInventory();
+      // Get ALL product data directly from eCount - no local storage
+      const ecountProducts = await ecountApi.getAllProductsFromEcount();
       
-      // Get cached inventory quantities from eCount (with 1-hour caching)
-      try {
-        const inventoryMap = await ecountApi.getCachedInventoryData();
-        console.log(`📊 Got cached inventory for ${inventoryMap.size} items from eCount`);
-        
-        // Merge: Use storage metadata + cached eCount quantities
-        const hybridProducts = baseProducts.map(product => {
-          const ecountQuantity = inventoryMap.get(product.id);
-          return {
-            ...product,
-            availableQuantity: ecountQuantity !== undefined ? ecountQuantity : product.availableQuantity,
-            isLowStock: ecountQuantity !== undefined ? ecountQuantity < 10 : product.isLowStock,
-            // Mark products that have real eCount data
-            hasRealTimeData: ecountQuantity !== undefined
-          };
-        });
-        
-        // Also add any eCount-only products not in our catalog
-        inventoryMap.forEach((quantity, productCode) => {
-          const existsInCatalog = baseProducts.some(p => p.id === productCode);
-          if (!existsInCatalog && quantity > 0) {
-            hybridProducts.push({
-              id: productCode,
-              name: generateProductName(productCode),
-              packaging: 'Standard',
-              referenceNumber: productCode,
-              price: '25000',
-              imageUrl: getProductImage(productCode),
-              category: getCategoryFromCode(productCode),
-              availableQuantity: quantity,
-              isLowStock: quantity < 10,
-              isExpiringSoon: false,
-              hasRealTimeData: true
-            });
-          }
-        });
-        
-        console.log(`✅ Hybrid catalog: ${hybridProducts.length} products (${hybridProducts.filter(p => p.hasRealTimeData).length} with live eCount data)`);
-        res.json(hybridProducts);
-        
-      } catch (ecountError) {
-        console.error('eCount inventory failed, using storage data only:', ecountError);
-        res.json(baseProducts);
-      }
+      console.log(`🚀 Pure eCount catalog: ${ecountProducts.length} products from ERP`);
+      
+      res.json(ecountProducts);
     } catch (error) {
-      console.error('Failed to fetch products:', error);
-      res.status(500).json({ message: "Failed to fetch products", error });
+      console.error('❌ Failed to get eCount products:', error);
+      res.status(500).json({ error: 'Failed to fetch products from eCount ERP' });
     }
   });
 

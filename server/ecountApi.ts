@@ -629,6 +629,91 @@ class EcountApiService {
   }
 
   /**
+   * Pure eCount Integration: Get ALL products from eCount with inventory data
+   * This replaces the hybrid system approach
+   */
+  async getAllProductsFromEcount(): Promise<any[]> {
+    console.log('🚀 Fetching ALL products from eCount ERP (Pure Integration)');
+    
+    try {
+      // Get both product list and inventory in parallel
+      const [productList, inventoryData] = await Promise.all([
+        this.getProductList(),
+        this.getCachedInventoryData()
+      ]);
+      
+      // Transform eCount data to our product format
+      const products = productList.map((product: any) => {
+        const inventory = inventoryData[product.PROD_CD] || {};
+        
+        return {
+          id: product.PROD_CD,
+          name: product.PROD_NM || this.generateProductName(product.PROD_CD),
+          packaging: product.UNIT || 'Standard',
+          referenceNumber: product.PROD_CD,
+          price: inventory.PRICE || product.PRICE || '25000',
+          imageUrl: this.getProductImage(product.PROD_CD),
+          category: this.getCategoryFromCode(product.PROD_CD),
+          availableQuantity: parseInt(inventory.QTY || '0'),
+          isLowStock: parseInt(inventory.QTY || '0') < 10,
+          isExpiringSoon: false,
+          hasRealTimeData: true,
+          lastUpdated: new Date().toISOString()
+        };
+      });
+      
+      console.log(`✅ Pure eCount integration: ${products.length} products loaded from ERP`);
+      return products;
+      
+    } catch (error) {
+      console.error('❌ Failed to get products from eCount:', error);
+      throw new Error('Failed to fetch products from eCount ERP');
+    }
+  }
+
+  /**
+   * Get product list from eCount
+   */
+  private async getProductList(): Promise<any[]> {
+    try {
+      const endpoint = '/OAPI/V2/Item/GetItemList';
+      const response = await this.makeEcountRequest(endpoint, {
+        PROD_GB: 'Y' // Get products only
+      });
+      
+      return response?.ItemList || [];
+    } catch (error) {
+      console.error('Failed to get eCount product list:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Helper functions for product data transformation
+   */
+  private generateProductName(productCode: string): string {
+    if (productCode.startsWith('LYOFIA')) return `LYOFIA Medical Test Kit - ${productCode}`;
+    if (productCode.startsWith('ABS')) return `ABS Medical Component - ${productCode}`;
+    if (productCode.startsWith('HS-')) return `Medical Instrument - ${productCode}`;
+    if (productCode.startsWith('PDL-')) return `PDL Medical Supply - ${productCode}`;
+    if (productCode.match(/^\d+$/)) return `Medical Product ${productCode}`;
+    return `Medical Supply - ${productCode}`;
+  }
+
+  private getCategoryFromCode(productCode: string): string {
+    if (productCode.startsWith('LYOFIA')) return 'Laboratory Tests';
+    if (productCode.startsWith('ABS')) return 'Medical Components';
+    if (productCode.startsWith('HS-')) return 'Medical Instruments';
+    if (productCode.startsWith('PDL-')) return 'Medical Supplies';
+    if (productCode.match(/^\d+$/)) return 'General Medical';
+    return 'Medical Supplies';
+  }
+
+  private getProductImage(productCode: string): string {
+    return 'https://images.unsplash.com/photo-1559757148-5c350d0d3c56?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300';
+  }
+
+  /**
    * Fallback products in case eCount API is unavailable
    */
   private getFallbackProducts(): ProductWithInventory[] {
