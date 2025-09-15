@@ -590,9 +590,9 @@ class EcountApiService {
     try {
       console.log('📋 Fetching product master data from eCount using CORRECT tenant endpoint...');
       
-      // Use the actual endpoint that exists in this eCount tenant (from user's screenshot)
+      // Try different endpoint from user's screenshot - Basic Item
       const result = await this.ecountRequest({
-        endpoint: '/OAPI/V2/ItemManagement/GetInventoryDetail/ProductList',
+        endpoint: '/OAPI/V2/BasicItem',
         body: {
           PROD_CD: '', // Empty = get all products
           Page: '1',
@@ -954,29 +954,42 @@ class EcountApiService {
         this.getProductPricing()
       ]);
       
-      // Transform eCount data to our product format using REAL product names and prices
-      const products = productList.map((product: any) => {
+      // Transform eCount data using REAL product names and categories from InventoryBalance response
+      const products = productList.map((product: any, index: number) => {
         const productCode = product.PROD_CD;
-        const masterData = productMasterData.get(productCode);
-        const realPrice = productPricing.get(productCode);
+        
+        // Log first product structure to see what fields are available
+        if (index === 0) {
+          console.log(`📋 InventoryBalance product fields available:`, Object.keys(product));
+          console.log(`📋 First product sample data:`, product);
+        }
+        
+        // Extract REAL product name from InventoryBalance response (not generated!)
+        const realName = product.PROD_DES || product.ITEM_DES || product.PROD_NM || product.ITEM_NM || null;
+        const realCategory = product.CLASS_L_NM || product.CLASS_M_NM || product.CLASS_S_NM || product.ITEM_GRP_NM || null;
+        const realSpec = product.SIZE_DES || product.SPEC || product.SPECIFICATION || '';
         
         return {
           id: productCode,
-          name: masterData?.name || this.generateProductName(productCode), // Use REAL name from eCount or fallback
-          packaging: masterData?.unit || 'Standard',
+          name: realName || this.generateProductName(productCode), // Use REAL name from InventoryBalance!
+          packaging: product.SIZE_DES || 'Standard',
           referenceNumber: productCode,
-          price: realPrice ? realPrice.toString() : '25000', // Use REAL price from eCount or default
+          price: product.PRICE || '25000', // Try to use price from InventoryBalance
           imageUrl: this.getProductImage(productCode),
-          category: masterData?.category || this.getCategoryFromCode(productCode),
+          category: realCategory || this.getCategoryFromCode(productCode), // Use REAL category!
           availableQuantity: parseInt(product.BAL_QTY || '0'), // Real inventory from eCount
           isLowStock: parseInt(product.BAL_QTY || '0') < 10,
           isExpiringSoon: false,
           hasRealTimeData: true,
           lastUpdated: new Date().toISOString(),
-          description: masterData?.description || '', // Add real product description
-          specification: masterData?.specification || '' // Add real product specifications
+          description: product.PROD_DES || product.ITEM_DESC || '', // Use REAL description
+          specification: realSpec
         };
       });
+      
+      // Count how many products have real vs generated names
+      const realNamesCount = products.filter(p => !p.name.includes('Medical Product') && !p.name.includes('Medical Supply')).length;
+      console.log(`🎉 REAL NAMES FOUND: ${realNamesCount}/${products.length} products have real names from InventoryBalance!`);
       
       // Cache safety: Only cache if we have products (prevent overwriting good cache with empty results)
       if (products.length > 0) {
