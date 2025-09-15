@@ -4,8 +4,16 @@ import { supabase } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
 import type { User as SupabaseUser } from "@supabase/supabase-js";
 
+interface AdminUser {
+  id: string;
+  email: string;
+  name: string;
+  role: string;
+}
+
 interface AuthContextType {
   user: Profile | null;
+  adminUser: AdminUser | null;
   isLoading: boolean;
   login: (credentials: SupabaseLogin) => Promise<boolean>;
   register: (userData: SupabaseSignUp) => Promise<boolean>;
@@ -18,30 +26,54 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<Profile | null>(null);
+  const [adminUser, setAdminUser] = useState<AdminUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
 
   useEffect(() => {
-    // Get initial session
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (session) {
-        await loadUserProfile(session.user.id);
-      }
-      setIsLoading(false);
-    });
-
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (session) {
-        await loadUserProfile(session.user.id);
-      } else {
-        setUser(null);
-      }
-      setIsLoading(false);
-    });
-
-    return () => subscription.unsubscribe();
+    initializeAuth();
   }, []);
+
+  const initializeAuth = async () => {
+    try {
+      // Check for admin token first
+      const adminToken = localStorage.getItem("phomas_admin_token");
+      if (adminToken) {
+        // We have an admin token, so user is admin
+        setAdminUser({
+          id: "admin-phomas",
+          email: "admin@phomas.com", 
+          name: "PHOMAS DIAGNOSTICS",
+          role: "admin"
+        });
+        setIsLoading(false);
+        return;
+      }
+
+      // Check for Supabase session
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        await loadUserProfile(session.user.id);
+      }
+      setIsLoading(false);
+
+      // Listen for Supabase auth changes
+      const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+        if (session) {
+          await loadUserProfile(session.user.id);
+          setAdminUser(null); // Clear admin user if Supabase user logs in
+        } else {
+          setUser(null);
+        }
+        setIsLoading(false);
+      });
+
+      return () => subscription.unsubscribe();
+    } catch (error) {
+      console.error('Auth initialization error:', error);
+      setIsLoading(false);
+    }
+  };
 
   const loadUserProfile = async (userId: string) => {
     try {
@@ -166,30 +198,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = async () => {
     try {
-      const { error } = await supabase.auth.signOut();
-      if (error) {
-        console.warn("Failed to logout from Supabase:", error);
+      // Check if admin user is logged in
+      if (adminUser) {
+        localStorage.removeItem("phomas_admin_token");
+        setAdminUser(null);
+      } else {
+        // Regular Supabase user logout
+        const { error } = await supabase.auth.signOut();
+        if (error) {
+          console.warn("Failed to logout from Supabase:", error);
+        }
+        setUser(null);
       }
-    } catch (error) {
-      console.warn("Failed to logout:", error);
-    } finally {
-      // Clear user state
-      setUser(null);
+      
       toast({
         title: "Logged out",
         description: "You have been successfully logged out",
       });
+    } catch (error) {
+      console.warn("Failed to logout:", error);
     }
   };
 
   const value: AuthContextType = {
     user,
+    adminUser,
     isLoading,
     login,
     register,
     logout,
-    isAuthenticated: !!user,
-    isAdmin: user?.name === "PHOMAS DIAGNOSTICS", // Admin is the main company
+    isAuthenticated: !!user || !!adminUser,
+    isAdmin: !!adminUser || user?.user_type === "admin", // Admin token or admin user type
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

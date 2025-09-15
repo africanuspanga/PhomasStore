@@ -20,15 +20,8 @@ cloudinary.config({
 });
 
 // Initialize Supabase client for server-side auth verification
-if (!process.env.SUPABASE_URL) {
-  throw new Error('SUPABASE_URL environment variable is required');
-}
-if (!process.env.SUPABASE_SERVICE_ROLE_KEY && !process.env.SUPABASE_ANON_KEY) {
-  throw new Error('SUPABASE_SERVICE_ROLE_KEY or SUPABASE_ANON_KEY environment variable is required');
-}
-
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY!;
+const supabaseUrl = process.env.SUPABASE_URL || 'https://xvomxojbfhovbhbbkuoh.supabase.co'
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh2b214b2piZmhvdmJoYmJrdW9oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTc5NjY5NTksImV4cCI6MjA3MzU0Mjk1OX0.Th3j5bG7kDgJC9J8jHezRzPVLoI0DhPnE5KB_Fb2f10'
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey, {
   auth: {
@@ -209,8 +202,76 @@ function getProductImage(productCode: string): string {
   return 'https://images.unsplash.com/photo-1559757148-5c350d0d3c56?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300';
 }
 
+// Admin session store for company admin access
+const adminSessions = new Map<string, { userId: string; role: string; email: string; createdAt: Date }>();
+
+// Admin authentication middleware for company admin
+const requireAdminAuth = async (req: Request, res: Response, next: NextFunction) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ message: 'Admin authentication required' });
+  }
+
+  const token = authHeader.substring(7);
+  const session = adminSessions.get(token);
+  
+  if (!session) {
+    return res.status(401).json({ message: 'Invalid or expired admin session' });
+  }
+
+  // Check if session is older than 24 hours
+  const now = new Date();
+  const sessionAge = now.getTime() - session.createdAt.getTime();
+  if (sessionAge > 24 * 60 * 60 * 1000) {
+    adminSessions.delete(token);
+    return res.status(401).json({ message: 'Admin session expired' });
+  }
+
+  // Attach admin info to request
+  (req as any).userId = session.userId;
+  (req as any).userRole = session.role;
+  (req as any).userEmail = session.email;
+  next();
+};
+
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Note: Authentication is now handled by Supabase on the frontend
+  // Admin authentication endpoint for company admin
+  app.post("/api/admin/login", async (req, res) => {
+    try {
+      const { email, password } = req.body;
+      
+      // Check hardcoded admin credentials
+      if (email === "admin@phomas.com" && password === "admin123") {
+        // Create admin session token
+        const token = randomUUID();
+        adminSessions.set(token, {
+          userId: "admin-phomas",
+          role: "admin",
+          email: email,
+          createdAt: new Date()
+        });
+        
+        console.log(`🔐 Admin login successful: ${email}`);
+        
+        res.json({ 
+          success: true, 
+          token, 
+          user: { 
+            id: "admin-phomas",
+            email: email,
+            name: "PHOMAS DIAGNOSTICS",
+            role: "admin" 
+          } 
+        });
+      } else {
+        console.log(`🔐 Admin login failed: Invalid credentials for ${email}`);
+        return res.status(401).json({ message: "Invalid admin credentials" });
+      }
+    } catch (error) {
+      console.error('🔐 Admin login error:', error);
+      res.status(400).json({ message: "Admin login failed", error });
+    }
+  });
 
   // Products - Pure eCount Integration (Public catalog browsing)
   app.get("/api/products", async (req, res) => {

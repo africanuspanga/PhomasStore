@@ -8,6 +8,7 @@ import { CartProvider } from "@/contexts/CartContext";
 import { Layout } from "@/components/Layout";
 import Home from "@/pages/Home";
 import Login from "@/pages/Login";
+import AdminLogin from "@/pages/AdminLogin";
 import Cart from "@/pages/Cart";
 import OrderHistory from "@/pages/OrderHistory";
 import AdminPanel from "@/pages/AdminPanel";
@@ -43,6 +44,7 @@ function Router() {
   return (
     <Switch>
       <Route path="/login" component={Login} />
+      <Route path="/admin-login" component={AdminLogin} />
       <Route path="/">
         <ProtectedRoute>
           <Home />
