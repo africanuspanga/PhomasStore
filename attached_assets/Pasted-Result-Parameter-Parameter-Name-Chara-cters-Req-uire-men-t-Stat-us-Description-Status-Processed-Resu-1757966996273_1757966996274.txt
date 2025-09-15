@@ -1,0 +1,3024 @@
+Result
+Parameter Parameter Name
+Chara
+cters
+Req
+uire
+men
+t
+Stat
+us
+Description
+Status
+Processed
+Results
+Y 200 (Normal)
+Error Error If an error occurred
+Code Error Code
+Messag
+e
+Error Message
+Messag
+eDetail
+Error Details
+Data
+COM_C
+ODE
+Company Code 6 Y COM_CODE (Company Code) that is entered when calling the URL.
+USER_I
+D
+User ID 30 Y
+USER_ID (API Key Issued User ID) that is entered when calling the
+URL.
+SESSIO
+N_ID
+Session ID 50 Y
+SESSION_ID (Session ID) that is created after calling the URL. It is
+used for authentication during the session.
+EXPIRE
+_DATE
+EXPIRE_DATE Y The current API version will expire on
+NOTICE NOTICE Y Notice of ECOUNT API
+Example Parameter
+URL : https://oapi{ZONE}.ecount.com/OAPI/V2/OAPILogin
+// Replace {ZONE} with real zone information when entering Zone data.(Without {})
+{
+"COM_CODE":"80001", // USER COM_CODE input
+"USER_ID":"USER_ID", // USER USER_ID input
+"API_CERT_KEY":"{API_CERT_KEY}", // USER API_CERT_KEY input
+"LAN_TYPE":"ko-KR", // USER LAN_TYPE input
+"ZONE":"C" // USER ZONE input
+}
+Example Result
+[SUCCESS]
+{
+"Data":
+{
+"EXPIRE_DATE":"",
+"NOTICE":"",
+"Code":"00",
+"Datas":
+{
+"COM_CODE":"80001",
+"USER_ID":"USER_ID",
+"SESSION_ID":"39313231367c256562253866253939256563253838253938:0HDD9DBtZt2e"
+},
+"Message":"",
+"RedirectUrl":""
+},
+"Status":"200",
+"Error":null,
+"Timestamp":"2018년 6월 11일 오후 1:09:21"
+}
+[FAIL]
+{
+"Data":null,
+"Status":"200",
+"Error":
+{
+"Code":201,
+"Message":API_CERT_KEY is not valid.,
+"MessageDetail":""
+},
+"Timestamp":null
+}
+Description by Error Type
+Statu
+s
+"Error" >
+"Code"
+Description
+200 None Processed Successfully
+404 None When the called API does not exist since the API path is not correct.
+412 None If exceeding the API transmission count limit
+200
+20
+Please enter the correct Code, ID, and Password. If you do not know your login information, please
+contact the Master ID.
+21 Access restricted by Master.
+22
+[ID - Restricted Time] Login is restricted for this ID during [FROM] ~ [TO].
+Please contact your Master ID .
+23
+[All - Restricted Time] Login is restricted for all users from [FROM] ~ [TO].
+Please contact your Master ID .
+24
+[ID - Block Access by IP Address (PC)] Login is restricted for all users at this IP address.
+Please contact your Master ID .
+25
+[All - Block Access by IP Address (PC)] Login is restricted for all users at this IP address.
+Please contact your Master ID .
+26 Do not have authorization for the application.
+27 [Mobile Login] Please request your Master ID [000] to permit login to mobile with your ID.
+81, 82,
+83
+Access to the API has been denied due to unpaid subscription fees.
+84 Access to the API has been denied due to unpaid subscription fees.
+85 Access to the API has been denied since youre company code has been blocked.
+89 Access to the API has been denied since your company code has been withdrawn.
+98
+You have entered an incorrect password 5 times.\n\nPlease request a new password.\n-Users:
+Request a new password from the Master ID. Master ID: re-login after re setting a password.\n-You
+will receive a temporary password via Email.
+99 The relevant ID does not exist.
+201 API_CERT_KEY is not valid.
+204 This is the authentication key for TESTING. / This is the authentication key for ACTUAL SERVER.
+* HTTP 412 Forbidden, 302 Object Moved error occurs when exceeding server request count limit.
+* If not sending Content-Type to application/json, 'Unsupported Media Type' will appear in Message.
+* If the input value is not valid JSON data, 'Model validation state error' will be displayed in the message.
+Login API
+Overview
+Provides Login API to link with the external service system.
+Requested Data Format
+Field Description
+Calling
+Method
+POST
+Content-Ty
+pe
+application/json
+Test URL https://sboapi{ZONE}.ecount.com/OAPI/V2/OAPILogin
+Request
+URL
+https://oapi{ZONE}.ecount.com/OAPI/V2/OAPILogin
+Types of
+Data
+Format
+JSON(Paramenter, Result)
+Types of Data Format
+Parameter Parameter Name
+Chara
+cters
+Req
+uire
+men
+t
+Stat
+us
+Description
+COM_CO
+DE
+Company Code 6 Y The company code to use when logging on to Ecount ERP.
+USER_ID User ID 30 Y
+An ECOUNT User ID that has issued the following API_CERT_KEY
+(Test Authentication Key)
+API_CERT
+_KEY
+Test
+Authentication
+Key
+50 Y
+The API authentication key issued through logging in to ECOUNT
+ERP > User Customization > Information > API Authentication Key
+Issuance > API Authentication Status > Test Authentication Key.
+LAN_TYP
+E
+Language
+Settings
+50 Y
+ko-KR : 한국어 (Default)
+en-US : English
+zh-CN : 简体中文
+zh-TW : 繁体中文
+ja-JP : 日本語
+vi-VN : Việt Nam
+es : Español
+id-ID : Indonesian
+ZONE ZONE 2 Y DOMAIN ZONE
+Result
+Parameter Parameter Name
+Chara
+cters
+Req
+uire
+men
+t
+Description
+Stat
+us
+Status
+Processed
+Results
+Y 200 (Normal)
+Error Error If an error occurred
+Code Error Code
+Messag
+e
+Error Message
+Messag
+eDetail
+Error Details
+Data
+COM_C
+ODE
+Company Code 6 Y COM_CODE (Company Code) that is entered when calling the URL.
+USER_I
+D
+User ID 30 Y
+USER_ID (API Key Issued User ID) that is entered when calling the
+URL.
+SESSIO
+N_ID
+Session ID 50 Y
+SESSION_ID (Session ID) that is created after calling the URL. It is
+used for authentication during the session.
+EXPIRE
+_DATE
+EXPIRE_DATE Y The current API version will expire on
+NOTICE NOTICE Y Notice of ECOUNT API
+Example Parameter
+URL : https://oapi{ZONE}.ecount.com/OAPI/V2/OAPILogin
+// Replace {ZONE} with real zone information when entering Zone data.(Without {})
+{
+"COM_CODE":"80001", // USER COM_CODE input
+"USER_ID":"USER_ID", // USER USER_ID input
+"API_CERT_KEY":"{API_CERT_KEY}", // USER API_CERT_KEY input
+"LAN_TYPE":"ko-KR", // USER LAN_TYPE input
+"ZONE":"C" // USER ZONE input
+}
+Example Result
+[SUCCESS]
+{
+"Data":
+{
+"EXPIRE_DATE":"",
+"NOTICE":"",
+"Code":"00",
+"Datas":
+{
+"COM_CODE":"80001",
+"USER_ID":"USER_ID",
+"SESSION_ID":"39313231367c256562253866253939256563253838253938:0HDD9DBtZt2e"
+},
+"Message":"",
+"RedirectUrl":""
+},
+"Status":"200",
+"Error":null,
+"Timestamp":"2018년 6월 11일 오후 1:09:21"
+}
+[FAIL]
+{
+"Data":null,
+"Status":"200",
+"Error":
+{
+"Code":201,
+"Message":API_CERT_KEY is not valid.,
+"MessageDetail":""
+},
+"Timestamp":null
+}
+Description by Error Type
+Statu
+s
+"Error" >
+"Code"
+Description
+200 None Processed Successfully
+404 None When the called API does not exist since the API path is not correct.
+412 None If exceeding the API transmission count limit
+200
+20
+Please enter the correct Code, ID, and Password. If you do not know your login information, please
+contact the Master ID.
+21 Access restricted by Master.
+22
+[ID - Restricted Time] Login is restricted for this ID during [FROM] ~ [TO].
+Please contact your Master ID .
+23
+[All - Restricted Time] Login is restricted for all users from [FROM] ~ [TO].
+Please contact your Master ID .
+24
+[ID - Block Access by IP Address (PC)] Login is restricted for all users at this IP address.
+Please contact your Master ID .
+25
+[All - Block Access by IP Address (PC)] Login is restricted for all users at this IP address.
+Please contact your Master ID .
+26 Do not have authorization for the application.
+27 [Mobile Login] Please request your Master ID [000] to permit login to mobile with your ID.
+81, 82,
+83
+Access to the API has been denied due to unpaid subscription fees.
+84 Access to the API has been denied due to unpaid subscription fees.
+85 Access to the API has been denied since youre company code has been blocked.
+89 Access to the API has been denied since your company code has been withdrawn.
+98
+You have entered an incorrect password 5 times.\n\nPlease request a new password.\n-Users:
+Request a new password from the Master ID. Master ID: re-login after re setting a password.\n-You
+will receive a temporary password via Email.
+99 The relevant ID does not exist.
+201 API_CERT_KEY is not valid.
+204 This is the authentication key for TESTING. / This is the authentication key for ACTUAL SERVER.
+* HTTP 412 Forbidden, 302 Object Moved error occurs when exceeding server request count limit.
+* If not sending Content-Type to application/json, 'Unsupported Media Type' will appear in Message.
+* If the input value is not valid JSON data, 'Model validation state error' will be displayed in the message.
+Item
+Overview
+You can register Item data into Ecount ERP by linking it with the external service system.
+However, since only the fields set as the General Tab on the input screen in ERP can be setup
+Fields that are required to input(Parameter) of the Setup API are different for each company code
+When sending a field that is not in the General Tab, the data of that field is not registered.
+Requested Data Format
+Field Description
+Calling
+Method
+POST
+Content-Ty
+pe
+application/json
+Test URL
+https://sboapi{ZONE}.ecount.com/OAPI/V2/InventoryBasic/SaveBasicProduct?SESSION_ID={SESSIO
+N_ID}
+Request
+URL
+https://oapi{ZONE}.ecount.com/OAPI/V2/InventoryBasic/SaveBasicProduct?SESSION_ID={SESSION_I
+D}
+Types of
+Data
+Format
+JSON(Paramenter, Result)
+Types of Data Format
+Parameter Parameter Name
+Chara
+cters
+Ecou
+nt
+Requi
+red
+Requi
+red to
+input
+Description
+SESSION_ID Session ID
+STRIN
+G(50)
+Y
+SESSION_ID (Session ID) that is given after calling
+the Login API.
+ProductList
+[BulkDatas]
+Information by
+each Sales Order
+Slip
+Repeated part
+PROD_CD Item Code
+STRIN
+G(20)
+Y Item Code
+PROD_DE
+S
+Item Name
+STRIN
+G(100)
+Y Item Name
+SIZE_FLA
+G
+Spec. Type
+STRIN
+G(1)
+Spec. Type (1: Spec. Name, 2: Spec. Group, 3: Spec.
+Calculation, 4: Spec. Calculation Group)
+SIZE_DES Spec.
+STRIN
+G(100)
+Spec.(If you select Spec. Group / Spec. Calculation
+Group, enter the already registered Group Code or
+Group Name.)
+UNIT Unit
+STRIN
+G(6)
+Unit
+PROD_TY
+PE
+Item Category
+STRIN
+G(1)
+Item Category : Raw Material0, Finished Goods1,
+Semi-Finished Goods2, Merchandise3, Sub Material4,
+Intangible Merchandise7. If not entered, default 3.
+SET_FLA
+G
+Bundle Item
+STRIN
+G(1)
+Bundle Item (1:Use, 0:Do not Use)
+BAL_FLA
+G
+Quantity
+Management
+STRIN
+G(1)
+Quantity Management (0:Non-stock Item, 1:Stock
+Item)
+WH_CD Process
+STRIN
+G(5)
+Process Code : InvⅠ > Setup > Location > New >
+Type : Factory > Process
+IN_PRICE Purchase Price
+NUME
+RIC(1
+8,6)
+Purchase Price
+IN_PRICE
+_VAT
+Purchase
+Price(Tax Status)
+STRIN
+G(1)
+Purchase Price(Tax Status) : Not Included 0, Included
+1. If not entered, default 0.
+OUT_PRI
+CE
+Sales Price
+NUME
+RIC(1
+8,6)
+Sales Price
+OUT_PRI
+CE_VAT
+Sales Price (Tax
+Status)
+STRIN
+G(1)
+Sales Price(Tax Status) : Not Included 0, Included 1. If
+not entered, default 0.
+REMARK
+S_WIN
+Keyword
+STRIN
+G(100)
+Keyword
+CLASS_C
+D
+Group Code
+STRIN
+G(5)
+Item Group I Code
+CLASS_C
+D2
+Group Code 2
+STRIN
+G(5)
+Item Group II Code
+CLASS_C
+D3
+Group Code 3
+STRIN
+G(5)
+Item Group III Code
+BAR_COD
+E
+Barcode
+STRIN
+G(30)
+Barcode
+VAT_YN
+Tax Rate (Sales)
+Status
+STRIN
+G(1)
+Tax Rate(Sales)Status(N:Default, Y:Set Manually)
+TAX Tax Rate
+NUME
+RIC(6,
+3)
+Tax Rate applied when entering a sales slip
+VAT_RAT
+E_BY_BA
+SE_YN
+Tax Rate
+(Purchases) Status
+STRIN
+G(1)
+Tax Rate(Purchases) Input Status(N:Default, Y:Set
+Manually)
+VAT_RAT
+E_BY
+Tax Rate
+(Purchases)
+NUME
+RIC(6,
+3)
+Tax Rate applied when entering a purchase slip
+CS_FLAG
+Share with
+C-Portal
+STRIN
+G(1)
+Share with C-Portal (1:Use, 0:Do not Use)
+REMARK
+S
+Remarks
+STRIN
+G(100)
+Remarks
+INSPECT_
+TYPE_CD
+Quality Inspection
+Type
+STRIN
+G(30)
+Quality Inspection Type : Inv.Ⅱ > Quality Control >
+Quality Inspection > Reg. Inspection Type
+INSPECT_
+STATUS
+QC Inspection
+Method
+STRIN
+G(1)
+QC Inspection Method(L:Lot, S:Sample)
+SAMPLE_
+PERCENT
+Sampling Ratio
+NUME
+RIC(4,
+2)
+Sampling Ratio
+SAFE_A0
+001
+Safety Stock-Sales
+Order
+STRIN
+G(1)
+Set whether to check safety stock when entering the
+Sales Order (0 : Default, 1 : Use, 2 : Do not use)
+SAFE_A0
+002
+Safety Stock-Sales
+STRIN
+G(1)
+Set whether to check safety stock when entering the
+Sales (0 : Default, 1 : Use, 2 : Do not use)
+SAFE_A0
+003
+Safety
+Stock-Goods
+Issued
+STRIN
+G(1)
+Set whether to check safety stock when entering the
+Goods Issued (0 : Default, 1 : Use, 2 : Do not use)
+SAFE_A0
+004
+Safety
+Stock-Goods
+Receipt
+STRIN
+G(1)
+Set whether to check safety stock when entering the
+Goods Receipt (0 : Default, 1 : Use, 2 : Do not use)
+SAFE_A0
+005
+Safety
+Stock-Locations
+Trans.
+STRIN
+G(1)
+Set whether to check safety stock when entering the
+Location Tran. (0 : Default, 1 : Use, 2 : Do not use)
+SAFE_A0
+006
+Safety
+Stock-Internal Use
+STRIN
+G(1)
+Set whether to check safety stock when entering the
+Internal Use (0 : Default, 1 : Use, 2 : Do not use)
+SAFE_A0
+007
+Safety
+Stock-Product
+Defect
+STRIN
+G(1)
+Set whether to check safety stock when entering the
+Product Defect (0 : Default, 1 : Use, 2 : Do not use)
+CSORD_C
+0001
+C-Portal Min. S/O
+Qty. Check
+STRIN
+G(1)
+Set whether to check safety stock when entering the
+C-Portal Sales Order (0 : Default, 1 : Use, 2 : Do not
+use)
+CSORD_T
+EXT
+C-Portal Min. S/O
+Qty.
+NUME
+RIC(1
+5,3)
+Enter the minimum quantity to use for sales orders in
+the C-Portal.
+CSORD_C
+0003
+C-Portal Min. S/O
+Unit
+STRIN
+G(1)
+Set the minimum quantity unit to use for sales orders
+in the C-Portal(Y:Use, N:Do Not Use)
+IN_TERM Lead Time
+STRIN
+G(5)
+Lead Time
+MIN_QTY
+Minimum Purchase
+Qty.
+STRIN
+G(7)
+Minimum Purchase Qty.
+CUST Vendor
+STRIN
+G(30)
+Vendor
+OUT_PRI
+CE1
+Price A
+NUME
+RIC(1
+8,6)
+Price A
+OUT_PRI
+CE1_VAT_
+YN
+Price A Tax Status
+STRIN
+G(1)
+Price A Tax Status (N:Not Included, Y:Included)
+OUT_PRI
+CE2
+Price B
+NUME
+RIC(1
+8,6)
+Price B
+OUT_PRI
+CE2_VAT_
+YN
+Price B Tax Status
+STRIN
+G(1)
+Price B Tax Status (N:Not Included, Y:Included)
+OUT_PRI
+CE3
+Price C
+NUME
+RIC(1
+8,6)
+Price C
+OUT_PRI
+CE3_VAT_
+YN
+Price C Tax Status
+STRIN
+G(1)
+Price C Tax Status (N:Not Included, Y:Included)
+OUT_PRI
+CE4
+Price D
+NUME
+RIC(1
+8,6)
+Price D
+OUT_PRI
+CE4_VAT_
+YN
+Price D Tax Status
+STRIN
+G(1)
+Price D Tax Status (N:Not Included, Y:Included)
+OUT_PRI
+CE5
+Price E
+NUME
+RIC(1
+8,6)
+Price E
+OUT_PRI
+CE5_VAT_
+YN
+Price E Tax Status
+STRIN
+G(1)
+Price E Tax Status (N:Not Included, Y:Included)
+OUT_PRI
+CE6
+Price F
+NUME
+RIC(1
+8,6)
+Price F
+OUT_PRI
+CE6_VAT_
+YN
+Price F Tax Status
+STRIN
+G(1)
+Price F Tax Status (N:Not Included, Y:Included)
+OUT_PRI
+CE7
+Price G
+NUME
+RIC(1
+8,6)
+Price G
+OUT_PRI
+CE7_VAT_
+YN
+Price G Tax Status
+STRIN
+G(1)
+Price G Tax Status (N:Not Included, Y:Included)
+OUT_PRI
+CE8
+Price H
+NUME
+RIC(1
+8,6)
+Price H
+OUT_PRI
+CE8_VAT_
+YN
+Price H Tax Status
+STRIN
+G(1)
+Price H Tax Status (N:Not Included, Y:Included)
+OUT_PRI
+CE9
+Price I
+NUME
+RIC(1
+8,6)
+Price I
+OUT_PRI
+CE9_VAT_
+YN
+Price I Tax Status
+STRIN
+G(1)
+Price I Tax Status (N:Not Included, Y:Included)
+OUT_PRI
+CE10
+Price J
+NUME
+RIC(1
+8,6)
+Price J
+OUT_PRI
+CE10_VAT
+_YN
+Price J Tax Status
+STRIN
+G(1)
+Price J Tax Status (N:Not Included, Y:Included)
+OUTSIDE
+_PRICE
+Outsourcing Price
+NUME
+RIC(1
+8,6)
+Outsourcing Price
+OUTSIDE
+_PRICE_V
+AT
+OE Price (Tax
+Status)
+STRIN
+G(1)
+OE Price Tax Status (N:Not Included, Y:Included)
+LABOR_W
+EIGHT
+Labor Cost
+NUME
+RIC(7,
+2)
+Labor Cost
+EXPENSE
+S_WEIGH
+T
+Weighted Expense
+Ratio
+NUME
+RIC(7,
+2)
+Weighted Expense Ratio
+MATERIA
+L_COST
+Standard Material
+Cost
+NUME
+RIC(1
+8,6)
+Standard Material Cost
+EXPENSE
+_COST
+Standard
+Expenses
+NUME
+RIC(1
+8,6)
+Standard Expenses
+LABOR_C
+OST
+Standard Labor
+Cost
+NUME
+RIC(1
+8,6)
+Standard Labor Cost
+OUT_COS
+T
+Standard O/E Cost
+NUME
+RIC(1
+8,6)
+Standard O/E Cost
+CONT1
+Text Type Add.
+Field 1
+STRIN
+G(100)
+Text Type Add. Field 1
+CONT2
+Text Type Add.
+Field 2
+STRIN
+G(100)
+Text Type Add. Field 2
+CONT3
+Text Type Add.
+Field 3
+STRIN
+G(100)
+Text Type Add. Field 3
+CONT4
+Text Type Add.
+Field 4
+STRIN
+G(100)
+Text Type Add. Field 4
+CONT5
+Text Type Add.
+Field 5
+STRIN
+G(100)
+Text Type Add. Field 5
+CONT6
+Text Type Add.
+Field 6
+STRIN
+G(100)
+Text Type Add. Field 6
+NO_USER
+1
+Number Type Add.
+Field 1
+NUME
+RIC(1
+8,6)
+Number Type Add. Field 1
+NO_USER
+2
+Number Type Add.
+Field 2
+NUME
+RIC(1
+8,6)
+Number Type Add. Field 2
+NO_USER
+3
+Number Type Add.
+Field 3
+NUME
+RIC(1
+8,6)
+Number Type Add. Field 3
+NO_USER
+4
+Number Type Add.
+Field 4
+NUME
+RIC(1
+8,6)
+Number Type Add. Field 4
+NO_USER
+5
+Number Type Add.
+Field 5
+NUME
+RIC(1
+8,6)
+Number Type Add. Field 5
+NO_USER
+6
+Number Type Add.
+Field 6
+NUME
+RIC(1
+8,6)
+Number Type Add. Field 6
+NO_USER
+7
+Number Type Add.
+Field 7
+NUME
+RIC(1
+8,6)
+Number Type Add. Field 7
+NO_USER
+8
+Number Type Add.
+Field 8
+NUME
+RIC(1
+8,6)
+Number Type Add. Field 8
+NO_USER
+9
+Number Type Add.
+Field 9
+NUME
+RIC(1
+8,6)
+Number Type Add. Field 9
+NO_USER
+10
+Number Type Add.
+Field 10
+NUME
+RIC(1
+8,6)
+Number Type Add. Field 10
+ITEM_TYP
+E
+Mgmt. Field
+STRIN
+G(1)
+Mgmt. Field(B:Default, M:Required, Y:Optional, N:Do
+Not Use)
+SERIAL_T
+YPE
+Serial/Lot No.
+STRIN
+G(1)
+Serial(B:Default, M:Required, Y:Optional, N:Do Not
+Use)
+PROD_SE
+LL_TYPE
+Auto-Create
+Manufacture Slip -
+Sales
+STRIN
+G(1)
+Auto-Create Manufacture Slip - Sales(B:Default,
+Y:Use, N:Do Not Use)
+PROD_W
+HMOVE_T
+YPE
+Auto-Create
+Manufacture Slip -
+Location Tran.
+STRIN
+G(1)
+Auto-Create Manufacture Slip - Location
+Tran.(B:Default, Y:Use, N:Do Not Use)
+QC_BUY_
+TYPE
+Auto-Create
+Quality Insp.
+Request -
+Purchases
+STRIN
+G(1)
+Auto-Create Quality Insp. Request -
+Purchases(B:Default, Y:Use, N:Do Not Use)
+QC_YN Request QC Insp.
+STRIN
+G(1)
+Request QC Insp.(Y:Use, N:Do not Use)
+Result
+Parameter Parameter Name
+Chara
+cters
+Req
+uire
+men
+t
+Stat
+us
+Description
+Status
+Processed
+Results
+Y 200 (Normal)
+Error Error If an error occurred
+Code Error Code
+Messag
+e
+Error Message
+Messag
+eDetail
+Error Details
+Data
+Success
+Cnt
+Number of
+Successes
+STRIN
+G(20)
+Y
+FailCnt
+Number of
+Failures
+STRIN
+G(20)
+Y
+ResultD
+etails
+Processed
+Results
+STRIN
+G(400
+0)
+Y Repeated part
+SlipNos
+Voucher No.
+(ERP)
+STRIN
+G(20)
+Y Voucher Number (Blank if failed)
+EXPIRE
+_DATE
+EXPIRE_DATE Y The current API version will expire on
+QUANTI
+TY_INF
+O
+Allowed Qty. Y Qty. that can be allowed to send during 1 hour, 1 day
+TRACE_
+ID
+Sequence No. for
+Log Analysis
+Y Sequence No. for Log Analysis When Error
+Example Parameter
+URL : https://oapi{ZONE}.ecount.com/OAPI/V2/InventoryBasic/SaveBasicProduct?SESSION_ID={SESSION_ID}
+// Replace {ZONE} with real zone information when entering Zone data.(Without {})
+{
+"ProductList": [{
+"BulkDatas": {
+"PROD_CD": "00001",
+"PROD_DES": "Test Product",
+"SIZE_FLAG": "",
+"SIZE_DES": "",
+"UNIT": "",
+"PROD_TYPE": "",
+"SET_FLAG": "",
+"BAL_FLAG": "",
+"WH_CD": "",
+"IN_PRICE": "",
+"IN_PRICE_VAT": "",
+"OUT_PRICE": "",
+"OUT_PRICE_VAT": "",
+"REMARKS_WIN": "",
+"CLASS_CD": "",
+"CLASS_CD2": "",
+"CLASS_CD3": "",
+"BAR_CODE": "",
+"VAT_YN": "",
+"TAX": "",
+"VAT_RATE_BY_BASE_YN": "",
+"VAT_RATE_BY": "",
+"CS_FLAG": "",
+"REMARKS": "",
+"INSPECT_TYPE_CD": "",
+"INSPECT_STATUS": "",
+"SAMPLE_PERCENT": "",
+"EXCH_RATE": "",
+"DENO_RATE": "",
+"SAFE_A0001": "",
+"SAFE_A0002": "",
+"SAFE_A0003": "",
+"SAFE_A0004": "",
+"SAFE_A0005": "",
+"SAFE_A0006": "",
+"SAFE_A0007": "",
+"CSORD_C0001": "",
+"CSORD_TEXT": "",
+"CSORD_C0003": "",
+"IN_TERM": "",
+"MIN_QTY": "",
+"CUST": "",
+"OUT_PRICE1": "",
+"OUT_PRICE1_VAT_YN": "",
+"OUT_PRICE2": "",
+"OUT_PRICE2_VAT_YN": "",
+"OUT_PRICE3": "",
+"OUT_PRICE3_VAT_YN": "",
+"OUT_PRICE4": "",
+"OUT_PRICE4_VAT_YN": "",
+"OUT_PRICE5": "",
+"OUT_PRICE5_VAT_YN": "",
+"OUT_PRICE6": "",
+"OUT_PRICE6_VAT_YN": "",
+"OUT_PRICE7": "",
+"OUT_PRICE7_VAT_YN": "",
+"OUT_PRICE8": "",
+"OUT_PRICE8_VAT_YN": "",
+"OUT_PRICE9": "",
+"OUT_PRICE9_VAT_YN": "",
+"OUT_PRICE10": "",
+"OUT_PRICE10_VAT_YN": "",
+"OUTSIDE_PRICE": "",
+"OUTSIDE_PRICE_VAT": "",
+"LABOR_WEIGHT": "",
+"EXPENSES_WEIGHT": "",
+"MATERIAL_COST": "",
+"EXPENSE_COST": "",
+"LABOR_COST": "",
+"OUT_COST": "",
+"CONT1": "",
+"CONT2": "",
+"CONT3": "",
+"CONT4": "",
+"CONT5": "",
+"CONT6": "",
+"NO_USER1": "",
+"NO_USER2": "",
+"NO_USER3": "",
+"NO_USER4": "",
+"NO_USER5": "",
+"NO_USER6": "",
+"NO_USER7": "",
+"NO_USER8": "",
+"NO_USER9": "",
+"NO_USER10": "",
+"ITEM_TYPE": "",
+"SERIAL_TYPE": "",
+"PROD_SELL_TYPE": "",
+"PROD_WHMOVE_TYPE": "",
+"QC_BUY_TYPE": "",
+"QC_YN": ""
+}
+},{
+"BulkDatas": {
+"PROD_CD": "00002",
+"PROD_DES": "Test Product1",
+"SIZE_FLAG": "",
+"SIZE_DES": "",
+"UNIT": "",
+"PROD_TYPE": "",
+"SET_FLAG": "",
+"BAL_FLAG": "",
+"WH_CD": "",
+"IN_PRICE": "",
+"IN_PRICE_VAT": "",
+"OUT_PRICE": "",
+"OUT_PRICE_VAT": "",
+"REMARKS_WIN": "",
+"CLASS_CD": "",
+"CLASS_CD2": "",
+"CLASS_CD3": "",
+"BAR_CODE": "",
+"VAT_YN": "",
+"TAX": "",
+"VAT_RATE_BY_BASE_YN": "",
+"VAT_RATE_BY": "",
+"CS_FLAG": "",
+"REMARKS": "",
+"INSPECT_TYPE_CD": "",
+"INSPECT_STATUS": "",
+"SAMPLE_PERCENT": "",
+"EXCH_RATE": "",
+"DENO_RATE": "",
+"SAFE_A0001": "",
+"SAFE_A0002": "",
+"SAFE_A0003": "",
+"SAFE_A0004": "",
+"SAFE_A0005": "",
+"SAFE_A0006": "",
+"SAFE_A0007": "",
+"CSORD_C0001": "",
+"CSORD_TEXT": "",
+"CSORD_C0003": "",
+"IN_TERM": "",
+"MIN_QTY": "",
+"CUST": "",
+"OUT_PRICE1": "",
+"OUT_PRICE1_VAT_YN": "",
+"OUT_PRICE2": "",
+"OUT_PRICE2_VAT_YN": "",
+"OUT_PRICE3": "",
+"OUT_PRICE3_VAT_YN": "",
+"OUT_PRICE4": "",
+"OUT_PRICE4_VAT_YN": "",
+"OUT_PRICE5": "",
+"OUT_PRICE5_VAT_YN": "",
+"OUT_PRICE6": "",
+"OUT_PRICE6_VAT_YN": "",
+"OUT_PRICE7": "",
+"OUT_PRICE7_VAT_YN": "",
+"OUT_PRICE8": "",
+"OUT_PRICE8_VAT_YN": "",
+"OUT_PRICE9": "",
+"OUT_PRICE9_VAT_YN": "",
+"OUT_PRICE10": "",
+"OUT_PRICE10_VAT_YN": "",
+"OUTSIDE_PRICE": "",
+"OUTSIDE_PRICE_VAT": "",
+"LABOR_WEIGHT": "",
+"EXPENSES_WEIGHT": "",
+"MATERIAL_COST": "",
+"EXPENSE_COST": "",
+"LABOR_COST": "",
+"OUT_COST": "",
+"CONT1": "",
+"CONT2": "",
+"CONT3": "",
+"CONT4": "",
+"CONT5": "",
+"CONT6": "",
+"NO_USER1": "",
+"NO_USER2": "",
+"NO_USER3": "",
+"NO_USER4": "",
+"NO_USER5": "",
+"NO_USER6": "",
+"NO_USER7": "",
+"NO_USER8": "",
+"NO_USER9": "",
+"NO_USER10": "",
+"ITEM_TYPE": "",
+"SERIAL_TYPE": "",
+"PROD_SELL_TYPE": "",
+"PROD_WHMOVE_TYPE": "",
+"QC_BUY_TYPE": "",
+"QC_YN": ""
+}
+}]
+}
+Example Result
+[SUCCESS]
+{
+"Data": {
+"EXPIRE_DATE": "",
+"QUANTITY_INFO": Maximum number of consecutive errors per hour" : 1/30," 1 hour Allowable Amount" : 3/6000," 1 day
+Allowable Amount" : 13/10000",
+"TRACE_ID":"db6138411aad40e42dc5e209f65f6f3c",
+"SuccessCnt": 2,
+"FailCnt": 0,
+"ResultDetails": "[{"IsSuccess": true, "TotalError": "[1] OK", "Errors": [], "Code": null}, {"IsSuccess": true, "TotalError": "[2]
+OK", "Errors": [], "Code": null}]",
+"SlipNos": null
+},
+"Status": "200",
+"Errors": null,
+"Error": null,
+"Timestamp": "2020-03-12 15:33:48.958",
+"RequestKey": null,
+"IsEnableNoL4": false,
+"RefreshTimestamp": null,
+"AsyncActionKey": null
+}
+[FAIL - Validation]
+{
+"Data":[{
+"EXPIRE_DATE": "",
+"QUANTITY_INFO": Maximum number of consecutive errors per hour" : 1/30," 1 hour Allowable Amount" : 3/6000," 1 day
+Allowable Amount" : 13/10000",
+"SuccessCnt": 0,
+"FailCnt": 2,
+"ResultDetails": "[{"IsSuccess": false, "TotalError": "[1]Customer/Vendor", "Errors": [{"ColCd": "CUST", "Message":
+"Customer/Vendor"}], "Code": null},
+{"IsSuccess": false, "TotalError": "[2]Customer/Vendor", "Errors": [{"ColCd": "CUST", "Message":
+"Customer/Vendor"}], "Code": null}]",
+"SlipNos": null
+}],
+"Status": "200",
+"Errors": null,
+"Error": null,
+"Timestamp": "2020-03-12 15:34:11.654",
+"RequestKey": null,
+"IsEnableNoL4": false,
+"RefreshTimestamp": null,
+"AsyncActionKey": null
+}
+Description by Error Type
+Search Item API
+Overview
+You can search Item data into Ecount ERP by linking it with the external service system.
+Requested Data Format
+Field Description
+Calling
+Method
+POST
+Content-Ty
+pe
+application/json
+Test URL
+https://sboapi{ZONE}.ecount.com/OAPI/V2/InventoryBasic/ViewBasicProduct?SESSION_ID={SESSIO
+N_ID}}
+Request
+URL
+https://oapi{ZONE}.ecount.com/OAPI/V2/InventoryBasic/ViewBasicProduct?SESSION_ID={SESSION_I
+D}}
+Types of
+Data
+Format
+JSON(Paramenter, Result)
+Types of Data Format
+Parameter Parameter Name
+Charact
+ers
+Ecou
+nt
+Requi
+red
+Templ
+ate
+Requi
+red
+Description
+SESSION_I
+D
+Session ID
+STRIN
+G(50)
+Y
+SESSION_ID (Session ID) that is given after calling the
+Login API.
+PROD_CD Item Code
+STRIN
+G(20)
+Y
+Entries
+- Enter the item code you want to search.
+Character Limit
+- Enter the pre-registered item code.
+- Up to 1000 characters.
+PROD_TYP
+E
+Item Category
+STRIN
+G(20)
+Entries
+- Enter the item type you want to search.
+- In order to search for multiple item types, you can add a
+separator '∬' between them.
+Character Limit
+- Enter the item type. If left blank, all item types will be
+searched.
+- 0 : Raw Material
+- 1 : Finished Good
+- 2 : Semi-Finished Good
+- 3 : Merchandise
+- 4 : Sub Material
+- 7 : Intangible Merchandise
+- Up to 20 characters.
+Result
+Parameter
+Parameter
+Name
+Chara
+cters
+Req
+uire
+Description
+men
+t
+Stat
+us
+Status
+Processed
+Results
+Y 200 (Normal)
+Error Error If an error occurred
+Code Error Code
+Message Error Message
+MessageD
+etail
+Error Details
+Data
+EXPIRE_D
+ATE
+EXPIRE_DATE Y The current API version will expire on
+QUANTITY
+_INFO
+Allowed Qty. Y Qty. that can be allowed to send during 1 hour, 1 day
+TRACE_ID
+Sequence No.
+for Log Analysis
+Y Sequence No. for Log Analysis When Error
+Result
+PROD_
+CD
+Item Code
+STRIN
+G(20)
+Y Item Code
+PROD_
+DES
+Item Name
+STRIN
+G(100)
+Y Item Name
+SIZE_F
+LAG
+Spec. Type
+STRIN
+G(1)
+Spec. Type (1: Spec. Name, 2: Spec. Group, 3: Spec. Calculation, 4:
+Spec. Calculation Group)
+SIZE_D
+ES
+Spec.
+STRIN
+G(100)
+Spec.(If you select Spec. Group / Spec. Calculation Group, enter the
+already registered Group Code or Group Name.)
+UNIT Unit
+STRIN
+G(6)
+Unit
+PROD_
+TYPE
+Item Category
+STRIN
+G(1)
+Item Category : Raw Material0, Finished Goods1, Semi-Finished
+Goods2, Merchandise3, Sub Material4, Intangible Merchandise7. If
+not entered, default 3.
+SET_FL
+AG
+Bundle Item
+STRIN
+G(1)
+Bundle Item (1:Use, 0:Do not Use)
+BAL_FL
+AG
+Quantity
+Management
+STRIN
+G(1)
+Quantity Management (0:Non-stock Item, 1:Stock Item)
+WH_CD Process
+STRIN
+G(5)
+Process Code : InvⅠ > Setup > Location > New > Type : Factory >
+Process
+IN_PRI
+CE
+Purchase Price
+NUME
+RIC(1
+8,6)
+Purchase Price
+IN_PRI
+CE_VAT
+Purchase
+Price(Tax
+Status)
+STRIN
+G(1)
+Purchase Price(Tax Status) : Not Included 0, Included 1. If not
+entered, default 0.
+OUT_P
+RICE
+Sales Price
+NUME
+RIC(1
+8,6)
+Sales Price
+OUT_P
+RICE_V
+AT
+Sales Price (Tax
+Status)
+STRIN
+G(1)
+Sales Price(Tax Status) : Not Included 0, Included 1. If not entered,
+default 0.
+REMAR
+KS_WI
+N
+Keyword
+STRIN
+G(100)
+Keyword
+CLASS
+_CD
+Group Code
+STRIN
+G(5)
+Item Group I Code
+CLASS
+_CD2
+Group Code 2
+STRIN
+G(5)
+Item Group II Code
+CLASS
+_CD3
+Group Code 3
+STRIN
+G(5)
+Item Group III Code
+BAR_C
+ODE
+Barcode
+STRIN
+G(30)
+Barcode
+VAT_YN
+Tax Rate
+(Sales) Status
+STRIN
+G(1)
+Tax Rate(Sales)Status(N:Default, Y:Set Manually)
+TAX Tax Rate
+NUME
+RIC(6,
+3)
+Tax Rate applied when entering a sales slip
+VAT_RA
+TE_BY_
+BASE_
+YN
+Tax Rate
+(Purchases)
+Status
+STRIN
+G(1)
+Tax Rate(Purchases) Input Status(N:Default, Y:Set Manually)
+VAT_RA
+TE_BY
+Tax Rate
+(Purchases)
+NUME
+RIC(6,
+3)
+Tax Rate applied when entering a purchase slip
+CS_FL
+AG
+Share with
+C-Portal
+STRIN
+G(1)
+Share with C-Portal (1:Use, 0:Do not Use)
+REMAR
+KS
+Remarks
+STRIN
+G(100)
+Remarks
+INSPEC
+T_TYP
+E_CD
+Quality
+Inspection Type
+STRIN
+G(30)
+Quality Inspection Type : Inv.Ⅱ > Quality Control > Quality Inspection
+> Reg. Inspection Type
+INSPEC
+T_STAT
+US
+QC Inspection
+Method
+STRIN
+G(1)
+QC Inspection Method(L:Lot, S:Sample)
+SAMPL
+E_PER
+CENT
+Sampling Ratio
+NUME
+RIC(4,
+2)
+Sampling Ratio
+CSORD
+_C0001
+C-Portal Min.
+S/O Qty. Check
+STRIN
+G(1)
+Set whether to check safety stock when entering the C-Portal Sales
+Order (0 : Default, 1 : Use, 2 : Do not use)
+CSORD
+_TEXT
+C-Portal Min.
+S/O Qty.
+NUME
+RIC(1
+5,3)
+Enter the minimum quantity to use for sales orders in the C-Portal.
+CSORD
+_C0003
+C-Portal Min.
+S/O Unit
+STRIN
+G(1)
+Set the minimum quantity unit to use for sales orders in the
+C-Portal(Y:Use, N:Do Not Use)
+IN_TER
+M
+Lead Time
+STRIN
+G(5)
+Lead Time
+MIN_Q
+TY
+Minimum
+Purchase Qty.
+STRIN
+G(7)
+Minimum Purchase Qty.
+CUST Vendor
+STRIN
+G(30)
+Vendor
+EXCH_
+RATE
+Unit Conversion
+Ratio(Base
+Qty.)
+STRIN
+G(30)
+DENO_
+RATE
+Unit Conversion
+Ratio(Aux. Qty.)
+STRIN
+G(30)
+OUT_P
+RICE1
+Price A
+NUME
+RIC(1
+8,6)
+Price A
+OUT_P
+RICE1_
+VAT_YN
+Price A Tax
+Status
+STRIN
+G(1)
+Price A Tax Status (N:Not Included, Y:Included)
+OUT_P
+RICE2
+Price B
+NUME
+RIC(1
+8,6)
+Price B
+OUT_P
+RICE2_
+VAT_YN
+Price B Tax
+Status
+STRIN
+G(1)
+Price B Tax Status (N:Not Included, Y:Included)
+OUT_P
+RICE3
+Price C
+NUME
+RIC(1
+8,6)
+Price C
+OUT_P
+RICE3_
+VAT_YN
+Price C Tax
+Status
+STRIN
+G(1)
+Price C Tax Status (N:Not Included, Y:Included)
+OUT_P
+RICE4
+Price D
+NUME
+RIC(1
+8,6)
+Price D
+OUT_P
+RICE4_
+VAT_YN
+Price D Tax
+Status
+STRIN
+G(1)
+Price D Tax Status (N:Not Included, Y:Included)
+OUT_P
+RICE5
+Price E
+NUME
+RIC(1
+8,6)
+Price E
+OUT_P
+RICE5_
+VAT_YN
+Price E Tax
+Status
+STRIN
+G(1)
+Price E Tax Status (N:Not Included, Y:Included)
+OUT_P
+RICE6
+Price F
+NUME
+RIC(1
+8,6)
+Price F
+OUT_P
+RICE6_
+VAT_YN
+Price F Tax
+Status
+STRIN
+G(1)
+Price F Tax Status (N:Not Included, Y:Included)
+OUT_P
+RICE7
+Price G
+NUME
+RIC(1
+8,6)
+Price G
+OUT_P
+RICE7_
+VAT_YN
+Price G Tax
+Status
+STRIN
+G(1)
+Price G Tax Status (N:Not Included, Y:Included)
+OUT_P
+RICE8
+Price H
+NUME
+RIC(1
+8,6)
+Price H
+OUT_P
+RICE8_
+VAT_YN
+Price H Tax
+Status
+STRIN
+G(1)
+Price H Tax Status (N:Not Included, Y:Included)
+OUT_P
+RICE9
+Price I
+NUME
+RIC(1
+8,6)
+Price I
+OUT_P
+RICE9_
+VAT_YN
+Price I Tax
+Status
+STRIN
+G(1)
+Price I Tax Status (N:Not Included, Y:Included)
+OUT_P
+RICE10
+Price J
+NUME
+RIC(1
+8,6)
+Price J
+OUT_P
+RICE10
+_VAT_Y
+N
+Price J Tax
+Status
+STRIN
+G(1)
+Price J Tax Status (N:Not Included, Y:Included)
+OUTSI
+DE_PRI
+CE
+Outsourcing
+Price
+NUME
+RIC(1
+8,6)
+Outsourcing Price
+OUTSI
+DE_PRI
+CE_VAT
+OE Price (Tax
+Status)
+STRIN
+G(1)
+OE Price Tax Status (N:Not Included, Y:Included)
+LABOR
+_WEIG
+HT
+Labor Cost
+NUME
+RIC(7,
+2)
+Labor Cost
+EXPEN
+SES_W
+EIGHT
+Weighted
+Expense Ratio
+NUME
+RIC(7,
+2)
+Weighted Expense Ratio
+MATERI
+AL_CO
+ST
+Standard
+Material Cost
+NUME
+RIC(1
+8,6)
+Standard Material Cost
+EXPEN
+SE_CO
+ST
+Standard
+Expenses
+NUME
+RIC(1
+8,6)
+Standard Expenses
+LABOR
+_COST
+Standard Labor
+Cost
+NUME
+RIC(1
+8,6)
+Standard Labor Cost
+OUT_C
+OST
+Standard O/E
+Cost
+NUME
+RIC(1
+8,6)
+Standard O/E Cost
+CONT1
+Text Type Add.
+Field 1
+STRIN
+G(100)
+Text Type Add. Field 1
+CONT2
+Text Type Add.
+Field 2
+STRIN
+G(100)
+Text Type Add. Field 2
+CONT3
+Text Type Add.
+Field 3
+STRIN
+G(100)
+Text Type Add. Field 3
+CONT4
+Text Type Add.
+Field 4
+STRIN
+G(100)
+Text Type Add. Field 4
+CONT5
+Text Type Add.
+Field 5
+STRIN
+G(100)
+Text Type Add. Field 5
+CONT6
+Text Type Add.
+Field 6
+STRIN
+G(100)
+Text Type Add. Field 6
+NO_US
+ER1
+Number Type
+Add. Field 1
+NUME
+RIC(1
+8,6)
+Number Type Add. Field 1
+NO_US
+ER2
+Number Type
+Add. Field 2
+NUME
+RIC(1
+8,6)
+Number Type Add. Field 2
+NO_US
+ER3
+Number Type
+Add. Field 3
+NUME
+RIC(1
+8,6)
+Number Type Add. Field 3
+NO_US
+ER4
+Number Type
+Add. Field 4
+NUME
+RIC(1
+8,6)
+Number Type Add. Field 4
+NO_US
+ER5
+Number Type
+Add. Field 5
+NUME
+RIC(1
+8,6)
+Number Type Add. Field 5
+NO_US
+ER6
+Number Type
+Add. Field 6
+NUME
+RIC(1
+8,6)
+Number Type Add. Field 6
+NO_US
+ER7
+Number Type
+Add. Field 7
+NUME
+RIC(1
+8,6)
+Number Type Add. Field 7
+NO_US
+ER8
+Number Type
+Add. Field 8
+NUME
+RIC(1
+8,6)
+Number Type Add. Field 8
+NO_US
+ER9
+Number Type
+Add. Field 9
+NUME
+RIC(1
+8,6)
+Number Type Add. Field 9
+NO_US
+ER10
+Number Type
+Add. Field 10
+NUME
+RIC(1
+8,6)
+Number Type Add. Field 10
+ITEM_T
+YPE
+Mgmt. Field
+STRIN
+G(1)
+Mgmt. Field(B:Default, M:Required, Y:Optional, N:Do Not Use)
+SERIAL
+_TYPE
+Serial/Lot No.
+STRIN
+G(1)
+Serial(B:Default, M:Required, Y:Optional, N:Do Not Use)
+PROD_
+SELL_T
+YPE
+Auto-Create
+Manufacture
+Slip - Sales
+STRIN
+G(1)
+Auto-Create Manufacture Slip - Sales(B:Default, Y:Use, N:Do Not
+Use)
+PROD_
+WHMO
+VE_TY
+PE
+Auto-Create
+Manufacture
+Slip - Location
+Tran.
+STRIN
+G(1)
+Auto-Create Manufacture Slip - Location Tran.(B:Default, Y:Use,
+N:Do Not Use)
+QC_BU
+Y_TYP
+E
+Auto-Create
+Quality Insp.
+Request -
+Purchases
+STRIN
+G(1)
+Auto-Create Quality Insp. Request - Purchases(B:Default, Y:Use,
+N:Do Not Use)
+QC_YN
+Request QC
+Insp.
+STRIN
+G(1)
+Request QC Insp.(Y:Use, N:Do not Use)
+Example Parameter
+URL : https://oapi{ZONE}.ecount.com/OAPI/V2/InventoryBasic/ViewBasicProduct?SESSION_ID={SESSION_ID}}
+// Replace {ZONE} with real zone information when entering Zone data.(Without {})
+{"PROD_CD": "00001","PROD_TYPE":"0"}
+Example Result
+[SUCCESS]
+{
+"Data": {
+"EXPIRE_DATE":"",
+"QUANTITY_INFO": Maximum number of consecutive errors per hour" : 0/30," 1 hour Allowable Amount" : 3/6000," 1
+day Allowable Amount" : 4/10000",
+"TRACE_ID":"db6138411aad40e42dc5e209f65f6f3c",
+"Result": "[{"PROD_CD": "00001",
+"PROD_DES": "test123",
+"SIZE_FLAG": "1",
+"SIZE_DES": "6",
+"UNIT": "EA",
+"PROD_TYPE": "3",
+"SET_FLAG": "1",
+"BAL_FLAG": "1",
+"WH_CD": "00002",
+"IN_PRICE": "700.0000000000",
+"SIZE_CD": "",
+"IN_PRICE_VAT": "1",
+"REMARKS_WIN": "test",
+"CLASS_CD": "00001",
+"CLASS_CD2": "",
+"CLASS_CD3": "",
+"BAR_CODE": "8801166053051",
+"VAT_YN": "Y",
+"TAX": "20.000",
+"VAT_RATE_BY_BASE_YN": "Y",
+"VAT_RATE_BY": "20.00000",
+"CS_FLAG": "1",
+"REMARKS": "123",
+"INSPECT_TYPE_CD": "1",
+"INSPECT_STATUS": "L",
+"SAMPLE_PERCENT": "0.00",
+"IN_TERM": "0",
+"MIN_QTY": "0.0000000000",
+"CUST": "2118702818",
+"EXCH_RATE": "0.0000000000",
+"DENO_RATE": 1,
+"OUT_PRICE": "12000.0000000000",
+"OUT_PRICE1": "0.0000000000",
+"OUT_PRICE2": "0.0000000000",
+"OUT_PRICE3": "111.0000000000",
+"OUT_PRICE4": "0.0000000000",
+"OUT_PRICE5": "0.0000000000",
+"OUT_PRICE6": "0.0000000000",
+"OUT_PRICE7": "0.0000000000",
+"OUT_PRICE8": "0.0000000000",
+"OUT_PRICE9": "0.0000000000",
+"OUT_PRICE10": "0.0000000000",
+"OUT_PRICE_VAT": "1",
+"OUT_PRICE1_VAT_YN": "N",
+"OUT_PRICE2_VAT_YN": "Y",
+"OUT_PRICE3_VAT_YN": "N",
+"OUT_PRICE4_VAT_YN": "Y",
+"OUT_PRICE5_VAT_YN": "N",
+"OUT_PRICE6_VAT_YN": "N",
+"OUT_PRICE7_VAT_YN": "N",
+"OUT_PRICE8_VAT_YN": "N",
+"OUT_PRICE9_VAT_YN": "N",
+"OUT_PRICE10_VAT_YN": "N",
+"OUTSIDE_PRICE": "6000.0000000000",
+"OUTSIDE_PRICE_VAT": "1",
+"LABOR_WEIGHT": "1.0000000000",
+"EXPENSES_WEIGHT": "1.00",
+"MATERIAL_COST": "0.0000000000",
+"EXPENSE_COST": "0.0000000000",
+"LABOR_COST": "0.0000000000",
+"OUT_COST": "0.0000000000",
+"CONT1": "",
+"CONT2": "",
+"CONT3": "",
+"CONT4": "",
+"CONT5": "",
+"CONT6": "",
+"NO_USER1": "0.0000000000",
+"NO_USER2": "0.0000000000",
+"NO_USER3": "0.0000000000",
+"SERIAL_TYPE": "B",
+"PROD_SELL_TYPE": "B",
+"PROD_WHMOVE_TYPE": "B",
+"QC_BUY_TYPE": "B",
+"QC_YN": "B",
+"SAFE_QTY": "0.0000000000"
+}
+]"
+},
+"Status": "200",
+"Errors": null,
+"Error": null,
+"Timestamp": "2020-01-00 00:00:00.000",
+"RequestKey": null,
+"IsEnableNoL4": true,
+"RefreshTimestamp": "0",
+"AsyncActionKey": null
+}
+Description by Error Type
+Please click the View Details link for a detailed description of each error type.
+Search Item API
+Overview
+You can search Item data into Ecount ERP by linking it with the external service system.
+Requested Data Format
+Field Description
+Calling
+Method
+POST
+Content-Ty
+pe
+application/json
+Test URL
+https://sboapi{ZONE}.ecount.com/OAPI/V2/InventoryBasic/GetBasicProductsList?SESSION_ID={SESS
+ION_ID}}
+Request
+URL
+https://oapi{ZONE}.ecount.com/OAPI/V2/InventoryBasic/GetBasicProductsList?SESSION_ID={SESSIO
+N_ID}}
+Types of
+Data
+Format
+JSON(Paramenter, Result)
+Types of Data Format
+Parameter Parameter Name
+Charact
+ers
+Ecou
+nt
+Requi
+red
+Templ
+ate
+Requi
+red
+Description
+SESSION_I
+D
+Session ID
+STRIN
+G(50)
+Y
+SESSION_ID (Session ID) that is given after calling the
+Login API.
+PROD_CD Item Code
+STRIN
+G(2000
+0)
+Entries
+- Enter the item code you want to search.
+- Item information can be recognized even if a barcode is
+entered.
+- When searching for multiple items, you can search
+together by adding a delimiter '∬'.
+Character Limit
+- Enter the pre-registered item code.
+- Up to 20000 characters.
+COMMA_F
+LAG
+Incl. Comma
+CHAR(
+1)
+In ECOUNT, Comma(',') is transmitted after converting it
+to ('∬'), a delimiter.
+Therefore, if the item code contains a comma, enter Y.
+Default : 'N'
+Entries : 'Y', 'N'
+PROD_TYP
+E
+Item Category
+STRIN
+G(20)
+Entries
+- Enter the item type you want to search.
+- In order to search for multiple item types, you can add a
+separator '∬' between them.
+Character Limit
+- Enter the item type. If left blank, all item types will be
+searched.
+- 0 : Raw Material
+- 1 : Finished Good
+- 2 : Semi-Finished Good
+- 3 : Merchandise
+- 4 : Sub Material
+- 7 : Intangible Merchandise
+- Up to 20 characters.
+FROM_PR
+OD_CD
+Item Code
+STRIN
+G(20)
+Entries
+- Enter the item code you want to search.
+Character Limit
+- Enter the pre-registered item code.
+- Up to 1000 characters.
+TO_PROD_
+CD
+Item Code
+STRIN
+G(20)
+Entries
+- Enter the item code you want to search.
+Character Limit
+- Enter the pre-registered item code.
+- Up to 1000 characters.
+Result
+Parameter
+Parameter
+Name
+Chara
+cters
+Req
+uire
+men
+t
+Stat
+us
+Description
+Status
+Processed
+Results
+Y 200 (Normal)
+Error Error If an error occurred
+Code Error Code
+Message Error Message
+MessageD
+etail
+Error Details
+Data
+EXPIRE_D
+ATE
+EXPIRE_DATE Y The current API version will expire on
+QUANTITY
+_INFO
+Allowed Qty. Y Qty. that can be allowed to send during 1 hour, 1 day
+TRACE_ID
+Sequence No.
+for Log Analysis
+Y Sequence No. for Log Analysis When Error
+Result
+PROD_
+CD
+Item Code
+STRIN
+G(20)
+Y Item Code
+PROD_
+DES
+Item Name
+STRIN
+G(100)
+Y Item Name
+SIZE_F
+LAG
+Spec. Type
+STRIN
+G(1)
+Spec. Type (1: Spec. Name, 2: Spec. Group, 3: Spec. Calculation, 4:
+Spec. Calculation Group)
+SIZE_D
+ES
+Spec.
+STRIN
+G(100)
+Spec.(If you select Spec. Group / Spec. Calculation Group, enter the
+already registered Group Code or Group Name.)
+UNIT Unit
+STRIN
+G(6)
+Unit
+PROD_
+TYPE
+Item Category
+STRIN
+G(1)
+Item Category : Raw Material0, Finished Goods1, Semi-Finished
+Goods2, Merchandise3, Sub Material4, Intangible Merchandise7. If
+not entered, default 3.
+SET_FL
+AG
+Bundle Item
+STRIN
+G(1)
+Bundle Item (1:Use, 0:Do not Use)
+BAL_FL
+AG
+Quantity
+Management
+STRIN
+G(1)
+Quantity Management (0:Non-stock Item, 1:Stock Item)
+WH_CD Process
+STRIN
+G(5)
+Process Code : InvⅠ > Setup > Location > New > Type : Factory >
+Process
+IN_PRI
+CE
+Purchase Price
+NUME
+RIC(1
+8,6)
+Purchase Price
+IN_PRI
+CE_VAT
+Purchase
+Price(Tax
+Status)
+STRIN
+G(1)
+Purchase Price(Tax Status) : Not Included 0, Included 1. If not
+entered, default 0.
+OUT_P
+RICE
+Sales Price
+NUME
+RIC(1
+8,6)
+Sales Price
+OUT_P
+RICE_V
+AT
+Sales Price (Tax
+Status)
+STRIN
+G(1)
+Sales Price(Tax Status) : Not Included 0, Included 1. If not entered,
+default 0.
+REMAR
+KS_WI
+N
+Keyword
+STRIN
+G(100)
+Keyword
+CLASS
+_CD
+Group Code
+STRIN
+G(5)
+Item Group I Code
+CLASS
+_CD2
+Group Code 2
+STRIN
+G(5)
+Item Group II Code
+CLASS
+_CD3
+Group Code 3
+STRIN
+G(5)
+Item Group III Code
+BAR_C
+ODE
+Barcode
+STRIN
+G(30)
+Barcode
+VAT_YN
+Tax Rate
+(Sales) Status
+STRIN
+G(1)
+Tax Rate(Sales)Status(N:Default, Y:Set Manually)
+TAX Tax Rate
+NUME
+RIC(6,
+3)
+Tax Rate applied when entering a sales slip
+VAT_RA
+TE_BY_
+BASE_
+YN
+Tax Rate
+(Purchases)
+Status
+STRIN
+G(1)
+Tax Rate(Purchases) Input Status(N:Default, Y:Set Manually)
+VAT_RA
+TE_BY
+Tax Rate
+(Purchases)
+NUME
+RIC(6,
+3)
+Tax Rate applied when entering a purchase slip
+CS_FL
+AG
+Share with
+C-Portal
+STRIN
+G(1)
+Share with C-Portal (1:Use, 0:Do not Use)
+REMAR
+KS
+Remarks
+STRIN
+G(100)
+Remarks
+INSPEC
+T_TYP
+E_CD
+Quality
+Inspection Type
+STRIN
+G(30)
+Quality Inspection Type : Inv.Ⅱ > Quality Control > Quality Inspection
+> Reg. Inspection Type
+INSPEC
+T_STAT
+US
+QC Inspection
+Method
+STRIN
+G(1)
+QC Inspection Method(L:Lot, S:Sample)
+SAMPL
+E_PER
+CENT
+Sampling Ratio
+NUME
+RIC(4,
+2)
+Sampling Ratio
+CSORD
+_C0001
+C-Portal Min.
+S/O Qty. Check
+STRIN
+G(1)
+Set whether to check safety stock when entering the C-Portal Sales
+Order (0 : Default, 1 : Use, 2 : Do not use)
+CSORD
+_TEXT
+C-Portal Min.
+S/O Qty.
+NUME
+RIC(1
+5,3)
+Enter the minimum quantity to use for sales orders in the C-Portal.
+CSORD
+_C0003
+C-Portal Min.
+S/O Unit
+STRIN
+G(1)
+Set the minimum quantity unit to use for sales orders in the
+C-Portal(Y:Use, N:Do Not Use)
+IN_TER
+M
+Lead Time
+STRIN
+G(5)
+Lead Time
+MIN_Q
+TY
+Minimum
+Purchase Qty.
+STRIN
+G(7)
+Minimum Purchase Qty.
+CUST Vendor
+STRIN
+G(30)
+Vendor
+EXCH_
+RATE
+Unit Conversion
+Ratio(Base
+Qty.)
+STRIN
+G(30)
+DENO_
+RATE
+Unit Conversion
+Ratio(Aux. Qty.)
+STRIN
+G(30)
+OUT_P
+RICE1
+Price A
+NUME
+RIC(1
+8,6)
+Price A
+OUT_P
+RICE1_
+VAT_YN
+Price A Tax
+Status
+STRIN
+G(1)
+Price A Tax Status (N:Not Included, Y:Included)
+OUT_P
+RICE2
+Price B
+NUME
+RIC(1
+8,6)
+Price B
+OUT_P
+RICE2_
+VAT_YN
+Price B Tax
+Status
+STRIN
+G(1)
+Price B Tax Status (N:Not Included, Y:Included)
+OUT_P
+RICE3
+Price C
+NUME
+RIC(1
+8,6)
+Price C
+OUT_P
+RICE3_
+VAT_YN
+Price C Tax
+Status
+STRIN
+G(1)
+Price C Tax Status (N:Not Included, Y:Included)
+OUT_P
+RICE4
+Price D
+NUME
+RIC(1
+8,6)
+Price D
+OUT_P
+RICE4_
+VAT_YN
+Price D Tax
+Status
+STRIN
+G(1)
+Price D Tax Status (N:Not Included, Y:Included)
+OUT_P
+RICE5
+Price E
+NUME
+RIC(1
+8,6)
+Price E
+OUT_P
+RICE5_
+VAT_YN
+Price E Tax
+Status
+STRIN
+G(1)
+Price E Tax Status (N:Not Included, Y:Included)
+OUT_P
+RICE6
+Price F
+NUME
+RIC(1
+8,6)
+Price F
+OUT_P
+RICE6_
+VAT_YN
+Price F Tax
+Status
+STRIN
+G(1)
+Price F Tax Status (N:Not Included, Y:Included)
+OUT_P
+RICE7
+Price G
+NUME
+RIC(1
+8,6)
+Price G
+OUT_P
+RICE7_
+VAT_YN
+Price G Tax
+Status
+STRIN
+G(1)
+Price G Tax Status (N:Not Included, Y:Included)
+OUT_P
+RICE8
+Price H
+NUME
+RIC(1
+8,6)
+Price H
+OUT_P
+RICE8_
+VAT_YN
+Price H Tax
+Status
+STRIN
+G(1)
+Price H Tax Status (N:Not Included, Y:Included)
+OUT_P
+RICE9
+Price I
+NUME
+RIC(1
+8,6)
+Price I
+OUT_P
+RICE9_
+VAT_YN
+Price I Tax
+Status
+STRIN
+G(1)
+Price I Tax Status (N:Not Included, Y:Included)
+OUT_P
+RICE10
+Price J
+NUME
+RIC(1
+8,6)
+Price J
+OUT_P
+RICE10
+_VAT_Y
+N
+Price J Tax
+Status
+STRIN
+G(1)
+Price J Tax Status (N:Not Included, Y:Included)
+OUTSI
+DE_PRI
+CE
+Outsourcing
+Price
+NUME
+RIC(1
+8,6)
+Outsourcing Price
+OUTSI
+DE_PRI
+CE_VAT
+OE Price (Tax
+Status)
+STRIN
+G(1)
+OE Price Tax Status (N:Not Included, Y:Included)
+LABOR
+_WEIG
+HT
+Labor Cost
+NUME
+RIC(7,
+2)
+Labor Cost
+EXPEN
+SES_W
+EIGHT
+Weighted
+Expense Ratio
+NUME
+RIC(7,
+2)
+Weighted Expense Ratio
+MATERI
+AL_CO
+ST
+Standard
+Material Cost
+NUME
+RIC(1
+8,6)
+Standard Material Cost
+EXPEN
+SE_CO
+ST
+Standard
+Expenses
+NUME
+RIC(1
+8,6)
+Standard Expenses
+LABOR
+_COST
+Standard Labor
+Cost
+NUME
+RIC(1
+8,6)
+Standard Labor Cost
+OUT_C
+OST
+Standard O/E
+Cost
+NUME
+RIC(1
+8,6)
+Standard O/E Cost
+CONT1
+Text Type Add.
+Field 1
+STRIN
+G(100)
+Text Type Add. Field 1
+CONT2
+Text Type Add.
+Field 2
+STRIN
+G(100)
+Text Type Add. Field 2
+CONT3
+Text Type Add.
+Field 3
+STRIN
+G(100)
+Text Type Add. Field 3
+CONT4
+Text Type Add.
+Field 4
+STRIN
+G(100)
+Text Type Add. Field 4
+CONT5
+Text Type Add.
+Field 5
+STRIN
+G(100)
+Text Type Add. Field 5
+CONT6
+Text Type Add.
+Field 6
+STRIN
+G(100)
+Text Type Add. Field 6
+NO_US
+ER1
+Number Type
+Add. Field 1
+NUME
+RIC(1
+8,6)
+Number Type Add. Field 1
+NO_US
+ER2
+Number Type
+Add. Field 2
+NUME
+RIC(1
+8,6)
+Number Type Add. Field 2
+NO_US
+ER3
+Number Type
+Add. Field 3
+NUME
+RIC(1
+8,6)
+Number Type Add. Field 3
+NO_US
+ER4
+Number Type
+Add. Field 4
+NUME
+RIC(1
+8,6)
+Number Type Add. Field 4
+NO_US
+ER5
+Number Type
+Add. Field 5
+NUME
+RIC(1
+8,6)
+Number Type Add. Field 5
+NO_US
+ER6
+Number Type
+Add. Field 6
+NUME
+RIC(1
+8,6)
+Number Type Add. Field 6
+NO_US
+ER7
+Number Type
+Add. Field 7
+NUME
+RIC(1
+8,6)
+Number Type Add. Field 7
+NO_US
+ER8
+Number Type
+Add. Field 8
+NUME
+RIC(1
+8,6)
+Number Type Add. Field 8
+NO_US
+ER9
+Number Type
+Add. Field 9
+NUME
+RIC(1
+8,6)
+Number Type Add. Field 9
+NO_US
+ER10
+Number Type
+Add. Field 10
+NUME
+RIC(1
+8,6)
+Number Type Add. Field 10
+ITEM_T
+YPE
+Mgmt. Field
+STRIN
+G(1)
+Mgmt. Field(B:Default, M:Required, Y:Optional, N:Do Not Use)
+SERIAL
+_TYPE
+Serial/Lot No.
+STRIN
+G(1)
+Serial(B:Default, M:Required, Y:Optional, N:Do Not Use)
+PROD_
+SELL_T
+YPE
+Auto-Create
+Manufacture
+Slip - Sales
+STRIN
+G(1)
+Auto-Create Manufacture Slip - Sales(B:Default, Y:Use, N:Do Not
+Use)
+PROD_
+WHMO
+VE_TY
+PE
+Auto-Create
+Manufacture
+Slip - Location
+Tran.
+STRIN
+G(1)
+Auto-Create Manufacture Slip - Location Tran.(B:Default, Y:Use,
+N:Do Not Use)
+QC_BU
+Y_TYP
+E
+Auto-Create
+Quality Insp.
+Request -
+Purchases
+STRIN
+G(1)
+Auto-Create Quality Insp. Request - Purchases(B:Default, Y:Use,
+N:Do Not Use)
+QC_YN
+Request QC
+Insp.
+STRIN
+G(1)
+Request QC Insp.(Y:Use, N:Do not Use)
+Example Parameter
+URL : https://oapi{ZONE}.ecount.com/OAPI/V2/InventoryBasic/GetBasicProductsList?SESSION_ID={SESSION_ID}}
+// Replace {ZONE} with real zone information when entering Zone data.(Without {})
+{"PROD_CD": "00001","PROD_TYPE":"0"}
+Example Result
+[SUCCESS]
+{
+"Data": {
+"EXPIRE_DATE":"",
+"QUANTITY_INFO": Maximum number of consecutive errors per hour" : 0/30," 1 hour Allowable Amount" : 3/6000," 1
+day Allowable Amount" : 4/10000",
+"TRACE_ID":"db6138411aad40e42dc5e209f65f6f3c",
+"Result": "[{"PROD_CD": "00001",
+"PROD_DES": "test123",
+"SIZE_FLAG": "1",
+"SIZE_DES": "6",
+"UNIT": "EA",
+"PROD_TYPE": "3",
+"SET_FLAG": "1",
+"BAL_FLAG": "1",
+"WH_CD": "00002",
+"IN_PRICE": "700.0000000000",
+"SIZE_CD": "",
+"IN_PRICE_VAT": "1",
+"REMARKS_WIN": "test",
+"CLASS_CD": "00001",
+"CLASS_CD2": "",
+"CLASS_CD3": "",
+"BAR_CODE": "8801166053051",
+"VAT_YN": "Y",
+"TAX": "20.000",
+"VAT_RATE_BY_BASE_YN": "Y",
+"VAT_RATE_BY": "20.00000",
+"CS_FLAG": "1",
+"REMARKS": "123",
+"INSPECT_TYPE_CD": "1",
+"INSPECT_STATUS": "L",
+"SAMPLE_PERCENT": "0.00",
+"IN_TERM": "0",
+"MIN_QTY": "0.0000000000",
+"CUST": "2118702818",
+"EXCH_RATE": "0.0000000000",
+"DENO_RATE": 1,
+"OUT_PRICE": "12000.0000000000",
+"OUT_PRICE1": "0.0000000000",
+"OUT_PRICE2": "0.0000000000",
+"OUT_PRICE3": "111.0000000000",
+"OUT_PRICE4": "0.0000000000",
+"OUT_PRICE5": "0.0000000000",
+"OUT_PRICE6": "0.0000000000",
+"OUT_PRICE7": "0.0000000000",
+"OUT_PRICE8": "0.0000000000",
+"OUT_PRICE9": "0.0000000000",
+"OUT_PRICE10": "0.0000000000",
+"OUT_PRICE_VAT": "1",
+"OUT_PRICE1_VAT_YN": "N",
+"OUT_PRICE2_VAT_YN": "Y",
+"OUT_PRICE3_VAT_YN": "N",
+"OUT_PRICE4_VAT_YN": "Y",
+"OUT_PRICE5_VAT_YN": "N",
+"OUT_PRICE6_VAT_YN": "N",
+"OUT_PRICE7_VAT_YN": "N",
+"OUT_PRICE8_VAT_YN": "N",
+"OUT_PRICE9_VAT_YN": "N",
+"OUT_PRICE10_VAT_YN": "N",
+"OUTSIDE_PRICE": "6000.0000000000",
+"OUTSIDE_PRICE_VAT": "1",
+"LABOR_WEIGHT": "1.0000000000",
+"EXPENSES_WEIGHT": "1.00",
+"MATERIAL_COST": "0.0000000000",
+"EXPENSE_COST": "0.0000000000",
+"LABOR_COST": "0.0000000000",
+"OUT_COST": "0.0000000000",
+"CONT1": "",
+"CONT2": "",
+"CONT3": "",
+"CONT4": "",
+"CONT5": "",
+"CONT6": "",
+"NO_USER1": "0.0000000000",
+"NO_USER2": "0.0000000000",
+"NO_USER3": "0.0000000000",
+"SERIAL_TYPE": "B",
+"PROD_SELL_TYPE": "B",
+"PROD_WHMOVE_TYPE": "B",
+"QC_BUY_TYPE": "B",
+"QC_YN": "B",
+"SAFE_QTY": "0.0000000000"
+}
+]"
+},
+"Status": "200",
+"Errors": null,
+"Error": null,
+"Timestamp": "2020-01-00 00:00:00.000",
+"RequestKey": null,
+"IsEnableNoL4": true,
+"RefreshTimestamp": "0",
+"AsyncActionKey": null
+}
+Description by Error Type
+Please click the View Details link for a detailed description of each error type.
+Quotation API
+Overview
+You can input Quotation data into Ecount ERP by linking it with the external service system.
+However, since only the fields added to the default input screen template within ERP can be entered
+Template Required Fields(Parameter) of the input API are different for each company code
+}
+Description by Error Type
+Please click the View Details link for a detailed description of each error type.
+Quotation API
+Overview
+You can input Quotation data into Ecount ERP by linking it with the external service system.
+However, since only the fields added to the default input screen template within ERP can be entered
+Template Required Fields(Parameter) of the input API are different for each company code
+W

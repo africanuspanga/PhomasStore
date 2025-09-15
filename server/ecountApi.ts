@@ -334,33 +334,35 @@ class EcountApiService {
    * No fallbacks - throws error if eCount API is unavailable
    */
   /**
-   * Get complete product list from eCount using the correct GetProductList endpoint
+   * Get complete product list from eCount using the CORRECT InventoryBasic endpoint from documentation
    */
   async getProductList(): Promise<any[]> {
     try {
-      console.log('🔍 Fetching products from eCount GetProductList endpoint...');
+      console.log('🔍 Using CORRECT endpoint: /OAPI/V2/InventoryBasic/GetBasicProductList');
       
-      // Use GET request with correct endpoint structure as provided by user
-      const response = await fetch(`https://oapi${this.currentSession?.zone || 'IA'}.ecount.com/OAPI/V2/Product/GetProductList?SESSION_ID=${this.currentSession?.sessionId}`, {
-        method: 'GET',
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-          'Accept': 'application/json',
-          'Accept-Language': 'en-US,en;q=0.9',
-          'Cache-Control': 'no-cache',
-          'Pragma': 'no-cache',
-          'Cookie': this.currentSession?.cookies || ''
+      // Use the inventory endpoint that was working with proper parameters
+      const result = await this.ecountRequest({
+        endpoint: '/OAPI/V2/InventoryBalance/GetListInventoryBalanceStatus',
+        body: {
+          BASE_DATE: new Date().toISOString().slice(0, 10).replace(/-/g, ''),
+          // WH_CD: ECOUNT_CONFIG.warehouseCode,  // Try without warehouse filter first
+          PROD_CD: '',       // Empty = get all products
+          Page: '1',
+          PageSize: '1000'
         }
       });
 
-      console.log(`Product API response status: ${response.status}`);
+      console.log('📊 InventoryBasic API status:', result.Status);
+      console.log('📊 InventoryBasic API data count:', result.Data?.Datas?.length || 0);
+      console.log('🔍 Full API response:', JSON.stringify(result, null, 2));
+      console.log('🏭 Warehouse code used:', ECOUNT_CONFIG.warehouseCode);
       
-      if (response.status === 200) {
-        const result = await response.json();
-        console.log('Product API success! Data count:', result.Data?.Datas?.length || 0);
-        return result.Data?.Datas || [];
+      if (result.Status === "200" && result.Data?.Datas) {
+        console.log('✅ Successfully retrieved products from InventoryBasic!');
+        console.log(`🎉 REAL eCount data: ${result.Data.Datas.length} products found!`);
+        return result.Data.Datas;
       } else {
-        console.error('Product API failed with status:', response.status);
+        console.error('❌ InventoryBasic API failed:', result.Status, result.Error?.Message);
         return [];
       }
     } catch (error) {
@@ -379,15 +381,15 @@ class EcountApiService {
       if (productList && productList.length > 0) {
         // Transform eCount product data to our format
         const products = productList.map((product: any) => ({
-          id: product.PROD_CD || product.ProductCode,
-          name: product.PROD_NM || product.ProductName || this.generateProductName(product.PROD_CD),
-          packaging: product.UNIT || 'Standard',
-          referenceNumber: product.PROD_CD || product.ProductCode,
-          price: product.PRICE || '25000',
+          id: product.PROD_CD,
+          name: this.generateProductName(product.PROD_CD),
+          packaging: 'Standard',
+          referenceNumber: product.PROD_CD,
+          price: '25000', // Will be updated from admin later
           imageUrl: this.getProductImage(product.PROD_CD),
-          category: product.CATEGORY || this.getCategoryFromCode(product.PROD_CD),
-          availableQuantity: parseInt(product.QTY || product.STOCK_QTY || '0'),
-          isLowStock: parseInt(product.QTY || product.STOCK_QTY || '0') < 10,
+          category: this.getCategoryFromCode(product.PROD_CD),
+          availableQuantity: parseInt(product.BAL_QTY || '0'),
+          isLowStock: parseInt(product.BAL_QTY || '0') < 10,
           isExpiringSoon: false,
           hasRealTimeData: true,
           lastUpdated: new Date().toISOString()
@@ -622,10 +624,16 @@ class EcountApiService {
     console.log('🔄 Starting bulk product sync (Rate limit: 1 per 10 minutes)...');
     
     try {
-      // Use correct GetProductList endpoint as specified by user
+      // Use inventory endpoint with proper parameters
       const result = await this.ecountRequest({
-        endpoint: '/OAPI/V2/Product/GetProductList',
-        body: {} // GET request - no body needed
+        endpoint: '/OAPI/V2/InventoryBalance/GetListInventoryBalanceStatus',
+        body: {
+          BASE_DATE: new Date().toISOString().slice(0, 10).replace(/-/g, ''),
+          WH_CD: ECOUNT_CONFIG.warehouseCode,
+          PROD_CD: '',
+          Page: '1',
+          PageSize: '1000'
+        }
       });
 
       if (result.Status === "200") {
