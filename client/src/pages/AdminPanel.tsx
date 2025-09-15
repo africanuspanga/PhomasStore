@@ -9,6 +9,7 @@ import { Users, Package, AlertTriangle, Clock, CheckCircle, Edit, Trash2, Plus, 
 import { format } from "date-fns";
 import { useLocation } from "wouter";
 import { AdminProductManager } from "@/components/AdminProductManager";
+import { BulkSyncManager } from "@/components/BulkSyncManager";
 import type { User } from "@shared/schema";
 
 export default function AdminPanel() {
@@ -78,6 +79,7 @@ export default function AdminPanel() {
           <TabsList className="mb-6">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="products">Product Management</TabsTrigger>
+            <TabsTrigger value="sync">Bulk Sync</TabsTrigger>
           </TabsList>
           
           <TabsContent value="overview">
@@ -239,6 +241,10 @@ export default function AdminPanel() {
           
           <TabsContent value="products">
             <AdminProductManager />
+          </TabsContent>
+          
+          <TabsContent value="sync">
+            <BulkSyncManager />
           </TabsContent>
         </Tabs>
       </div>

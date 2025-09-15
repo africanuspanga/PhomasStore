@@ -49,6 +49,8 @@ interface EcountApiRequestOptions {
 class EcountApiService {
   private session: EcountSession | null = null;
   private baseUrl: string;
+  private inventoryCache = new Map<string, { data: any, timestamp: number }>();
+  private readonly CACHE_DURATION = 60 * 60 * 1000; // 1 hour in milliseconds
 
   constructor() {
     // Use test URL for now
@@ -404,6 +406,170 @@ class EcountApiService {
       'default': 'https://images.unsplash.com/photo-1559757148-5c350d0d3c56?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300'
     };
     return defaultImages.default;
+  }
+
+  /**
+   * Bulk product sync - downloads complete product catalog (rate limited: 1 per 10 minutes)
+   */
+  async bulkSyncProducts(): Promise<any> {
+    console.log('🔄 Starting bulk product sync (Rate limit: 1 per 10 minutes)...');
+    
+    try {
+      const result = await this.ecountRequest({
+        endpoint: '/OAPI/V2/Item/GetItemList',
+        body: {
+          // Pagination parameters - adjust based on total product count
+          Page: 1,
+          PageSize: 1000, // Max products per call - adjust as needed
+          IsIncludeDel: false // Don't include deleted items
+        }
+      });
+
+      if (result.Status === "200") {
+        console.log(`✅ Bulk product sync completed: ${result.Data?.Datas?.length || 0} products retrieved`);
+        return result;
+      }
+
+      throw new Error(`Bulk product sync failed: ${result.Error?.Message || 'Unknown error'}`);
+    } catch (error) {
+      console.error('❌ Error in bulk product sync:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Bulk inventory sync - downloads all inventory quantities (rate limited: 1 per 10 minutes)
+   */
+  async bulkSyncInventory(): Promise<any> {
+    console.log('🔄 Starting bulk inventory sync (Rate limit: 1 per 10 minutes)...');
+    
+    try {
+      const result = await this.ecountRequest({
+        endpoint: '/OAPI/V2/InventoryBalance/GetListInventoryBalanceStatus',
+        body: {
+          BASE_DATE: new Date().toISOString().slice(0, 10).replace(/-/g, ''), // YYYYMMDD
+          WH_CD: ECOUNT_CONFIG.warehouseCode,
+          PROD_CD: "", // Get all products
+          // Pagination if needed
+          Page: 1,
+          PageSize: 1000
+        }
+      });
+
+      if (result.Status === "200") {
+        console.log(`✅ Bulk inventory sync completed: ${result.Data?.Datas?.length || 0} inventory records retrieved`);
+        return result;
+      }
+
+      throw new Error(`Bulk inventory sync failed: ${result.Error?.Message || 'Unknown error'}`);
+    } catch (error) {
+      console.error('❌ Error in bulk inventory sync:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get cached inventory data with 1-hour expiration
+   */
+  async getCachedInventoryData(): Promise<Map<string, number>> {
+    const cacheKey = 'inventory_data';
+    const cached = this.inventoryCache.get(cacheKey);
+    
+    // Check if we have valid cached data (less than 1 hour old)
+    if (cached && (Date.now() - cached.timestamp) < this.CACHE_DURATION) {
+      console.log('📦 Using cached inventory data (age: ' + Math.round((Date.now() - cached.timestamp) / 1000 / 60) + ' minutes)');
+      return cached.data;
+    }
+    
+    console.log('🔄 Cache miss or expired, fetching fresh inventory data');
+    
+    try {
+      const freshData = await this.getInventoryBalance();
+      
+      // Cache the fresh data
+      this.inventoryCache.set(cacheKey, {
+        data: freshData,
+        timestamp: Date.now()
+      });
+      
+      console.log(`✅ Fresh inventory data cached: ${freshData.size} products`);
+      return freshData;
+    } catch (error) {
+      // If fresh fetch fails and we have expired cache, use it as fallback
+      if (cached) {
+        const ageMinutes = Math.round((Date.now() - cached.timestamp) / 1000 / 60);
+        console.log(`⚠️ Fresh fetch failed, using expired cache as fallback (age: ${ageMinutes} minutes)`);
+        return cached.data;
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Get single item inventory for high-priority products (rate limit: 1 per second)
+   */
+  async getSingleItemInventory(itemCode: string): Promise<number> {
+    console.log(`🔍 Getting single item inventory for: ${itemCode} (Rate limit: 1 per second)`);
+    
+    try {
+      const result = await this.ecountRequest({
+        endpoint: '/OAPI/V2/InventoryBalance/GetInventoryBalanceStatus',
+        body: {
+          BASE_DATE: new Date().toISOString().slice(0, 10).replace(/-/g, ''), // YYYYMMDD
+          WH_CD: ECOUNT_CONFIG.warehouseCode,
+          PROD_CD: itemCode // Single item lookup
+        }
+      });
+
+      if (result.Status === "200" && result.Data?.Datas?.length > 0) {
+        const quantity = result.Data.Datas[0]?.BAL_QTY || 0;
+        console.log(`✅ Single item inventory for ${itemCode}: ${quantity} units`);
+        
+        // Update cache with this single item
+        const cacheKey = 'inventory_data';
+        const cached = this.inventoryCache.get(cacheKey);
+        if (cached && cached.data instanceof Map) {
+          cached.data.set(itemCode, quantity);
+          console.log(`📦 Updated cache with fresh data for ${itemCode}`);
+        }
+        
+        return quantity;
+      }
+
+      console.log(`ℹ️ No inventory found for item ${itemCode}`);
+      return 0;
+    } catch (error) {
+      console.error(`❌ Error getting single item inventory for ${itemCode}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Clear inventory cache (useful for admin operations)
+   */
+  clearInventoryCache(): void {
+    console.log('🗑️ Clearing inventory cache');
+    this.inventoryCache.clear();
+  }
+
+  /**
+   * Get cache status for admin monitoring
+   */
+  getCacheStatus(): { size: number, lastUpdated: string | null, isExpired: boolean } {
+    const cached = this.inventoryCache.get('inventory_data');
+    
+    if (!cached) {
+      return { size: 0, lastUpdated: null, isExpired: true };
+    }
+    
+    const ageMs = Date.now() - cached.timestamp;
+    const isExpired = ageMs > this.CACHE_DURATION;
+    
+    return {
+      size: cached.data instanceof Map ? cached.data.size : 0,
+      lastUpdated: new Date(cached.timestamp).toISOString(),
+      isExpired
+    };
   }
 
   /**

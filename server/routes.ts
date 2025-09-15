@@ -158,18 +158,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Product routes - Hybrid approach: local metadata + eCount inventory
+  // Product routes - Hybrid approach: local metadata + cached eCount inventory
   app.get("/api/products", async (req, res) => {
     try {
       // Get base products from storage (rich metadata: names, descriptions, images)
       const baseProducts = await storage.getProductsWithInventory();
       
-      // Get real-time inventory quantities from eCount
+      // Get cached inventory quantities from eCount (with 1-hour caching)
       try {
-        const inventoryMap = await ecountApi.getInventoryBalance();
-        console.log(`📊 Got real-time inventory for ${inventoryMap.size} items from eCount`);
+        const inventoryMap = await ecountApi.getCachedInventoryData();
+        console.log(`📊 Got cached inventory for ${inventoryMap.size} items from eCount`);
         
-        // Merge: Use storage metadata + eCount quantities
+        // Merge: Use storage metadata + cached eCount quantities
         const hybridProducts = baseProducts.map(product => {
           const ecountQuantity = inventoryMap.get(product.id);
           return {
@@ -340,6 +340,93 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(inventory);
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch inventory", error });
+    }
+  });
+
+  // Admin bulk sync routes - protected
+  app.post("/api/admin/bulk-sync-products", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      console.log('Admin initiated bulk product sync');
+      const result = await ecountApi.bulkSyncProducts();
+      
+      res.json({
+        success: true,
+        message: 'Bulk product sync completed successfully',
+        data: {
+          productsCount: result.Data?.Datas?.length || 0,
+          status: result.Status,
+          timestamp: new Date().toISOString()
+        }
+      });
+    } catch (error) {
+      console.error('Admin bulk product sync failed:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Bulk product sync failed',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
+  app.post("/api/admin/bulk-sync-inventory", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      console.log('Admin initiated bulk inventory sync');
+      const result = await ecountApi.bulkSyncInventory();
+      
+      res.json({
+        success: true,
+        message: 'Bulk inventory sync completed successfully',
+        data: {
+          inventoryCount: result.Data?.Datas?.length || 0,
+          status: result.Status,
+          timestamp: new Date().toISOString()
+        }
+      });
+    } catch (error) {
+      console.error('Admin bulk inventory sync failed:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Bulk inventory sync failed',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
+  app.post("/api/admin/clear-cache", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      console.log('Admin clearing inventory cache');
+      ecountApi.clearInventoryCache();
+      
+      res.json({
+        success: true,
+        message: 'Inventory cache cleared successfully',
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error('Admin cache clear failed:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Cache clear failed',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
+  app.get("/api/admin/cache-status", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const cacheStatus = ecountApi.getCacheStatus();
+      
+      res.json({
+        success: true,
+        data: cacheStatus
+      });
+    } catch (error) {
+      console.error('Admin cache status failed:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to get cache status',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
     }
   });
 
