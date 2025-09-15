@@ -243,11 +243,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const validatedData = supabaseSignUpSchema.parse(req.body);
       const { email, password, name, phone, address, user_type } = validatedData;
 
-      // Create user in Supabase Auth
+      // Create user in Supabase Auth with auto-confirmation
       const { data: authData, error: authError } = await supabase.auth.admin.createUser({
         email,
         password,
-        email_confirm: true, // Auto-confirm email for demo
+        email_confirm: true, // Auto-confirm email - no confirmation needed
+        user_metadata: {
+          name,
+          phone,
+          address,
+          user_type
+        }
       });
 
       if (authError) {
