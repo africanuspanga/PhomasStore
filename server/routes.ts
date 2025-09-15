@@ -74,6 +74,36 @@ const requireAdmin = (req: Request, res: Response, next: NextFunction) => {
   next();
 };
 
+// Rate limiting for eCount bulk operations (per documentation: 1 call per 10 minutes)
+const bulkOperationRateLimit = new Map<string, number>();
+const BULK_RATE_LIMIT = 10 * 60 * 1000; // 10 minutes in milliseconds
+
+const enforceBulkRateLimit = (operation: string) => {
+  return (req: Request, res: Response, next: NextFunction) => {
+    const userId = (req as any).userId;
+    const key = `${userId}-${operation}`;
+    const now = Date.now();
+    const lastCall = bulkOperationRateLimit.get(key) || 0;
+    const timeSinceLastCall = now - lastCall;
+    
+    if (timeSinceLastCall < BULK_RATE_LIMIT) {
+      const waitTime = BULK_RATE_LIMIT - timeSinceLastCall;
+      const waitMinutes = Math.ceil(waitTime / (60 * 1000));
+      
+      console.log(`🚫 Rate limit hit for ${operation} by user ${userId}`);
+      return res.status(429).json({ 
+        error: 'Rate limit exceeded',
+        message: `Bulk operations limited to 1 per 10 minutes. Please wait ${waitMinutes} minutes.`,
+        retryAfter: waitTime
+      });
+    }
+    
+    // Update rate limit tracker
+    bulkOperationRateLimit.set(key, now);
+    next();
+  };
+};
+
 // Helper functions for product transformation
 function generateProductName(productCode: string): string {
   // Medical supply name patterns based on product codes
@@ -302,8 +332,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Admin bulk sync routes - protected
-  app.post("/api/admin/bulk-sync-products", requireAuth, requireAdmin, async (req, res) => {
+  // Admin bulk sync routes - protected with authentication AND rate limiting
+  app.post("/api/admin/bulk-sync-products", requireAuth, requireAdmin, enforceBulkRateLimit('bulk-sync-products'), async (req, res) => {
     try {
       console.log('Admin initiated bulk product sync');
       const result = await ecountApi.bulkSyncProducts();
@@ -327,7 +357,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/admin/bulk-sync-inventory", requireAuth, requireAdmin, async (req, res) => {
+  app.post("/api/admin/bulk-sync-inventory", requireAuth, requireAdmin, enforceBulkRateLimit('bulk-sync-inventory'), async (req, res) => {
     try {
       console.log('Admin initiated bulk inventory sync');
       const result = await ecountApi.bulkSyncInventory();
@@ -351,7 +381,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/admin/clear-cache", requireAuth, requireAdmin, async (req, res) => {
+  app.post("/api/admin/clear-cache", requireAuth, requireAdmin, enforceBulkRateLimit('clear-cache'), async (req, res) => {
     try {
       console.log('Admin clearing inventory cache');
       ecountApi.clearInventoryCache();
