@@ -286,27 +286,79 @@ class EcountApiService {
   }
 
   /**
-   * Create sales order in eCount using centralized helper
+   * Create sales order in eCount using the correct JSON format
    */
   async createSalesOrder(order: Order): Promise<string> {
     try {
       const orderItems = JSON.parse(order.items);
       const currentDate = new Date().toISOString().slice(0, 10).replace(/-/g, ''); // YYYYMMDD
       
+      // Use eCount's special JSON format structure
       const result = await this.ecountRequest({
-        endpoint: '/OAPI/V2/OpenMarket/SaveOpenMarketOrderNew',
+        endpoint: '/OAPI/V2/SalesOrder/SaveSalesOrder',
         body: {
-          SalesList: orderItems.map((item: any, index: number) => ({
-            Datas: {
-              UPLOAD_SER_NO: index + 1,
+          SaleOrderList: orderItems.map((item: any, index: number) => ({
+            BulkDatas: {
+              // Header fields
               IO_DATE: currentDate,
-              CUST: "WEB_CUSTOMER", // Default web customer code
-              CUST_DES: "Online Customer",
+              UPLOAD_SER_NO: (index + 1).toString(),
+              CUST: "2025", // Customer code - should be configured per customer
+              CUST_DES: "Phomas Online Customer",
+              EMP_CD: "",
+              WH_CD: ECOUNT_CONFIG.warehouseCode,
+              IO_TYPE: "",
+              EXCHANGE_TYPE: "",
+              EXCHANGE_RATE: "",
+              PJT_CD: "",
+              DOC_NO: order.orderNumber,
+              TTL_CTT: "",
+              REF_DES: "",
+              COLL_TERM: "",
+              AGREE_TERM: "",
+              TIME_DATE: "",
+              REMARKS_WIN: "",
+              
+              // Custom text fields
+              U_MEMO1: `Web Order: ${order.orderNumber}`,
+              U_MEMO2: "",
+              U_MEMO3: "",
+              U_MEMO4: "",
+              U_MEMO5: "",
+              
+              // Additional header fields (empty for now)
+              ADD_TXT_01_T: "", ADD_TXT_02_T: "", ADD_TXT_03_T: "", ADD_TXT_04_T: "", ADD_TXT_05_T: "",
+              ADD_TXT_06_T: "", ADD_TXT_07_T: "", ADD_TXT_08_T: "", ADD_TXT_09_T: "", ADD_TXT_10_T: "",
+              ADD_NUM_01_T: "", ADD_NUM_02_T: "", ADD_NUM_03_T: "", ADD_NUM_04_T: "", ADD_NUM_05_T: "",
+              ADD_CD_01_T: "", ADD_CD_02_T: "", ADD_CD_03_T: "",
+              ADD_DATE_01_T: "", ADD_DATE_02_T: "", ADD_DATE_03_T: "",
+              U_TXT1: "",
+              ADD_LTXT_01_T: "", ADD_LTXT_02_T: "", ADD_LTXT_03_T: "",
+              
+              // Product/item fields
               PROD_CD: item.productId,
               PROD_DES: item.name,
+              SIZE_DES: item.packaging || "",
+              UQTY: "",
               QTY: item.quantity.toString(),
-              WH_CD: ECOUNT_CONFIG.warehouseCode,
-              REMARKS: `Web Order: ${order.orderNumber}`
+              PRICE: item.price?.toString() || "0",
+              USER_PRICE_VAT: "",
+              SUPPLY_AMT: (item.quantity * (item.price || 0)).toString(),
+              SUPPLY_AMT_F: "",
+              VAT_AMT: "",
+              ITEM_TIME_DATE: "",
+              REMARKS: `Phomas Online Store - Order: ${order.orderNumber}`,
+              ITEM_CD: "",
+              
+              // Additional item fields
+              P_REMARKS1: "", P_REMARKS2: "", P_REMARKS3: "",
+              ADD_TXT_01: "", ADD_TXT_02: "", ADD_TXT_03: "", ADD_TXT_04: "", ADD_TXT_05: "", ADD_TXT_06: "",
+              REL_DATE: "", REL_NO: "",
+              P_AMT1: "", P_AMT2: "",
+              ADD_NUM_01: "", ADD_NUM_02: "", ADD_NUM_03: "", ADD_NUM_04: "", ADD_NUM_05: "",
+              ADD_CD_01: "", ADD_CD_02: "", ADD_CD_03: "",
+              ADD_CD_NM_01: "", ADD_CD_NM_02: "", ADD_CD_NM_03: "",
+              ADD_CDNM_01: "", ADD_CDNM_02: "", ADD_CDNM_03: "",
+              ADD_DATE_01: "", ADD_DATE_02: "", ADD_DATE_03: ""
             }
           }))
         }
@@ -415,13 +467,15 @@ class EcountApiService {
     console.log('🔄 Starting bulk product sync (Rate limit: 1 per 10 minutes)...');
     
     try {
+      // Use proper eCount request format for bulk product sync
       const result = await this.ecountRequest({
         endpoint: '/OAPI/V2/Item/GetItemList',
         body: {
-          // Pagination parameters - adjust based on total product count
-          Page: 1,
-          PageSize: 1000, // Max products per call - adjust as needed
-          IsIncludeDel: false // Don't include deleted items
+          // eCount-specific parameters
+          Page: "1",
+          PageSize: "1000", // Max products per call - adjust as needed
+          IsIncludeDel: "false", // Don't include deleted items
+          WH_CD: ECOUNT_CONFIG.warehouseCode
         }
       });
 
@@ -444,15 +498,16 @@ class EcountApiService {
     console.log('🔄 Starting bulk inventory sync (Rate limit: 1 per 10 minutes)...');
     
     try {
+      // Use proper eCount request format for bulk inventory sync
       const result = await this.ecountRequest({
         endpoint: '/OAPI/V2/InventoryBalance/GetListInventoryBalanceStatus',
         body: {
           BASE_DATE: new Date().toISOString().slice(0, 10).replace(/-/g, ''), // YYYYMMDD
           WH_CD: ECOUNT_CONFIG.warehouseCode,
           PROD_CD: "", // Get all products
-          // Pagination if needed
-          Page: 1,
-          PageSize: 1000
+          // Pagination parameters as strings
+          Page: "1",
+          PageSize: "1000"
         }
       });
 
