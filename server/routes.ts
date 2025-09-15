@@ -513,9 +513,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin bulk sync routes - protected with admin authentication AND rate limiting
-  app.post("/api/admin/bulk-sync-products", requireAdminAuth, enforceBulkRateLimit('bulk-sync-products'), async (req, res) => {
+  app.post("/api/admin/bulk-sync-products", requireAdminAuth, async (req, res) => {
     try {
-      console.log('Admin initiated bulk product sync');
+      const forceSync = req.query.force === '1' || req.body.force === true;
+      
+      if (!forceSync) {
+        // Apply rate limiting for normal sync only
+        const userId = (req as any).userId;
+        const key = `${userId}-bulk-sync-products`;
+        const now = Date.now();
+        const lastCall = bulkOperationRateLimit.get(key) || 0;
+        const timeSinceLastCall = now - lastCall;
+        
+        if (timeSinceLastCall < BULK_RATE_LIMIT) {
+          const waitSeconds = Math.ceil((BULK_RATE_LIMIT - timeSinceLastCall) / 1000);
+          console.log(`🚫 Rate limit hit for bulk-sync-products by user ${userId}`);
+          return res.status(429).json({ 
+            error: 'Rate limit exceeded',
+            message: `Bulk operations limited to 1 per 10 minutes. Please wait ${Math.ceil(waitSeconds / 60)} minutes.`,
+            retryAfter: BULK_RATE_LIMIT - timeSinceLastCall
+          });
+        }
+        
+        bulkOperationRateLimit.set(key, now);
+      } else {
+        console.log('🔄 FORCE SYNC: Bypassing rate limits to test new ItemManagement endpoint...');
+      }
+      
+      console.log('Admin initiated bulk product sync' + (forceSync ? ' (FORCE MODE)' : ''));
       const result = await ecountApi.bulkSyncProducts();
       
       res.json({

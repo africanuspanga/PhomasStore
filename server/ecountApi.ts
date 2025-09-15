@@ -588,11 +588,11 @@ class EcountApiService {
    */
   async getProductMasterData(): Promise<Map<string, any>> {
     try {
-      console.log('📋 Fetching product master data from eCount using correct endpoint...');
+      console.log('📋 Fetching product master data from eCount using CORRECT tenant endpoint...');
       
-      // Try the standard eCount product master endpoint
+      // Use the actual endpoint that exists in this eCount tenant (from user's screenshot)
       const result = await this.ecountRequest({
-        endpoint: '/OAPI/V2/InventoryBasic/GetBasicProductList',
+        endpoint: '/OAPI/V2/ItemManagement/GetInventoryDetail/ProductList',
         body: {
           PROD_CD: '', // Empty = get all products
           Page: '1',
@@ -604,7 +604,8 @@ class EcountApiService {
       
       // Parse the response correctly
       const products = result.Data?.Datas || result.Data?.Result || [];
-      console.log(`📊 Product master data structure:`, {
+      
+      console.log(`📊 ItemManagement endpoint data structure:`, {
         status: result.Status,
         hasDatas: !!result.Data?.Datas,
         datasLength: result.Data?.Datas?.length,
@@ -613,24 +614,32 @@ class EcountApiService {
         totalProducts: products.length
       });
 
+      // Log first product structure to understand field names
+      if (products.length > 0) {
+        console.log(`📋 First product fields:`, Object.keys(products[0]));
+        console.log(`📋 First product sample:`, products[0]);
+      }
+
       if (result.Status === "200" && products.length > 0) {
         products.forEach((product: any) => {
-          productMasterMap.set(product.PROD_CD, {
-            name: product.PROD_NM || product.PROD_DES || `Product ${product.PROD_CD}`,
-            description: product.PROD_DES || product.PROD_NM || '',
-            specification: product.SPEC || '',
-            category: product.ITEM_GRP_CD || this.getCategoryFromCode(product.PROD_CD),
-            unit: product.UNIT || 'PCS'
+          // Map the actual field names from this eCount tenant
+          const productCode = product.PROD_CD || product.ITEM_CD || product.CODE;
+          productMasterMap.set(productCode, {
+            name: product.ITEM_NM || product.PROD_NM || product.PROD_DES || product.NAME || `Product ${productCode}`,
+            description: product.PROD_DES || product.ITEM_DESC || product.DESCRIPTION || '',
+            specification: product.SPEC || product.SPECIFICATION || '',
+            category: product.ITEM_GRP || product.ITEM_GRP_CD || product.CATEGORY || this.getCategoryFromCode(productCode),
+            unit: product.UNIT || product.UOM || 'PCS'
           });
         });
-        console.log(`✅ Retrieved master data for ${productMasterMap.size} products`);
+        console.log(`✅ Retrieved REAL master data for ${productMasterMap.size} products from ItemManagement!`);
       } else {
-        console.log('⚠️ No product master data available, will use generated names');
+        console.log('⚠️ ItemManagement endpoint returned no data, will use generated names');
       }
 
       return productMasterMap;
     } catch (error) {
-      console.error('❌ Failed to get product master data:', error);
+      console.error('❌ Failed to get product master data from ItemManagement:', error);
       return new Map(); // Return empty map on error
     }
   }
@@ -725,35 +734,47 @@ class EcountApiService {
     console.log('🔄 Starting bulk product sync (Rate limit: 1 per 10 minutes)...');
     
     try {
-      // Use inventory endpoint with proper parameters
-      const result = await this.ecountRequest({
-        endpoint: '/OAPI/V2/InventoryBalance/GetListInventoryBalanceStatus',
-        body: {
-          BASE_DATE: new Date().toISOString().slice(0, 10).replace(/-/g, ''),
-          WH_CD: ECOUNT_CONFIG.warehouseCode,
-          PROD_CD: '',
-          Page: '1',
-          PageSize: '1000'
-        }
-      });
+      // ENHANCED: Get both inventory data AND product master data from correct endpoints
+      console.log('📊 Fetching from TWO endpoints: InventoryBalance + ItemManagement...');
+      
+      const [inventoryResult, productMasterData] = await Promise.all([
+        // Get inventory quantities (this works)
+        this.ecountRequest({
+          endpoint: '/OAPI/V2/InventoryBalance/GetListInventoryBalanceStatus',
+          body: {
+            BASE_DATE: new Date().toISOString().slice(0, 10).replace(/-/g, ''),
+            WH_CD: ECOUNT_CONFIG.warehouseCode,
+            PROD_CD: '',
+            Page: '1',
+            PageSize: '1000'
+          }
+        }),
+        // Get product names and categories (NEW: using correct endpoint)
+        this.getProductMasterData()
+      ]);
 
-      // FIX: Check for Data.Datas first, then Data.Result as fallback
-      const products = result.Data?.Datas || result.Data?.Result || [];
+      // Parse inventory data
+      const products = inventoryResult.Data?.Datas || inventoryResult.Data?.Result || [];
       console.log(`📊 Bulk sync data structure:`, {
-        status: result.Status,
-        hasDatas: !!result.Data?.Datas,
-        datasLength: result.Data?.Datas?.length,
-        hasResult: !!result.Data?.Result,
-        resultLength: result.Data?.Result?.length,
-        totalProducts: products.length
+        inventoryStatus: inventoryResult.Status,
+        hasDatas: !!inventoryResult.Data?.Datas,
+        datasLength: inventoryResult.Data?.Datas?.length,
+        hasResult: !!inventoryResult.Data?.Result,
+        resultLength: inventoryResult.Data?.Result?.length,
+        totalProducts: products.length,
+        masterDataCount: productMasterData.size
       });
       
-      if (result.Status === "200") {
-        console.log(`✅ Bulk product sync completed: ${products.length} products retrieved`);
-        return result;
+      if (inventoryResult.Status === "200") {
+        console.log(`✅ Bulk product sync completed: ${products.length} products with ${productMasterData.size} master data entries retrieved`);
+        return {
+          ...inventoryResult,
+          masterDataCount: productMasterData.size,
+          hasRealNames: productMasterData.size > 0
+        };
       }
 
-      throw new Error(`Bulk product sync failed: ${result.Error?.Message || 'Unknown error'}`);
+      throw new Error(`Bulk product sync failed: ${inventoryResult.Error?.Message || 'Unknown error'}`);
     } catch (error) {
       console.error('❌ Error in bulk product sync:', error);
       throw error;
