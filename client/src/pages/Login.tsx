@@ -147,7 +147,11 @@ export default function Login() {
                           placeholder="Your Medical Practice"
                           data-testid="input-company-name"
                           autoComplete="organization"
-                          {...field}
+                          value={field.value || ""}
+                          onChange={field.onChange}
+                          onBlur={field.onBlur}
+                          name={field.name}
+                          ref={field.ref}
                         />
                       </FormControl>
                       <FormMessage />
@@ -187,7 +191,11 @@ export default function Login() {
                           placeholder="+255754231267 or 0754231267"
                           data-testid="input-phone"
                           autoComplete="tel"
-                          {...field}
+                          value={field.value || ""}
+                          onChange={field.onChange}
+                          onBlur={field.onBlur}
+                          name={field.name}
+                          ref={field.ref}
                         />
                       </FormControl>
                       <FormMessage />
@@ -207,7 +215,11 @@ export default function Login() {
                           placeholder="Street, City, Region"
                           data-testid="input-address"
                           autoComplete="address-line1"
-                          {...field}
+                          value={field.value || ""}
+                          onChange={field.onChange}
+                          onBlur={field.onBlur}
+                          name={field.name}
+                          ref={field.ref}
                         />
                       </FormControl>
                       <FormMessage />
@@ -227,7 +239,11 @@ export default function Login() {
                           placeholder="admin@yourpractice.com"
                           data-testid="input-register-email"
                           autoComplete="email"
-                          {...field}
+                          value={field.value || ""}
+                          onChange={field.onChange}
+                          onBlur={field.onBlur}
+                          name={field.name}
+                          ref={field.ref}
                         />
                       </FormControl>
                       <FormMessage />
@@ -245,7 +261,12 @@ export default function Login() {
                         <Input
                           type="password"
                           placeholder="Create a secure password"
-                          {...field}
+                          data-testid="input-register-password"
+                          value={field.value || ""}
+                          onChange={field.onChange}
+                          onBlur={field.onBlur}
+                          name={field.name}
+                          ref={field.ref}
                         />
                       </FormControl>
                       <FormMessage />
