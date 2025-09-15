@@ -91,6 +91,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const loadUserProfile = async (userId: string) => {
     try {
+      // Try to load profile from Supabase profiles table
       const { data: profile, error } = await supabase
         .from('profiles')
         .select('*')
@@ -99,6 +100,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (error) {
         console.error('Error loading profile:', error);
+        // If profiles table not available, create a basic user object from auth metadata
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          setUser({
+            id: user.id,
+            user_id: user.id,
+            name: user.user_metadata?.name || user.email?.split('@')[0] || 'User',
+            phone: user.user_metadata?.phone || '',
+            address: user.user_metadata?.address || '',
+            user_type: user.user_metadata?.user_type || 'company',
+            created_at: user.created_at
+          });
+        }
         return;
       }
 
@@ -151,10 +165,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       setIsLoading(true);
       
-      // Sign up with Supabase Auth
+      // Sign up with Supabase Auth including metadata
       const { data, error } = await supabase.auth.signUp({
         email: userData.email,
         password: userData.password,
+        options: {
+          data: {
+            name: userData.name,
+            phone: userData.phone,
+            address: userData.address,
+            user_type: userData.user_type
+          }
+        }
       });
 
       if (error) {
@@ -167,27 +189,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (data.user) {
-        // Create user profile
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .insert({
-            user_id: data.user.id,
-            name: userData.name,
-            phone: userData.phone,
-            address: userData.address,
-            user_type: userData.user_type,
-          });
-
-        if (profileError) {
-          toast({
-            title: "Registration failed",
-            description: "Failed to create user profile",
-            variant: "destructive",
-          });
-          return false;
+        // Try to create user profile, but don't fail if table doesn't exist
+        try {
+          await supabase
+            .from('profiles')
+            .insert({
+              user_id: data.user.id,
+              name: userData.name,
+              phone: userData.phone,
+              address: userData.address,
+              user_type: userData.user_type,
+            });
+        } catch (profileError) {
+          console.log('Profile creation skipped - table not available:', profileError);
         }
 
-        // Load the created profile
+        // Load the user (fallback to metadata if profile table not available)
         await loadUserProfile(data.user.id);
         
         toast({

@@ -20,14 +20,19 @@ cloudinary.config({
 });
 
 // Initialize Supabase client for server-side auth verification
-const supabaseUrl = process.env.SUPABASE_URL || 'https://xvomxojbfhovbhbbkuoh.supabase.co'
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh2b214b2piZmhvdmJoYmJrdW9oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTc5NjY5NTksImV4cCI6MjA3MzU0Mjk1OX0.Th3j5bG7kDgJC9J8jHezRzPVLoI0DhPnE5KB_Fb2f10'
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
+
+if (!supabaseUrl || !supabaseServiceKey) {
+  throw new Error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY environment variables are required');
+}
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey, {
   auth: {
     autoRefreshToken: false,
     persistSession: false
-  }
+  },
+  db: { schema: 'public' }
 })
 
 // Configure multer with proper validation
@@ -243,16 +248,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const validatedData = supabaseSignUpSchema.parse(req.body);
       const { email, password, name, phone, address, user_type } = validatedData;
 
-      // Create user in Supabase Auth with auto-confirmation
-      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+      // Create user in Supabase Auth
+      const { data: authData, error: authError } = await supabase.auth.signUp({
         email,
         password,
-        email_confirm: true, // Auto-confirm email - no confirmation needed
-        user_metadata: {
-          name,
-          phone,
-          address,
-          user_type
+        options: {
+          data: {
+            name,
+            phone,
+            address,
+            user_type
+          }
         }
       });
 
@@ -269,30 +275,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(500).json({ message: 'Registration failed - no user created' });
       }
 
-      // Create user profile in database
-      const { data: profileData, error: profileError } = await supabase
-        .from('profiles')
-        .insert({
-          user_id: authData.user.id,
-          email,
-          name,
-          phone,
-          address,
-          user_type,
-          role: 'customer'
-        })
-        .select()
-        .single();
-
-      if (profileError) {
-        console.error('🔐 Profile creation failed:', profileError);
-        // Clean up the auth user if profile creation fails
-        await supabase.auth.admin.deleteUser(authData.user.id);
-        return res.status(500).json({ 
-          message: 'Registration failed - profile creation error',
-          error: profileError.message 
-        });
-      }
+      // Skip profile creation for now due to schema cache issue
+      // Will be handled by client-side after login
+      console.log('🔐 Skipping profile creation - will be handled client-side');
 
       console.log('🔐 Registration successful:', { email, name, user_type });
       
@@ -310,6 +295,58 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error('🔐 Registration error:', error);
       res.status(400).json({ 
         message: "Registration failed", 
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
+  // Prevent GET requests on login endpoint
+  app.get("/api/auth/login", (_, res) => {
+    res.status(405).json({ error: 'Use POST method for login' });
+  });
+
+  // Customer login endpoint using Supabase
+  app.post("/api/auth/login", async (req, res) => {
+    try {
+      console.log('🔐 Login request received:', req.body);
+      
+      const { email, password } = req.body;
+
+      // Sign in with Supabase Auth
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email,
+        password
+      });
+
+      if (authError) {
+        console.error('🔐 Supabase auth login failed:', authError);
+        return res.status(401).json({ 
+          message: 'Login failed', 
+          error: authError.message 
+        });
+      }
+
+      if (!authData.user || !authData.session) {
+        console.error('🔐 No user or session returned from Supabase');
+        return res.status(401).json({ message: 'Login failed - no session created' });
+      }
+
+      console.log('🔐 Login successful:', { email, userId: authData.user.id });
+      
+      res.json({ 
+        success: true, 
+        message: 'Login successful',
+        user: {
+          id: authData.user.id,
+          email: authData.user.email,
+          access_token: authData.session.access_token,
+          refresh_token: authData.session.refresh_token
+        }
+      });
+    } catch (error) {
+      console.error('🔐 Login error:', error);
+      res.status(400).json({ 
+        message: "Login failed", 
         error: error instanceof Error ? error.message : 'Unknown error'
       });
     }
