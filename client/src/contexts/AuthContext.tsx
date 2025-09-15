@@ -31,49 +31,63 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const { toast } = useToast();
 
   useEffect(() => {
-    initializeAuth();
-  }, []);
-
-  const initializeAuth = async () => {
-    try {
-      // Check for admin token first
-      const adminToken = localStorage.getItem("phomas_admin_token");
-      if (adminToken) {
-        // We have an admin token, so user is admin
-        setAdminUser({
-          id: "admin-phomas",
-          email: "admin@phomas.com", 
-          name: "PHOMAS DIAGNOSTICS",
-          role: "admin"
-        });
-        setIsLoading(false);
-        return;
-      }
-
-      // Check for Supabase session
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session) {
-        await loadUserProfile(session.user.id);
-      }
-      setIsLoading(false);
-
-      // Listen for Supabase auth changes
-      const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-        if (session) {
-          await loadUserProfile(session.user.id);
-          setAdminUser(null); // Clear admin user if Supabase user logs in
-        } else {
-          setUser(null);
+    let mounted = true;
+    
+    const initializeAuth = async () => {
+      try {
+        // Check for admin token first
+        const adminToken = localStorage.getItem("phomas_admin_token");
+        if (adminToken && mounted) {
+          setAdminUser({
+            id: "admin-phomas",
+            email: "admin@phomas.com", 
+            name: "PHOMAS DIAGNOSTICS",
+            role: "admin"
+          });
+          setIsLoading(false);
+          return;
         }
-        setIsLoading(false);
-      });
 
-      return () => subscription.unsubscribe();
-    } catch (error) {
-      console.error('Auth initialization error:', error);
-      setIsLoading(false);
-    }
-  };
+        // Check for Supabase session
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session && mounted) {
+          await loadUserProfile(session.user.id);
+        }
+        if (mounted) {
+          setIsLoading(false);
+        }
+
+        // Listen for Supabase auth changes
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+          if (!mounted) return;
+          
+          if (session) {
+            await loadUserProfile(session.user.id);
+            setAdminUser(null);
+          } else {
+            setUser(null);
+          }
+          setIsLoading(false);
+        });
+
+        return () => {
+          mounted = false;
+          subscription.unsubscribe();
+        };
+      } catch (error) {
+        console.error('Auth initialization error:', error);
+        if (mounted) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    initializeAuth();
+    
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const loadUserProfile = async (userId: string) => {
     try {
@@ -228,7 +242,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     register,
     logout,
     isAuthenticated: !!user || !!adminUser,
-    isAdmin: !!adminUser || user?.user_type === "admin", // Admin token or admin user type
+    isAdmin: !!adminUser || user?.userType === "admin", // Admin token or admin user type
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
