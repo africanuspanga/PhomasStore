@@ -7,18 +7,18 @@ import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useAuth } from "@/contexts/AuthContext";
-import { insertUserSchema, loginSchema } from "@shared/schema";
+import { supabaseSignUpSchema, supabaseLoginSchema } from "@shared/schema";
 import { useLocation } from "wouter";
 import { z } from "zod";
 import logoImage from "@assets/Screenshot 2025-07-31 at 21.36.28_1753988684264.png";
 
-const registerFormSchema = insertUserSchema.extend({
+const registerFormSchema = supabaseSignUpSchema.extend({
   terms: z.boolean().refine((val) => val === true, {
     message: "You must accept the terms and conditions",
   }),
 });
 
-type LoginFormData = z.infer<typeof loginSchema>;
+type LoginFormData = z.infer<typeof supabaseLoginSchema>;
 type RegisterFormData = z.infer<typeof registerFormSchema>;
 
 export default function Login() {
@@ -27,7 +27,7 @@ export default function Login() {
   const [, setLocation] = useLocation();
 
   const loginForm = useForm<LoginFormData>({
-    resolver: zodResolver(loginSchema),
+    resolver: zodResolver(supabaseLoginSchema),
     defaultValues: {
       email: "",
       password: "",
@@ -39,7 +39,10 @@ export default function Login() {
     defaultValues: {
       email: "",
       password: "",
-      companyName: "",
+      name: "",
+      phone: "",
+      address: "",
+      user_type: "company",
       terms: false,
     },
   });
@@ -134,13 +137,67 @@ export default function Login() {
               <form onSubmit={registerForm.handleSubmit(onRegisterSubmit)} className="space-y-4">
                 <FormField
                   control={registerForm.control}
-                  name="companyName"
+                  name="name"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Company Name</FormLabel>
                       <FormControl>
                         <Input
                           placeholder="Your Medical Practice"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={registerForm.control}
+                  name="user_type"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Type</FormLabel>
+                      <FormControl>
+                        <select 
+                          {...field}
+                          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background"
+                        >
+                          <option value="company">Company (Pharmacy, Clinic, Hospital)</option>
+                          <option value="individual">Individual</option>
+                        </select>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={registerForm.control}
+                  name="phone"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Phone Number</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="+255754231267 or 0754231267"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={registerForm.control}
+                  name="address"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Address</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="Street, City, Region"
                           {...field}
                         />
                       </FormControl>

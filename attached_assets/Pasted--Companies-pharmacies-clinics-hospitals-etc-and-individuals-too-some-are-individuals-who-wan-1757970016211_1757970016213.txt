@@ -1,0 +1,52 @@
+
+Companies (pharmacies, clinics, hospitals, etc.) and individuals, too, some are individuals who want to buy medical supply equipment.
+
+
+Company Users (multiple users per company - no need for this, just one account per company is enough)
+
+
+Company Profiles (just name, email, phone number, company address) 
+
+
+Phase 3: Authentication Flow Replacement
+Replace custom session management with Supabase Auth
+Keep existing AuthContext but connect to Supabase
+Implement company registration with business verification
+Add multi-user company accounts (admin + staff users)
+Phase 4: Frontend Updates
+Update registration form for company details
+Add company dashboard for managing multiple users - (no need for multiple users) 
+Implement role-based permissions (company admin vs staff)
+📝 Step-by-Step Implementation Plan
+Step 1: Supabase Project Setup
+Set up Supabase project with authentication enabled
+Configure Row Level Security (RLS) policies
+Create database schema for companies and users
+Step 2: Replace Authentication System
+Replace activeSessions Map with Supabase Auth
+Update API endpoints to use Supabase authentication
+Migrate existing user data (if any)
+Step 3: Frontend Integration
+Install Supabase client library
+Update AuthContext to use Supabase
+Create company registration form
+Add company management features
+Step 4: User Management Features
+Company admin can invite staff users
+Role-based access control
+Company profile management
+🔧 What I Need From You
+Immediate Requirements:
+Supabase Account - I have an account so what details do you need?
+Company Types - What types of companies should be able to register? (Pharmacies, Clinics, Hospitals, Distributors, all these and allow individuals too) 
+Company Information - What business details do you want to collect during registration? Name, email, phone number and they should create their own password 
+Company name, registration number, license info, address, contact person, etc.
+Business Logic Questions:
+User Roles - Should companies have multiple user types? (just Admin)
+Verification Process - Do you want to manually approve company registrations? - no need if someone register they should go straight to the store 
+Pricing/Plans - Will different company types have different access levels - no all the same 
+Integration with eCount - Should company orders sync with your eCount ERP? - yes they have too but we will do this later 
+Technical Preferences:
+Current Data - Do you have existing users that need to be migrated? - no project is just starting 
+Email Verification - Should companies verify email addresses during registration? - no need 
+Password Requirements - Any specific password complexity requirements? - Standard atleast 8 characters 

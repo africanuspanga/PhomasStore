@@ -1,13 +1,14 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
-import type { User, InsertUser, LoginUser } from "@shared/schema";
-import { ecountService } from "@/services/ecountService";
+import type { SupabaseSignUp, SupabaseLogin, Profile } from "@shared/schema";
+import { supabase } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
+import type { User as SupabaseUser } from "@supabase/supabase-js";
 
 interface AuthContextType {
-  user: User | null;
+  user: Profile | null;
   isLoading: boolean;
-  login: (credentials: LoginUser) => Promise<boolean>;
-  register: (userData: InsertUser) => Promise<boolean>;
+  login: (credentials: SupabaseLogin) => Promise<boolean>;
+  register: (userData: SupabaseSignUp) => Promise<boolean>;
   logout: () => void;
   isAuthenticated: boolean;
   isAdmin: boolean;
@@ -16,50 +17,82 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<Profile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
 
   useEffect(() => {
-    // Check for stored user session and token
-    const storedUser = localStorage.getItem("phomas_user");
-    const storedToken = localStorage.getItem("phomas_token");
-    
-    if (storedUser && storedToken) {
-      try {
-        setUser(JSON.parse(storedUser));
-      } catch (error) {
-        localStorage.removeItem("phomas_user");
-        localStorage.removeItem("phomas_token");
+    // Get initial session
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (session) {
+        await loadUserProfile(session.user.id);
       }
-    } else {
-      // Clear incomplete session data
-      localStorage.removeItem("phomas_user");
-      localStorage.removeItem("phomas_token");
-    }
-    setIsLoading(false);
+      setIsLoading(false);
+    });
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (session) {
+        await loadUserProfile(session.user.id);
+      } else {
+        setUser(null);
+      }
+      setIsLoading(false);
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
-  const login = async (credentials: LoginUser): Promise<boolean> => {
+  const loadUserProfile = async (userId: string) => {
+    try {
+      const { data: profile, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('user_id', userId)
+        .single();
+
+      if (error) {
+        console.error('Error loading profile:', error);
+        return;
+      }
+
+      setUser(profile);
+    } catch (error) {
+      console.error('Error loading user profile:', error);
+    }
+  };
+
+  const login = async (credentials: SupabaseLogin): Promise<boolean> => {
     try {
       setIsLoading(true);
-      const response = await ecountService.login(credentials);
-      
-      if (response.success && response.token) {
-        setUser(response.user);
-        localStorage.setItem("phomas_user", JSON.stringify(response.user));
-        localStorage.setItem("phomas_token", response.token);
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: credentials.email,
+        password: credentials.password,
+      });
+
+      if (error) {
+        toast({
+          title: "Login failed",
+          description: error.message,
+          variant: "destructive",
+        });
+        return false;
+      }
+
+      if (data.user) {
+        await loadUserProfile(data.user.id);
         toast({
           title: "Welcome back!",
-          description: `Logged in as ${response.user.companyName}`,
+          description: "Successfully logged in",
         });
         return true;
       }
+      
       return false;
     } catch (error) {
       toast({
         title: "Login failed",
-        description: "Invalid email or password",
+        description: "An unexpected error occurred",
         variant: "destructive",
       });
       return false;
@@ -68,20 +101,56 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const register = async (userData: InsertUser): Promise<boolean> => {
+  const register = async (userData: SupabaseSignUp): Promise<boolean> => {
     try {
       setIsLoading(true);
-      const response = await ecountService.register(userData);
       
-      if (response.success) {
-        setUser(response.user);
-        localStorage.setItem("phomas_user", JSON.stringify(response.user));
+      // Sign up with Supabase Auth
+      const { data, error } = await supabase.auth.signUp({
+        email: userData.email,
+        password: userData.password,
+      });
+
+      if (error) {
+        toast({
+          title: "Registration failed",
+          description: error.message,
+          variant: "destructive",
+        });
+        return false;
+      }
+
+      if (data.user) {
+        // Create user profile
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .insert({
+            user_id: data.user.id,
+            name: userData.name,
+            phone: userData.phone,
+            address: userData.address,
+            user_type: userData.user_type,
+          });
+
+        if (profileError) {
+          toast({
+            title: "Registration failed",
+            description: "Failed to create user profile",
+            variant: "destructive",
+          });
+          return false;
+        }
+
+        // Load the created profile
+        await loadUserProfile(data.user.id);
+        
         toast({
           title: "Account created successfully!",
-          description: `Welcome to Phomas Online Store, ${response.user.companyName}`,
+          description: `Welcome to Phomas Online Store, ${userData.name}`,
         });
         return true;
       }
+      
       return false;
     } catch (error) {
       toast({
@@ -97,18 +166,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = async () => {
     try {
-      // Call logout endpoint to invalidate server-side session
-      const token = localStorage.getItem("phomas_token");
-      if (token) {
-        await ecountService.logout();
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        console.warn("Failed to logout from Supabase:", error);
       }
     } catch (error) {
-      console.warn("Failed to logout from server:", error);
+      console.warn("Failed to logout:", error);
     } finally {
-      // Always clear client-side session
+      // Clear user state
       setUser(null);
-      localStorage.removeItem("phomas_user");
-      localStorage.removeItem("phomas_token");
       toast({
         title: "Logged out",
         description: "You have been successfully logged out",
@@ -123,7 +189,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     register,
     logout,
     isAuthenticated: !!user,
-    isAdmin: user?.role === "admin",
+    isAdmin: user?.name === "PHOMAS DIAGNOSTICS", // Admin is the main company
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

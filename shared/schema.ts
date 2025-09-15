@@ -41,6 +41,17 @@ export const orders = pgTable("orders", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// Supabase Profile Schema
+export const profiles = pgTable("profiles", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().unique(),
+  name: text("name").notNull(),
+  phone: text("phone"),
+  address: text("address"),
+  userType: text("user_type").notNull(), // 'company' or 'individual'
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 export const insertUserSchema = createInsertSchema(users).pick({
   email: true,
   password: true,
@@ -50,6 +61,21 @@ export const insertUserSchema = createInsertSchema(users).pick({
 export const loginSchema = createInsertSchema(users).pick({
   email: true,
   password: true,
+});
+
+// New Supabase Registration Schema with Tanzania phone validation
+export const supabaseSignUpSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(8, "Password must be at least 8 characters"),
+  name: z.string().min(1, "Company name is required"),
+  phone: z.string().regex(/^(?:\+255|0)[67]\d{8}$/, "Please enter a valid Tanzania phone number (+255754231267 or 0754231267)"),
+  address: z.string().min(1, "Address is required"),
+  user_type: z.enum(['company', 'individual'])
+});
+
+export const supabaseLoginSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(1, "Password is required")
 });
 
 export const insertProductSchema = createInsertSchema(products).omit({
@@ -73,6 +99,11 @@ export type Product = typeof products.$inferSelect;
 export type Inventory = typeof inventory.$inferSelect;
 export type Order = typeof orders.$inferSelect;
 export type InsertProduct = z.infer<typeof insertProductSchema>;
+
+// New Supabase types
+export type SupabaseSignUp = z.infer<typeof supabaseSignUpSchema>;
+export type SupabaseLogin = z.infer<typeof supabaseLoginSchema>;
+export type Profile = typeof profiles.$inferSelect;
 export type InsertInventory = z.infer<typeof insertInventorySchema>;
 export type InsertOrder = z.infer<typeof insertOrderSchema>;
 
