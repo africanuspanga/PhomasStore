@@ -1,4 +1,5 @@
 import type { ProductWithInventory, Order } from "@shared/schema";
+import { ProductMapping } from "./productMapping";
 
 // eCount API Configuration - Production Ready
 const ECOUNT_CONFIG = {
@@ -731,52 +732,83 @@ class EcountApiService {
    * Bulk product sync - downloads complete product catalog (rate limited: 1 per 10 minutes)
    */
   async bulkSyncProducts(): Promise<any> {
-    console.log('🔄 Starting bulk product sync (Rate limit: 1 per 10 minutes)...');
+    console.log('🔄 Starting bulk product sync with USER EXCEL NAMES + live eCount stock...');
     
     try {
-      // ENHANCED: Get both inventory data AND product master data from correct endpoints
-      console.log('📊 Fetching from TWO endpoints: InventoryBalance + ItemManagement...');
+      // Load user's Excel product mapping FIRST
+      await ProductMapping.loadMapping();
+      const mappingStats = ProductMapping.getStats();
+      console.log(`📋 Excel mapping loaded: ${mappingStats.totalMapped} REAL product names available`);
       
-      const [inventoryResult, productMasterData] = await Promise.all([
-        // Get inventory quantities (this works)
-        this.ecountRequest({
-          endpoint: '/OAPI/V2/InventoryBalance/GetListInventoryBalanceStatus',
-          body: {
-            BASE_DATE: new Date().toISOString().slice(0, 10).replace(/-/g, ''),
-            WH_CD: ECOUNT_CONFIG.warehouseCode,
-            PROD_CD: '',
-            Page: '1',
-            PageSize: '1000'
-          }
-        }),
-        // Get product names and categories (NEW: using correct endpoint)
-        this.getProductMasterData()
-      ]);
+      // Get ONLY live stock data from eCount (no broken endpoints!)
+      console.log('📊 Fetching ONLY live stock data (avoiding broken master data endpoints)...');
+      const inventoryResult = await this.ecountRequest({
+        endpoint: '/OAPI/V2/InventoryBalance/GetListInventoryBalanceStatus',
+        body: {
+          BASE_DATE: new Date().toISOString().slice(0, 10).replace(/-/g, ''),
+          WH_CD: ECOUNT_CONFIG.warehouseCode,
+          PROD_CD: '',
+          Page: '1',
+          PageSize: '1000'
+        }
+      });
 
       // Parse inventory data
-      const products = inventoryResult.Data?.Datas || inventoryResult.Data?.Result || [];
-      console.log(`📊 Bulk sync data structure:`, {
-        inventoryStatus: inventoryResult.Status,
-        hasDatas: !!inventoryResult.Data?.Datas,
-        datasLength: inventoryResult.Data?.Datas?.length,
-        hasResult: !!inventoryResult.Data?.Result,
-        resultLength: inventoryResult.Data?.Result?.length,
-        totalProducts: products.length,
-        masterDataCount: productMasterData.size
-      });
+      const inventoryData = inventoryResult.Data?.Datas || inventoryResult.Data?.Result || [];
+      console.log(`📊 Live stock data: ${inventoryData.length} products from eCount`);
       
-      if (inventoryResult.Status === "200") {
-        console.log(`✅ Bulk product sync completed: ${products.length} products with ${productMasterData.size} master data entries retrieved`);
+      if (inventoryResult.Status === "200" && inventoryData.length > 0) {
+        // Build products using USER'S EXCEL DATA + live stock
+        const products = inventoryData.map((product: any, index: number) => {
+          const productCode = product.PROD_CD;
+          const excelProduct = ProductMapping.getProduct(productCode);
+          
+          // Log first product mapping to show it works
+          if (index === 0) {
+            console.log(`📋 First product mapping: ${productCode} → ${excelProduct?.name || 'NOT FOUND'}`);
+            console.log(`📋 Excel data for ${productCode}:`, excelProduct);
+          }
+          
+          return {
+            id: productCode,
+            name: excelProduct?.name || this.generateProductName(productCode), // USER'S REAL NAMES!
+            packaging: excelProduct?.uom || 'Standard',
+            referenceNumber: productCode,
+            price: excelProduct?.price?.toString() || '25000', // USER'S REAL PRICES!
+            imageUrl: this.getProductImage(productCode),
+            category: excelProduct?.category || this.getCategoryFromCode(productCode),
+            availableQuantity: parseInt(product.BAL_QTY || '0'), // LIVE stock from eCount
+            isLowStock: parseInt(product.BAL_QTY || '0') < 10,
+            isExpiringSoon: false,
+            hasRealTimeData: true,
+            lastUpdated: new Date().toISOString(),
+            description: excelProduct?.name || '',
+            specification: excelProduct?.uom || ''
+          };
+        });
+        
+        // Count real vs generated names
+        const realNamesCount = products.filter((p: any) => !p.name.includes('Medical Product') && !p.name.includes('Medical Supply')).length;
+        console.log(`🎉 USER'S REAL NAMES: ${realNamesCount}/${products.length} products have REAL names from Excel file!`);
+        
+        // Cache the combined data (Excel names + live stock)
+        this.inventoryCache.set('all_products', {
+          data: products,
+          timestamp: Date.now()
+        });
+        
+        console.log(`✅ Bulk sync completed: ${products.length} products with ${realNamesCount} real names cached`);
         return {
-          ...inventoryResult,
-          masterDataCount: productMasterData.size,
-          hasRealNames: productMasterData.size > 0
+          Status: "200",
+          Data: { Result: products },
+          excelMapped: realNamesCount,
+          totalProducts: products.length
         };
       }
 
-      throw new Error(`Bulk product sync failed: ${inventoryResult.Error?.Message || 'Unknown error'}`);
+      throw new Error(`Bulk product sync failed: ${inventoryResult.Error?.Message || 'No inventory data'}`);
     } catch (error) {
-      console.error('❌ Error in bulk product sync:', error);
+      console.error('❌ Error in bulk product sync with Excel integration:', error);
       throw error;
     }
   }
@@ -933,7 +965,7 @@ class EcountApiService {
    * This replaces the hybrid system approach
    */
   async getAllProductsFromEcount(): Promise<any[]> {
-    console.log('🚀 Fetching ALL products from eCount ERP (Pure Integration)');
+    console.log('🚀 Fetching ALL products from eCount ERP (Pure Integration) + User Excel Names');
     
     const cacheKey = 'all_products';
     const cached = this.inventoryCache.get(cacheKey);
@@ -946,50 +978,49 @@ class EcountApiService {
     }
     
     try {
-      // Get product list, inventory, master data, and pricing in parallel for complete eCount integration
-      const [productList, inventoryData, productMasterData, productPricing] = await Promise.all([
-        this.getProductList(),
-        this.getCachedInventoryData(),
-        this.getProductMasterData(),
-        this.getProductPricing()
-      ]);
+      // Load user's Excel product mapping (names, prices, categories)
+      await ProductMapping.loadMapping();
+      const mappingStats = ProductMapping.getStats();
+      console.log(`📋 Excel mapping loaded: ${mappingStats.totalMapped} real product names available`);
       
-      // Transform eCount data using REAL product names and categories from InventoryBalance response
+      // Get ONLY the live stock data from eCount (avoid rate-limited endpoints)
+      console.log('📊 Getting live stock data only (avoiding broken master data endpoints)...');
+      const productList = await this.getProductList(); // Just stock data
+      
+      // Transform eCount data using REAL product names from USER'S EXCEL FILE + live stock
       const products = productList.map((product: any, index: number) => {
         const productCode = product.PROD_CD;
         
-        // Log first product structure to see what fields are available
-        if (index === 0) {
-          console.log(`📋 InventoryBalance product fields available:`, Object.keys(product));
-          console.log(`📋 First product sample data:`, product);
-        }
+        // Get REAL product data from user's Excel file
+        const excelProduct = ProductMapping.getProduct(productCode);
         
-        // Extract REAL product name from InventoryBalance response (not generated!)
-        const realName = product.PROD_DES || product.ITEM_DES || product.PROD_NM || product.ITEM_NM || null;
-        const realCategory = product.CLASS_L_NM || product.CLASS_M_NM || product.CLASS_S_NM || product.ITEM_GRP_NM || null;
-        const realSpec = product.SIZE_DES || product.SPEC || product.SPECIFICATION || '';
+        // Log first product to show the transformation
+        if (index === 0) {
+          console.log(`📋 eCount product fields:`, Object.keys(product));
+          console.log(`📋 Excel mapping for ${productCode}:`, excelProduct);
+        }
         
         return {
           id: productCode,
-          name: realName || this.generateProductName(productCode), // Use REAL name from InventoryBalance!
-          packaging: product.SIZE_DES || 'Standard',
+          name: excelProduct?.name || this.generateProductName(productCode), // USER'S REAL NAMES!
+          packaging: excelProduct?.uom || 'Standard', // Real UOM from Excel
           referenceNumber: productCode,
-          price: product.PRICE || '25000', // Try to use price from InventoryBalance
+          price: excelProduct?.price?.toString() || '25000', // USER'S REAL PRICES!
           imageUrl: this.getProductImage(productCode),
-          category: realCategory || this.getCategoryFromCode(productCode), // Use REAL category!
-          availableQuantity: parseInt(product.BAL_QTY || '0'), // Real inventory from eCount
+          category: excelProduct?.category || this.getCategoryFromCode(productCode), // Smart categories
+          availableQuantity: parseInt(product.BAL_QTY || '0'), // LIVE stock from eCount
           isLowStock: parseInt(product.BAL_QTY || '0') < 10,
           isExpiringSoon: false,
           hasRealTimeData: true,
           lastUpdated: new Date().toISOString(),
-          description: product.PROD_DES || product.ITEM_DESC || '', // Use REAL description
-          specification: realSpec
+          description: excelProduct?.name || '', // Use product name as description
+          specification: excelProduct?.uom || ''
         };
       });
       
-      // Count how many products have real vs generated names
+      // Count how many products have real vs generated names  
       const realNamesCount = products.filter(p => !p.name.includes('Medical Product') && !p.name.includes('Medical Supply')).length;
-      console.log(`🎉 REAL NAMES FOUND: ${realNamesCount}/${products.length} products have real names from InventoryBalance!`);
+      console.log(`🎉 USER'S REAL NAMES: ${realNamesCount}/${products.length} products have REAL names from Excel file!`);
       
       // Cache safety: Only cache if we have products (prevent overwriting good cache with empty results)
       if (products.length > 0) {
