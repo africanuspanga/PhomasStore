@@ -485,8 +485,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Note: Logout is now handled by Supabase on the frontend
 
-  // Admin routes - all protected with authentication and admin authorization
-  app.get("/api/admin/users", requireAuth, requireAdmin, async (req, res) => {
+  // Admin routes - all protected with admin authentication
+  app.get("/api/admin/users", requireAdminAuth, async (req, res) => {
     try {
       const users = await storage.getAllUsers();
       // Remove passwords from response
@@ -503,7 +503,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/admin/inventory", requireAuth, requireAdmin, async (req, res) => {
+  app.get("/api/admin/inventory", requireAdminAuth, async (req, res) => {
     try {
       const inventory = await storage.getAllInventory();
       res.json(inventory);
@@ -512,8 +512,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Admin bulk sync routes - protected with authentication AND rate limiting
-  app.post("/api/admin/bulk-sync-products", requireAuth, requireAdmin, enforceBulkRateLimit('bulk-sync-products'), async (req, res) => {
+  // Admin bulk sync routes - protected with admin authentication AND rate limiting
+  app.post("/api/admin/bulk-sync-products", requireAdminAuth, enforceBulkRateLimit('bulk-sync-products'), async (req, res) => {
     try {
       console.log('Admin initiated bulk product sync');
       const result = await ecountApi.bulkSyncProducts();
@@ -537,7 +537,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/admin/bulk-sync-inventory", requireAuth, requireAdmin, enforceBulkRateLimit('bulk-sync-inventory'), async (req, res) => {
+  app.post("/api/admin/bulk-sync-inventory", requireAdminAuth, enforceBulkRateLimit('bulk-sync-inventory'), async (req, res) => {
     try {
       console.log('Admin initiated bulk inventory sync');
       const result = await ecountApi.bulkSyncInventory();
@@ -561,7 +561,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/admin/clear-cache", requireAuth, requireAdmin, enforceBulkRateLimit('clear-cache'), async (req, res) => {
+  app.post("/api/admin/clear-cache", requireAdminAuth, enforceBulkRateLimit('clear-cache'), async (req, res) => {
     try {
       console.log('Admin clearing inventory cache');
       ecountApi.clearInventoryCache();
@@ -581,7 +581,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/admin/cache-status", requireAuth, requireAdmin, async (req, res) => {
+  app.get("/api/admin/cache-status", requireAdminAuth, async (req, res) => {
     try {
       const cacheStatus = ecountApi.getCacheStatus();
       
@@ -600,7 +600,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Image upload route for admin - protected
-  app.post("/api/admin/upload-image", requireAuth, requireAdmin, upload.single('image'), async (req, res) => {
+  app.post("/api/admin/upload-image", requireAdminAuth, upload.single('image'), async (req, res) => {
     try {
       if (!req.file) {
         return res.status(400).json({ message: "No image file provided" });
@@ -639,7 +639,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Update product image route for admin - protected
-  app.put("/api/admin/products/:id/image", requireAuth, requireAdmin, async (req, res) => {
+  app.put("/api/admin/products/:id/image", requireAdminAuth, async (req, res) => {
     try {
       const { id } = req.params;
       const { imageUrl } = req.body;
