@@ -25,31 +25,55 @@ export class ProductMapping {
       console.log('📋 Loading REAL product names from user Excel file...');
       
       const excelPath = join(process.cwd(), 'attached_assets', 'Items with Lot_1757979367190.xlsx');
+      console.log('📁 Excel file path:', excelPath);
+      
       const workbook = XLSX.readFile(excelPath);
       const sheetName = workbook.SheetNames[0];
+      console.log('📄 Sheet name:', sheetName);
+      
       const worksheet = workbook.Sheets[sheetName];
       const data = XLSX.utils.sheet_to_json(worksheet);
-
-      // Skip header row and process product data
-      const productRows = data.slice(1);
+      console.log('📊 Total rows from Excel:', data.length);
       
-      productRows.forEach((row: any) => {
-        const code = row.__EMPTY?.toString()?.trim();
-        const name = row.__EMPTY_1?.toString()?.trim();
-        const uom = row.__EMPTY_2?.toString()?.trim();
-        const price = parseFloat(row.__EMPTY_6?.toString() || '0') || 25000;
+      if (data.length > 0) {
+        console.log('🔍 First row structure:', Object.keys(data[0]));
+        console.log('🔍 First row data:', data[0]);
+      }
+
+      // Don't skip header - process all data
+      const productRows = data;
+      let processed = 0;
+      
+      productRows.forEach((row: any, index: number) => {
+        const code = row['Item Code']?.toString()?.trim() || row.__EMPTY?.toString()?.trim();
+        const name = row['Item Name']?.toString()?.trim() || row.__EMPTY_1?.toString()?.trim();
+        const uom = row['UOM']?.toString()?.trim() || row.__EMPTY_2?.toString()?.trim();
+        const price = parseFloat(row['Sales Price']?.toString() || row.__EMPTY_6?.toString() || '0') || 25000;
         
-        if (code && name) {
+        if (index < 3) {
+          console.log(`🔍 Row ${index}:`, { code, name, uom, price });
+        }
+        
+        if (code && name && code !== 'Item Code') { // Skip header row
           this.productMap.set(code, {
             name,
             price,
             uom: uom || 'Standard',
             category: this.getCategoryFromName(name)
           });
+          processed++;
         }
       });
 
-      console.log(`✅ Loaded ${this.productMap.size} REAL product names from Excel file!`);
+      console.log(`✅ Processed ${processed} rows, loaded ${this.productMap.size} REAL product names from Excel file!`);
+      
+      // Show sample products
+      const sampleCodes = Array.from(this.productMap.keys()).slice(0, 3);
+      sampleCodes.forEach(code => {
+        const product = this.productMap.get(code);
+        console.log(`📦 Sample: ${code} -> "${product?.name}" (${product?.price})`);
+      });
+      
       this.isLoaded = true;
       
     } catch (error) {

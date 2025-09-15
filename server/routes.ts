@@ -2,6 +2,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { ecountApi } from "./ecountApi";
+import { ProductMapping } from "./productMapping";
 import { insertUserSchema, loginSchema, insertOrderSchema, supabaseSignUpSchema } from "@shared/schema";
 import { v2 as cloudinary } from 'cloudinary';
 import multer from 'multer';
