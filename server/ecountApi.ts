@@ -224,7 +224,8 @@ class EcountApiService {
   }
 
   /**
-   * Get products from eCount using inventory balance approach (more stable)
+   * Get products from eCount using inventory balance approach (Pure eCount Integration)
+   * No fallbacks - throws error if eCount API is unavailable
    */
   async getProducts(): Promise<ProductWithInventory[]> {
     try {
@@ -250,12 +251,12 @@ class EcountApiService {
         return products;
       }
 
-      console.error('No inventory data available from eCount');
-      throw new Error(`No products found in eCount system`);
+      console.error('❌ No inventory data available from eCount ERP');
+      throw new Error('No products found in eCount ERP system');
     } catch (error) {
-      console.error('eCount getProducts error:', error);
-      // Return fallback data in case of API issues
-      return this.getFallbackProducts();
+      console.error('❌ eCount getProducts error:', error);
+      // Pure eCount integration - no fallbacks allowed
+      throw new Error(`Failed to fetch products from eCount ERP: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
@@ -803,22 +804,6 @@ class EcountApiService {
   /**
    * Fallback products in case eCount API is unavailable
    */
-  private getFallbackProducts(): ProductWithInventory[] {
-    return [
-      {
-        id: "FALLBACK001",
-        name: "Medical Supply (API Unavailable)",
-        packaging: "Standard",
-        referenceNumber: "FALLBACK001",
-        price: "50000",
-        imageUrl: 'https://images.unsplash.com/photo-1559757148-5c350d0d3c56?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300',
-        category: "Medical Supplies",
-        availableQuantity: 0,
-        isLowStock: true,
-        isExpiringSoon: false
-      }
-    ];
-  }
 }
 
 // Export singleton instance

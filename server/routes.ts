@@ -74,9 +74,14 @@ const requireAdmin = (req: Request, res: Response, next: NextFunction) => {
   next();
 };
 
-// Rate limiting for eCount bulk operations (per documentation: 1 call per 10 minutes)
+// Rate limiting for eCount operations (per documentation)
 const bulkOperationRateLimit = new Map<string, number>();
+const readOperationRateLimit = new Map<string, number>();
+const saveOperationRateLimit = new Map<string, number>();
+
 const BULK_RATE_LIMIT = 10 * 60 * 1000; // 10 minutes in milliseconds
+const READ_RATE_LIMIT = 1000; // 1 second for single reads
+const SAVE_RATE_LIMIT = 10 * 1000; // 10 seconds for save operations
 
 const enforceBulkRateLimit = (operation: string) => {
   return (req: Request, res: Response, next: NextFunction) => {
@@ -102,6 +107,49 @@ const enforceBulkRateLimit = (operation: string) => {
     bulkOperationRateLimit.set(key, now);
     next();
   };
+};
+
+// Rate limiter for single eCount reads (1 request per second)
+const enforceReadRateLimit = (req: Request, res: Response, next: NextFunction) => {
+  const userId = (req as any).userId;
+  const key = `${userId}-read`;
+  const now = Date.now();
+  const lastCall = readOperationRateLimit.get(key) || 0;
+  const timeSinceLastCall = now - lastCall;
+  
+  if (timeSinceLastCall < READ_RATE_LIMIT) {
+    console.log(`🚫 Read rate limit hit by user ${userId}`);
+    return res.status(429).json({ 
+      error: 'Rate limit exceeded',
+      message: 'eCount read operations limited to 1 per second.',
+      retryAfter: READ_RATE_LIMIT - timeSinceLastCall
+    });
+  }
+  
+  readOperationRateLimit.set(key, now);
+  next();
+};
+
+// Rate limiter for eCount save operations (10 seconds)
+const enforceSaveRateLimit = (req: Request, res: Response, next: NextFunction) => {
+  const userId = (req as any).userId;
+  const key = `${userId}-save`;
+  const now = Date.now();
+  const lastCall = saveOperationRateLimit.get(key) || 0;
+  const timeSinceLastCall = now - lastCall;
+  
+  if (timeSinceLastCall < SAVE_RATE_LIMIT) {
+    const waitSeconds = Math.ceil((SAVE_RATE_LIMIT - timeSinceLastCall) / 1000);
+    console.log(`🚫 Save rate limit hit by user ${userId}`);
+    return res.status(429).json({ 
+      error: 'Rate limit exceeded',
+      message: `eCount save operations limited to 1 per 10 seconds. Please wait ${waitSeconds} seconds.`,
+      retryAfter: SAVE_RATE_LIMIT - timeSinceLastCall
+    });
+  }
+  
+  saveOperationRateLimit.set(key, now);
+  next();
 };
 
 // Helper functions for product transformation
@@ -203,45 +251,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/products/:id", async (req, res) => {
+  app.get("/api/products/:id", requireAuth, enforceReadRateLimit, async (req, res) => {
     try {
-      // Get all products from eCount and find the specific one
-      const products = await ecountApi.getProducts();
-      const product = products.find(p => p.id === req.params.id);
+      // Pure eCount integration - get ALL products from eCount ERP only
+      const ecountProducts = await ecountApi.getAllProductsFromEcount();
+      const product = ecountProducts.find(p => p.id === req.params.id);
       
       if (!product) {
-        // Fallback to storage if not found in eCount
-        const fallbackProduct = await storage.getProduct(req.params.id);
-        if (!fallbackProduct) {
-          return res.status(404).json({ message: "Product not found" });
-        }
-        
-        const inventory = await storage.getInventoryByProductId(fallbackProduct.id);
-        return res.json({
-          ...fallbackProduct,
-          availableQuantity: inventory?.availableQuantity || 0,
-          expirationDate: inventory?.expirationDate?.toISOString(),
+        console.log(`🔍 Product ${req.params.id} not found in eCount ERP`);
+        return res.status(404).json({ 
+          message: "Product not found in eCount ERP",
+          productId: req.params.id
         });
       }
       
-      // Get real-time inventory for this product
-      const inventoryMap = await ecountApi.getInventoryBalance();
-      const availableQuantity = inventoryMap.get(product.id) || 0;
-      
-      res.json({
-        ...product,
-        availableQuantity,
-        isLowStock: availableQuantity < 10,
-        isExpiringSoon: false
-      });
+      console.log(`✅ Product ${req.params.id} found in eCount ERP`);
+      res.json(product);
     } catch (error) {
-      console.error('Failed to fetch product from eCount:', error);
-      res.status(500).json({ message: "Failed to fetch product", error });
+      console.error('❌ Failed to fetch product from eCount:', error);
+      res.status(500).json({ 
+        message: "Failed to fetch product from eCount ERP", 
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
     }
   });
 
-  // Order routes - now with eCount integration
-  app.post("/api/orders", async (req, res) => {
+  // Order routes - now with eCount integration and rate limiting
+  app.post("/api/orders", requireAuth, enforceSaveRateLimit, async (req, res) => {
     try {
       const orderData = insertOrderSchema.parse(req.body);
       
