@@ -309,13 +309,14 @@ export default function Login() {
 
           <div className="text-center mt-6">
             <p className="text-gray-600">
-              {isLogin ? "Don't have an account? " : "Already have an account? "}
+              Don't have an account? {" "}
               <Button
                 variant="link"
                 className="text-phomas-blue hover:underline p-0"
-                onClick={() => setIsLogin(!isLogin)}
+                onClick={() => setLocation("/registration")}
+                data-testid="link-register"
               >
-                {isLogin ? "Register here" : "Sign in here"}
+                Register here
               </Button>
             </p>
           </div>
