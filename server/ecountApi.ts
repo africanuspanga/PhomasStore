@@ -335,23 +335,34 @@ class EcountApiService {
    */
   /**
    * Get complete product list from eCount using the correct GetProductList endpoint
-   * Now uses centralized ecountRequest for proper authentication and session management
    */
   async getProductList(): Promise<any[]> {
     try {
       console.log('🔍 Fetching products from eCount GetProductList endpoint...');
-      console.log('🏪 Using warehouse code:', ECOUNT_CONFIG.warehouseCode);
       
-      // Use centralized ecountRequest which handles authentication automatically
-      const result = await this.ecountRequest({
-        endpoint: '/OAPI/V2/Product/GetProductList',
-        body: {
-          WH_CD: ECOUNT_CONFIG.warehouseCode
+      // Use GET request with correct endpoint structure as provided by user
+      const response = await fetch(`https://oapi${this.currentSession?.zone || 'IA'}.ecount.com/OAPI/V2/Product/GetProductList?SESSION_ID=${this.currentSession?.sessionId}`, {
+        method: 'GET',
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+          'Accept': 'application/json',
+          'Accept-Language': 'en-US,en;q=0.9',
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache',
+          'Cookie': this.currentSession?.cookies || ''
         }
       });
 
-      console.log('Product API success! Data count:', result.Data?.Datas?.length || 0);
-      return result.Data?.Datas || [];
+      console.log(`Product API response status: ${response.status}`);
+      
+      if (response.status === 200) {
+        const result = await response.json();
+        console.log('Product API success! Data count:', result.Data?.Datas?.length || 0);
+        return result.Data?.Datas || [];
+      } else {
+        console.error('Product API failed with status:', response.status);
+        return [];
+      }
     } catch (error) {
       console.error('❌ eCount getProductList error:', error);
       return [];
