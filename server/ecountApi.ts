@@ -721,10 +721,10 @@ class EcountApiService {
   /**
    * Get product image URL - checks for custom uploaded images first, then fallback to default
    */
-  private getProductImage(productCode: string): string {
+  private async getProductImage(productCode: string): Promise<string> {
     // Check storage for custom uploaded images first
     try {
-      const customProduct = storage.products?.get?.(productCode);
+      const customProduct = await storage.getProduct(productCode);
       if (customProduct && customProduct.imageUrl) {
         console.log(`🖼️ Using custom image for ${productCode}: ${customProduct.imageUrl}`);
         return customProduct.imageUrl;
