@@ -489,18 +489,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Admin routes - all protected with admin authentication
   app.get("/api/admin/users", requireAdminAuth, async (req, res) => {
     try {
-      const users = await storage.getAllUsers();
-      // Remove passwords from response
-      const safeUsers = users.map(user => ({
-        id: user.id,
-        email: user.email,
-        companyName: user.companyName,
-        role: user.role,
-        createdAt: user.createdAt,
-      }));
+      console.log('🔍 Admin fetching all users from Supabase Auth...');
+      
+      // Fetch all users from Supabase Auth using Admin API
+      const { data: { users }, error } = await supabase.auth.admin.listUsers();
+      
+      if (error) {
+        console.error('❌ Failed to fetch users from Supabase:', error);
+        return res.status(500).json({ message: "Failed to fetch users from Supabase", error: error.message });
+      }
+      
+      console.log(`✅ Found ${users.length} users in Supabase Auth`);
+      
+      // Transform Supabase users to match expected format
+      const safeUsers = users.map(user => {
+        // Get user metadata (name, phone, address, user_type from registration)
+        const metadata = user.user_metadata || {};
+        
+        return {
+          id: user.id,
+          email: user.email || '',
+          companyName: metadata.name || metadata.company_name || 'Unknown Company',
+          role: user.email === 'admin@phomas.com' ? 'admin' : 'client',
+          createdAt: user.created_at ? new Date(user.created_at) : new Date(),
+          userType: metadata.user_type || 'individual',
+          phone: metadata.phone || '',
+          address: metadata.address || '',
+          emailConfirmed: user.email_confirmed_at ? true : false,
+          lastSignIn: user.last_sign_in_at ? new Date(user.last_sign_in_at) : null
+        };
+      });
+      
+      // Sort users: admin first, then by creation date (newest first)
+      safeUsers.sort((a, b) => {
+        if (a.role === 'admin' && b.role !== 'admin') return -1;
+        if (b.role === 'admin' && a.role !== 'admin') return 1;
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      });
+      
+      console.log(`📊 Returning ${safeUsers.length} users to admin panel`);
       res.json(safeUsers);
     } catch (error) {
-      res.status(500).json({ message: "Failed to fetch users", error });
+      console.error('❌ Admin users fetch error:', error);
+      res.status(500).json({ message: "Failed to fetch users", error: error instanceof Error ? error.message : 'Unknown error' });
     }
   });
 
