@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -21,6 +21,21 @@ export function AdminProductManager() {
     queryKey: ['/api/products'],
     queryFn: () => ecountService.getProducts(),
   });
+
+  // Sort products: Real names first, generic names last (same as homepage)
+  const sortedProducts = useMemo(() => {
+    return products.sort((a, b) => {
+      const aIsGeneric = a.name.includes('Medical Supply') || a.name.includes('Medical Product');
+      const bIsGeneric = b.name.includes('Medical Supply') || b.name.includes('Medical Product');
+      
+      // If one is generic and other isn't, non-generic comes first
+      if (aIsGeneric && !bIsGeneric) return 1;
+      if (!aIsGeneric && bIsGeneric) return -1;
+      
+      // If both are same type (both generic or both real), sort alphabetically
+      return a.name.localeCompare(b.name);
+    });
+  }, [products]);
 
   const updateImageMutation = useMutation({
     mutationFn: async ({ productId, imageUrl }: { productId: string; imageUrl: string }) => {
@@ -112,7 +127,7 @@ export function AdminProductManager() {
             
             <TabsContent value="grid">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {products.map((product) => {
+                {sortedProducts.map((product) => {
                   const status = getStockStatus(product);
                   const StatusIcon = status.icon;
                   
@@ -183,7 +198,7 @@ export function AdminProductManager() {
                     </tr>
                   </thead>
                   <tbody>
-                    {products.map((product) => {
+                    {sortedProducts.map((product) => {
                       const status = getStockStatus(product);
                       const StatusIcon = status.icon;
                       
