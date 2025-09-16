@@ -105,12 +105,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (user) {
           setUser({
             id: user.id,
-            user_id: user.id,
+            userId: user.id,
             name: user.user_metadata?.name || user.email?.split('@')[0] || 'User',
             phone: user.user_metadata?.phone || '',
             address: user.user_metadata?.address || '',
-            user_type: user.user_metadata?.user_type || 'company',
-            created_at: user.created_at
+            userType: user.user_metadata?.user_type || 'company',
+            createdAt: user.created_at
           });
         }
         return;
