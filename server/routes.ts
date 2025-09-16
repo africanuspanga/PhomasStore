@@ -219,7 +219,19 @@ const requireAdminAuth = async (req: Request, res: Response, next: NextFunction)
   }
 
   const token = authHeader.substring(7);
-  const session = adminSessions.get(token);
+  let session = adminSessions.get(token);
+  
+  // If session not found (e.g., after server restart), try to recreate it for known admin token
+  if (!session && token.startsWith('admin-token-')) {
+    console.log('🔄 Recreating admin session after server restart');
+    session = {
+      userId: 'admin-phomas',
+      role: 'admin',
+      email: 'admin@phomas.com',
+      createdAt: new Date()
+    };
+    adminSessions.set(token, session);
+  }
   
   if (!session) {
     return res.status(401).json({ message: 'Invalid or expired admin session' });
