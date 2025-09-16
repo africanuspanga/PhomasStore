@@ -967,6 +967,11 @@ class EcountApiService {
   async getAllProductsFromEcount(): Promise<any[]> {
     console.log('🚀 Fetching ALL products from eCount ERP (Pure Integration) + User Excel Names');
     
+    // ARCHITECT SOLUTION: Load Excel mapping BEFORE any cache returns
+    await ProductMapping.ensureLoaded();
+    const mappingStats = ProductMapping.getStats();
+    console.log(`📋 Excel mapping loaded: ${mappingStats.totalMapped} real product names available`);
+    
     const cacheKey = 'all_products';
     const cached = this.inventoryCache.get(cacheKey);
     
@@ -974,12 +979,16 @@ class EcountApiService {
     if (cached && (Date.now() - cached.timestamp) < this.CACHE_DURATION) {
       const ageMinutes = Math.round((Date.now() - cached.timestamp) / 1000 / 60);
       console.log(`📦 Using cached products (age: ${ageMinutes} minutes, count: ${cached.data.length})`);
-      return cached.data;
+      
+      // ARCHITECT SOLUTION: Apply Excel names to cached data
+      const enrichedProducts = ProductMapping.applyNames(cached.data);
+      const realNamesCount = enrichedProducts.filter(p => !p.name.includes('Medical Product') && !p.name.includes('Medical Supply')).length;
+      console.log(`🎉 Applied Excel names to cached products: ${realNamesCount}/${enrichedProducts.length} have REAL names!`);
+      return enrichedProducts;
     }
     
     try {
-      // Load user's Excel product mapping (names, prices, categories)
-      await ProductMapping.loadMapping();
+      // Excel mapping already loaded above
       const mappingStats = ProductMapping.getStats();
       console.log(`📋 Excel mapping loaded: ${mappingStats.totalMapped} real product names available`);
       
