@@ -12,9 +12,26 @@ export class ProductMapping {
     price: number;
     uom: string;
     category: string;
+    originalCode: string; // Keep track of original code for debugging
   }>();
   
   private static isLoaded = false;
+  private static unmatchedCodes: string[] = []; // Track codes that don't match
+
+  /**
+   * Normalize product codes for consistent matching
+   * Removes leading zeros, hyphens, spaces, converts to uppercase
+   */
+  private static normalizeProductCode(code: string): string {
+    if (!code) return '';
+    
+    return code
+      .toString()
+      .trim()                    // Remove leading/trailing spaces
+      .replace(/[-\s]/g, '')     // Remove hyphens and spaces
+      .replace(/^0+/, '')        // Remove leading zeros
+      .toUpperCase();            // Convert to uppercase for consistency
+  }
 
   /**
    * Ensure mapping is loaded (lazy loading)
@@ -28,9 +45,17 @@ export class ProductMapping {
    * Apply real names from Excel to any product list (cache or fresh)
    */
   static applyNames(products: any[]): any[] {
-    return products.map(product => {
-      const mapping = this.getProduct(product.id || product.PROD_CD);
+    this.unmatchedCodes = []; // Reset unmatched codes for this run
+    let matchedCount = 0;
+    let unmatchedCount = 0;
+    
+    const enrichedProducts = products.map(product => {
+      const originalCode = product.id || product.PROD_CD;
+      const normalizedCode = this.normalizeProductCode(originalCode);
+      const mapping = this.getProduct(originalCode);
+      
       if (mapping) {
+        matchedCount++;
         return {
           ...product,
           name: mapping.name,
@@ -38,9 +63,26 @@ export class ProductMapping {
           packaging: mapping.uom,
           category: mapping.category
         };
+      } else {
+        unmatchedCount++;
+        this.unmatchedCodes.push(originalCode);
+        return product;
       }
-      return product;
     });
+    
+    console.log(`🎯 Matching results: ${matchedCount}/${products.length} products matched (${unmatchedCount} unmatched)`);
+    
+    // Show first few unmatched codes for debugging
+    if (this.unmatchedCodes.length > 0) {
+      const sampleUnmatched = this.unmatchedCodes.slice(0, 5);
+      console.log(`❌ Sample unmatched codes:`, sampleUnmatched.map(code => `"${code}" -> "${this.normalizeProductCode(code)}"`));
+      
+      // Show sample Excel codes for comparison
+      const sampleExcelCodes = Array.from(this.productMap.keys()).slice(0, 5);
+      console.log(`✅ Sample Excel codes:`, sampleExcelCodes);
+    }
+    
+    return enrichedProducts;
   }
 
   /**
@@ -125,11 +167,18 @@ export class ProductMapping {
         }
         
         if (code && name && code.length > 0 && name.length > 0) {
-          this.productMap.set(code, {
+          const normalizedCode = this.normalizeProductCode(code);
+          
+          if (processed < 3) {
+            console.log(`🔧 Code normalization: "${code}" -> "${normalizedCode}"`);
+          }
+          
+          this.productMap.set(normalizedCode, {
             name,
             price,
             uom: uom || 'Standard',
-            category: this.getCategoryFromName(name)
+            category: this.getCategoryFromName(name),
+            originalCode: code
           });
           processed++;
         }
@@ -154,15 +203,17 @@ export class ProductMapping {
   }
 
   /**
-   * Get real product data by code
+   * Get real product data by code (with normalization)
    */
   static getProduct(code: string): {
     name: string;
     price: number;
     uom: string;
     category: string;
+    originalCode: string;
   } | null {
-    return this.productMap.get(code) || null;
+    const normalizedCode = this.normalizeProductCode(code);
+    return this.productMap.get(normalizedCode) || null;
   }
 
   /**
@@ -178,7 +229,23 @@ export class ProductMapping {
   static getStats() {
     return {
       totalMapped: this.productMap.size,
-      isLoaded: this.isLoaded
+      isLoaded: this.isLoaded,
+      unmatchedCount: this.unmatchedCodes.length
+    };
+  }
+
+  /**
+   * Get diagnostic information about code matching
+   */
+  static getDiagnostics() {
+    return {
+      totalExcelCodes: this.productMap.size,
+      unmatchedCodes: this.unmatchedCodes,
+      sampleExcelCodes: Array.from(this.productMap.keys()).slice(0, 10),
+      sampleUnmatched: this.unmatchedCodes.slice(0, 10).map(code => ({
+        original: code,
+        normalized: this.normalizeProductCode(code)
+      }))
     };
   }
 
