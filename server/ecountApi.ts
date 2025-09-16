@@ -1,5 +1,6 @@
 import type { ProductWithInventory, Order } from "@shared/schema";
 import { ProductMapping } from "./productMapping";
+import { storage } from "./storage";
 
 // eCount API Configuration - Production Ready
 const ECOUNT_CONFIG = {
@@ -718,9 +719,20 @@ class EcountApiService {
   }
 
   /**
-   * Get product image URL (placeholder for now, will integrate with Cloudinary)
+   * Get product image URL - checks for custom uploaded images first, then fallback to default
    */
   private getProductImage(productCode: string): string {
+    // Check storage for custom uploaded images first
+    try {
+      const customProduct = storage.products?.get?.(productCode);
+      if (customProduct && customProduct.imageUrl) {
+        console.log(`🖼️ Using custom image for ${productCode}: ${customProduct.imageUrl}`);
+        return customProduct.imageUrl;
+      }
+    } catch (error) {
+      // Product not found in storage, use default
+    }
+    
     // Default medical supply images based on product code patterns
     const defaultImages = {
       'default': 'https://images.unsplash.com/photo-1559757148-5c350d0d3c56?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300'
