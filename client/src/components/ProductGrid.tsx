@@ -18,7 +18,7 @@ export function ProductGrid({ products, isLoading }: ProductGridProps) {
   const [categoryFilter, setCategoryFilter] = useState("all");
 
   const filteredProducts = useMemo(() => {
-    return products.filter(product => {
+    const filtered = products.filter(product => {
       const matchesSearch = 
         product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         product.referenceNumber.toLowerCase().includes(searchQuery.toLowerCase());
@@ -26,6 +26,19 @@ export function ProductGrid({ products, isLoading }: ProductGridProps) {
       const matchesCategory = categoryFilter === "all" || product.category === categoryFilter;
       
       return matchesSearch && matchesCategory;
+    });
+    
+    // Sort products: Real names first, generic names last
+    return filtered.sort((a, b) => {
+      const aIsGeneric = a.name.includes('Medical Supply') || a.name.includes('Medical Product');
+      const bIsGeneric = b.name.includes('Medical Supply') || b.name.includes('Medical Product');
+      
+      // If one is generic and other isn't, non-generic comes first
+      if (aIsGeneric && !bIsGeneric) return 1;
+      if (!aIsGeneric && bIsGeneric) return -1;
+      
+      // If both are same type (both generic or both real), sort alphabetically
+      return a.name.localeCompare(b.name);
     });
   }, [products, searchQuery, categoryFilter]);
 
