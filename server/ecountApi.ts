@@ -137,7 +137,7 @@ class EcountApiService {
       // Add cookies if we have them from login
       if (cookies) {
         headers['Cookie'] = cookies;
-        console.log(`🍪 Using cookies from session: ${cookies.substring(0, 50)}...`);
+        console.log(`🍪 Using session cookies [REDACTED]`);
       }
       
       const response = await fetch(url, {
@@ -294,7 +294,7 @@ class EcountApiService {
       
       // Capture cookies from login response
       const setCookieHeaders = response.headers.get('set-cookie') || '';
-      console.log(`🍪 Login Set-Cookie headers: ${setCookieHeaders}`);
+      console.log(`🍪 Login Set-Cookie headers: [REDACTED FOR SECURITY]`);
       
       // Check content type before parsing JSON
       const contentType = response.headers.get('content-type');

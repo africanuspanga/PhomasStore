@@ -42,20 +42,28 @@ export class ProductMapping {
   }
 
   /**
-   * Apply real names from Excel to any product list (cache or fresh)
+   * Apply real names from Excel to any product list with advanced rule tracking
    */
   static applyNames(products: any[]): any[] {
     this.unmatchedCodes = []; // Reset unmatched codes for this run
-    let matchedCount = 0;
-    let unmatchedCount = 0;
+    
+    // ARCHITECT IMPROVEMENT: Unified metrics with rule tracking
+    const ruleStats = {
+      direct: 0,
+      'no-letter-suffix': 0,
+      'no-pack-suffix': 0,
+      'digits-only': 0,
+      unmatched: 0
+    };
     
     const enrichedProducts = products.map(product => {
       const originalCode = product.id || product.PROD_CD;
-      const normalizedCode = this.normalizeProductCode(originalCode);
       const mapping = this.getProduct(originalCode);
       
       if (mapping) {
-        matchedCount++;
+        const rule = mapping.matchRule || 'direct';
+        ruleStats[rule as keyof typeof ruleStats]++;
+        
         return {
           ...product,
           name: mapping.name,
@@ -64,13 +72,18 @@ export class ProductMapping {
           category: mapping.category
         };
       } else {
-        unmatchedCount++;
+        ruleStats.unmatched++;
         this.unmatchedCodes.push(originalCode);
         return product;
       }
     });
     
-    console.log(`🎯 Matching results: ${matchedCount}/${products.length} products matched (${unmatchedCount} unmatched)`);
+    const totalMatched = ruleStats.direct + ruleStats['no-letter-suffix'] + ruleStats['no-pack-suffix'] + ruleStats['digits-only'];
+    const realNamesCount = enrichedProducts.filter(p => !p.name.includes('Medical Product') && !p.name.includes('Medical Supply')).length;
+    
+    // ARCHITECT IMPROVEMENT: Single source of truth for metrics
+    console.log(`🎯 UNIFIED RESULTS: ${totalMatched}/${products.length} products matched (${ruleStats.unmatched} unmatched)`);
+    console.log(`📊 Match Rules: Direct=${ruleStats.direct}, NoLetterSuffix=${ruleStats['no-letter-suffix']}, NoPackSuffix=${ruleStats['no-pack-suffix']}, DigitsOnly=${ruleStats['digits-only']}`);
     
     // Show first few unmatched codes for debugging
     if (this.unmatchedCodes.length > 0) {
@@ -81,6 +94,9 @@ export class ProductMapping {
       const sampleExcelCodes = Array.from(this.productMap.keys()).slice(0, 5);
       console.log(`✅ Sample Excel codes:`, sampleExcelCodes);
     }
+    
+    // ARCHITECT FIX: Single source of truth - no conflicting metrics
+    console.log(`🎉 Applied Excel names: ${totalMatched}/${products.length} products have REAL names from mapping!`);
     
     return enrichedProducts;
   }
@@ -139,8 +155,14 @@ export class ProductMapping {
           columnMap = {
             code: codeCol,
             name: nameCol,
-            uom: rowText.findIndex(cell => cell === 'uom' || cell === 'unit') || nameCol + 1,
-            price: rowText.findIndex(cell => cell.includes('price') || cell.includes('sales')) || nameCol + 2
+            uom: (() => {
+              const idx = rowText.findIndex(cell => cell === 'uom' || cell === 'unit');
+              return idx === -1 ? nameCol + 1 : idx;
+            })(),
+            price: (() => {
+              const idx = rowText.findIndex(cell => cell.includes('price') || cell.includes('sales'));
+              return idx === -1 ? nameCol + 2 : idx;
+            })()
           };
           console.log(`🎯 Found header at row ${i}:`, row);
           console.log('🗂️ Column mapping:', columnMap);
@@ -203,7 +225,7 @@ export class ProductMapping {
   }
 
   /**
-   * Get real product data by code (with normalization)
+   * Get real product data by code (with advanced normalization and fallback matching)
    */
   static getProduct(code: string): {
     name: string;
@@ -211,9 +233,51 @@ export class ProductMapping {
     uom: string;
     category: string;
     originalCode: string;
+    matchRule?: string;
   } | null {
     const normalizedCode = this.normalizeProductCode(code);
-    return this.productMap.get(normalizedCode) || null;
+    
+    // Try direct match first
+    let product = this.productMap.get(normalizedCode);
+    if (product) {
+      return { ...product, matchRule: 'direct' };
+    }
+    
+    // ARCHITECT IMPROVEMENT: Fallback matching for variant suffixes
+    
+    // Rule A: Strip trailing letter-only suffix (e.g., "123ABC" -> "123")
+    const withoutLetterSuffix = normalizedCode.replace(/[A-Z]+$/, '');
+    if (withoutLetterSuffix !== normalizedCode) {
+      product = this.productMap.get(withoutLetterSuffix);
+      if (product) {
+        return { ...product, matchRule: 'no-letter-suffix' };
+      }
+    }
+    
+    // Rule B: Strip trailing digit+letter pack size (e.g., "1234505L" -> "12345")
+    const withoutPackSize = normalizedCode.replace(/\d+[A-Z]+$/, '');
+    if (withoutPackSize !== normalizedCode && withoutPackSize !== withoutLetterSuffix) {
+      product = this.productMap.get(withoutPackSize);
+      if (product) {
+        return { ...product, matchRule: 'no-pack-suffix' };
+      }
+    }
+    
+    // Rule C: Digits-only fallback (only if unique match)
+    const digitsOnly = normalizedCode.replace(/\D/g, '');
+    if (digitsOnly !== normalizedCode && digitsOnly.length >= 4) {
+      const candidates = Array.from(this.productMap.keys()).filter(key => 
+        key.replace(/\D/g, '') === digitsOnly
+      );
+      if (candidates.length === 1) {
+        product = this.productMap.get(candidates[0]);
+        if (product) {
+          return { ...product, matchRule: 'digits-only' };
+        }
+      }
+    }
+    
+    return null;
   }
 
   /**
