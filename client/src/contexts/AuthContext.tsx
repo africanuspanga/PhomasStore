@@ -110,7 +110,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             phone: user.user_metadata?.phone || '',
             address: user.user_metadata?.address || '',
             userType: user.user_metadata?.user_type || 'company',
-            createdAt: user.created_at
+            createdAt: new Date(user.created_at)
           });
         }
         return;
