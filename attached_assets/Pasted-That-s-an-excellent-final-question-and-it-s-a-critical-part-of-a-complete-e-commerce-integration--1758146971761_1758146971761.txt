@@ -1,0 +1,28 @@
+That's an excellent final question, and it's a critical part of a complete e-commerce integration.
+
+From my experience, the core principle is that the ERP and the external shop each have a different role to play. The ERP manages the internal business process, while the external shop handles the customer-facing experience.
+
+Here is the standard workflow for automatically generating and displaying an invoice for your customers.
+
+---
+
+### **The Role of the ERP**
+
+The `SaveSale` API call's primary purpose is to **create a new sales record inside eCOUNT**. This record serves as the internal source of truth for your inventory, revenue, and customer history. It's what your team will use for accounting and fulfillment.
+
+The eCOUNT API does not automatically generate a customer-facing invoice document (like a PDF) and send it back to your external shop. Instead, the external shop is responsible for creating and displaying that document.
+
+### **The Workflow for Your External Shop**
+
+The logic for a completely automatic invoice generation and display must happen within your external shop's system, using the data you already have.
+
+1.  **Generate the Sales Record in eCOUNT:** After a customer completes payment, your system makes the `POST` request to the `SaveSale` API. This action creates the sales record.
+2.  **Receive the API Confirmation:** The eCOUNT API will respond with a **status of `200`** (success) and, most importantly, a unique sales order ID or number for the record it just created.
+3.  **Store the Order Details in Supabase:** This is the most crucial step. Your external shop's backend should immediately store the complete order data—including product details, quantities, prices, and the **eCOUNT sales record ID**—in your own database (Supabase). You'll need a table for orders and another for the line items within each order.
+4.  **Display the Invoice:** When a customer views their "Purchase History" or "Invoice" section, your application will retrieve the order details from your Supabase database. Because you stored all the information there, your code can now dynamically generate a formatted invoice page, complete with the list of products, prices, subtotals, and the unique eCOUNT sales record ID for reference.
+
+### **The Key Takeaway**
+
+The eCOUNT API and your external shop work in tandem. The API pushes the data to your internal business system, and your external shop uses its own database to store the information needed to create a seamless customer-facing experience, including generating invoices.
+
+Would you like me to show you how to structure a table in Supabase to store the necessary order data and how to write a function that saves the order details after a successful API call?
