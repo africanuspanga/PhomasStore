@@ -10,10 +10,10 @@
   {
     "id": "65579a3e-701a-421c-b7a9-3156e4913a10",
     "productCode": "16890/31",
-    "imageUrl": "https://res.cloudinary.com/dvrdcyymo/image/upload/v1758150467/phomas-products/ea4ioj1hf9ovafctvr52.png",
+    "imageUrl": "https://res.cloudinary.com/dvrdcyymo/image/upload/v1758151951/phomas-products/a5v2cft1b7ou7gf5lsew.jpg",
     "priority": 0,
     "createdAt": "2025-09-17T23:04:23.755Z",
-    "updatedAt": "2025-09-17T23:07:48.219Z"
+    "updatedAt": "2025-09-17T23:32:31.951Z"
   },
   {
     "id": "2d58fb0c-d5dd-402c-b350-515b7966697f",
@@ -38,5 +38,13 @@
     "priority": 0,
     "createdAt": "2025-09-17T23:10:17.254Z",
     "updatedAt": "2025-09-17T23:10:17.254Z"
+  },
+  {
+    "id": "394e8860-f77c-41ec-b4ce-eee941d2f8a3",
+    "productCode": "BMR10",
+    "imageUrl": "https://res.cloudinary.com/dvrdcyymo/image/upload/v1758151878/phomas-products/mfqrbt9il6wbudcnhj8f.jpg",
+    "priority": 0,
+    "createdAt": "2025-09-17T23:31:19.930Z",
+    "updatedAt": "2025-09-17T23:31:19.930Z"
   }
 ]
