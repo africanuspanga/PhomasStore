@@ -20,6 +20,41 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
+// Automatically create unsigned upload preset for direct frontend uploads
+const ensureUploadPreset = async () => {
+  if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
+    return;
+  }
+  
+  try {
+    // Check if preset already exists
+    const existingPresets = await cloudinary.api.upload_presets();
+    const presetExists = existingPresets.presets.some((preset: any) => preset.name === 'phomas_products');
+    
+    if (!presetExists) {
+      await cloudinary.api.create_upload_preset({
+        name: 'phomas_products',
+        unsigned: true,
+        folder: 'phomas-products',
+        allowed_formats: ['jpg', 'png', 'gif', 'webp'],
+        transformation: [
+          { width: 800, height: 600, crop: 'limit' },
+          { quality: 'auto' },
+          { format: 'auto' }
+        ]
+      });
+      console.log('✅ Created Cloudinary upload preset for direct frontend uploads');
+    } else {
+      console.log('✅ Cloudinary upload preset already exists');
+    }
+  } catch (error) {
+    console.error('⚠️ Failed to create Cloudinary upload preset:', error);
+  }
+};
+
+// Initialize upload preset
+ensureUploadPreset();
+
 // Initialize Supabase client for server-side auth verification
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
@@ -412,6 +447,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error('🔐 Admin login error:', error);
       res.status(400).json({ message: "Admin login failed", error });
     }
+  });
+
+  // Public Cloudinary configuration for frontend direct uploads
+  app.get("/api/cloudinary-config", (req, res) => {
+    res.json({ 
+      cloudName: process.env.CLOUDINARY_CLOUD_NAME,
+      uploadPreset: 'phomas_products'
+    });
   });
 
   // Products - Pure eCount Integration (Public catalog browsing)

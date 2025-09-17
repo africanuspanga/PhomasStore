@@ -3,7 +3,6 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Upload, X, Image as ImageIcon, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { apiRequest } from '@/lib/queryClient';
 
 interface ImageUploadProps {
   onImageUploaded?: (imageUrl: string) => void;
@@ -39,27 +38,40 @@ export function ImageUpload({ onImageUploaded, currentImage, className }: ImageU
 
     setUploading(true);
     try {
+      // Get Cloudinary config from backend
+      const configResponse = await fetch('/api/cloudinary-config');
+      const config = await configResponse.json();
+      
+      // Direct upload to Cloudinary - no server proxy!
       const formData = new FormData();
-      formData.append('image', file);
+      formData.append('file', file);
+      formData.append('upload_preset', config.uploadPreset);
+      formData.append('folder', 'phomas-products');
+      
+      // Direct upload to Cloudinary
+      const response = await fetch(`https://api.cloudinary.com/v1_1/${config.cloudName}/image/upload`, {
+        method: 'POST',
+        body: formData,
+      });
 
-      const response = await apiRequest('POST', '/api/admin/upload-image', formData);
-      const result = await response.json();
-
-      if (result.success) {
-        setPreviewUrl(result.imageUrl);
-        onImageUploaded?.(result.imageUrl);
-        toast({
-          title: "Image uploaded successfully",
-          description: "Your image has been uploaded to Cloudinary",
-        });
-      } else {
-        throw new Error(result.message || 'Upload failed');
+      if (!response.ok) {
+        throw new Error(`Upload failed: ${response.status}`);
       }
+
+      const result = await response.json();
+      const imageUrl = result.secure_url;
+
+      setPreviewUrl(imageUrl);
+      onImageUploaded?.(imageUrl);
+      toast({
+        title: "Image uploaded successfully",
+        description: "Direct upload to Cloudinary completed",
+      });
     } catch (error) {
-      console.error('Upload error:', error);
+      console.error('Direct Cloudinary upload error:', error);
       toast({
         title: "Upload failed",
-        description: "Failed to upload image. Please try again.",
+        description: "Failed to upload directly to Cloudinary. Please try again.",
         variant: "destructive",
       });
     } finally {
