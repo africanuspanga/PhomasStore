@@ -1,7 +1,9 @@
-import { type User, type InsertUser, type Product, type InsertProduct, type Inventory, type InsertInventory, type Order, type InsertOrder, type ProductWithInventory, type OrderItem, type ProductImage, type InsertProductImage } from "@shared/schema";
+import { type User, type InsertUser, type Product, type InsertProduct, type Inventory, type InsertInventory, type Order, type InsertOrder, type ProductWithInventory, type OrderItem, type ProductImage, type InsertProductImage, productImages } from "@shared/schema";
 import { randomUUID } from "crypto";
 import * as fs from "fs";
 import * as path from "path";
+import { createClient } from '@supabase/supabase-js';
+import { eq } from 'drizzle-orm';
 
 export interface IStorage {
   // User management
@@ -73,8 +75,8 @@ export class MemStorage implements IStorage {
         for (const image of imageArray) {
           this.productImages.set(image.productCode, {
             ...image,
-            createdAt: new Date(image.createdAt),
-            updatedAt: new Date(image.updatedAt)
+            createdAt: image.createdAt ? new Date(image.createdAt) : new Date(),
+            updatedAt: image.updatedAt ? new Date(image.updatedAt) : new Date()
           });
         }
         
@@ -394,4 +396,193 @@ export class MemStorage implements IStorage {
   }
 }
 
-export const storage = new MemStorage();
+// Database Storage using Supabase for persistent product images
+export class DatabaseStorage implements IStorage {
+  private memStorage: MemStorage;
+  private supabase: any;
+
+  constructor() {
+    // Use MemStorage for everything except product images
+    this.memStorage = new MemStorage();
+    
+    // Initialize Supabase client for product images
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
+    
+    if (!supabaseUrl || !supabaseServiceKey) {
+      console.warn('⚠️ Supabase not configured, falling back to memory storage for images');
+      this.supabase = null;
+    } else {
+      this.supabase = createClient(supabaseUrl, supabaseServiceKey, {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false
+        },
+        db: { schema: 'public' }
+      });
+      console.log('✅ Supabase connected for persistent product images');
+    }
+  }
+
+  // Delegate all non-image methods to MemStorage
+  async getUser(id: string): Promise<User | undefined> {
+    return this.memStorage.getUser(id);
+  }
+
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    return this.memStorage.getUserByEmail(email);
+  }
+
+  async createUser(user: InsertUser): Promise<User> {
+    return this.memStorage.createUser(user);
+  }
+
+  async getAllUsers(): Promise<User[]> {
+    return this.memStorage.getAllUsers();
+  }
+
+  async getProduct(id: string): Promise<Product | undefined> {
+    return this.memStorage.getProduct(id);
+  }
+
+  async getAllProducts(): Promise<Product[]> {
+    return this.memStorage.getAllProducts();
+  }
+
+  async getProductsWithInventory(): Promise<ProductWithInventory[]> {
+    return this.memStorage.getProductsWithInventory();
+  }
+
+  async createProduct(product: InsertProduct): Promise<Product> {
+    return this.memStorage.createProduct(product);
+  }
+
+  async getInventoryByProductId(productId: string): Promise<Inventory | undefined> {
+    return this.memStorage.getInventoryByProductId(productId);
+  }
+
+  async getAllInventory(): Promise<Inventory[]> {
+    return this.memStorage.getAllInventory();
+  }
+
+  async updateInventory(productId: string, quantity: number): Promise<void> {
+    return this.memStorage.updateInventory(productId, quantity);
+  }
+
+  async createOrder(order: InsertOrder): Promise<Order> {
+    return this.memStorage.createOrder(order);
+  }
+
+  async getOrderById(id: string): Promise<Order | undefined> {
+    return this.memStorage.getOrderById(id);
+  }
+
+  async getOrdersByUserId(userId: string): Promise<Order[]> {
+    return this.memStorage.getOrdersByUserId(userId);
+  }
+
+  async getAllOrders(): Promise<Order[]> {
+    return this.memStorage.getAllOrders();
+  }
+
+  async updateOrderErpInfo(orderId: string, erpInfo: {
+    erpDocNumber?: string;
+    erpIoDate?: string;
+    erpSyncStatus?: string;
+    erpSyncError?: string | null;
+  }): Promise<Order> {
+    return this.memStorage.updateOrderErpInfo(orderId, erpInfo);
+  }
+
+  // PERSISTENT PRODUCT IMAGE METHODS - HYBRID APPROACH
+  async getProductImage(productCode: string): Promise<string | null> {
+    // Always try the persistent file storage first (most reliable)
+    const fileResult = await this.memStorage.getProductImage(productCode);
+    if (fileResult) {
+      return fileResult;
+    }
+
+    // Try Supabase as backup if file storage has no data
+    if (this.supabase) {
+      try {
+        const { data, error } = await this.supabase
+          .from('product_images')
+          .select('image_url')
+          .eq('product_code', productCode)
+          .single();
+
+        if (error && error.code !== 'PGRST116') { // PGRST116 = not found
+          // Supabase error, use file storage
+          return null;
+        }
+
+        return data?.image_url || null;
+      } catch (error) {
+        // Supabase failed, file storage already returned null
+        return null;
+      }
+    }
+
+    return null;
+  }
+
+  async setProductImage(productCode: string, imageUrl: string, priority: number = 0): Promise<void> {
+    // Always save to file storage (most reliable)
+    await this.memStorage.setProductImage(productCode, imageUrl, priority);
+    
+    // Try to save to Supabase as backup, but don't fail if it doesn't work
+    if (this.supabase) {
+      try {
+        await this.supabase
+          .from('product_images')
+          .upsert({
+            product_code: productCode,
+            image_url: imageUrl,
+            priority: priority,
+            updated_at: new Date().toISOString()
+          }, {
+            onConflict: 'product_code'
+          });
+        console.log(`🔄 Also saved to Supabase backup: ${productCode}`);
+      } catch (error) {
+        // Ignore Supabase errors, file storage is the primary method
+        console.log(`⚠️ Supabase backup failed for ${productCode}, but file storage saved`);
+      }
+    }
+    
+    console.log(`🖼️ Saved image for product ${productCode}: ${imageUrl}`);
+  }
+
+  async getProductImages(productCodes: string[]): Promise<Record<string, string>> {
+    // Use file storage for batch requests (faster and more reliable)
+    return this.memStorage.getProductImages(productCodes);
+  }
+
+  async deleteProductImage(productCode: string): Promise<void> {
+    // Delete from file storage
+    await this.memStorage.deleteProductImage(productCode);
+    
+    // Try to delete from Supabase backup
+    if (this.supabase) {
+      try {
+        await this.supabase
+          .from('product_images')
+          .delete()
+          .eq('product_code', productCode);
+        console.log(`🔄 Also deleted from Supabase backup: ${productCode}`);
+      } catch (error) {
+        // Ignore Supabase errors
+        console.log(`⚠️ Supabase backup delete failed for ${productCode}, but file storage deleted`);
+      }
+    }
+    
+    console.log(`🗑️ Deleted image for product ${productCode}`);
+  }
+
+  // Legacy method - for compatibility
+  async updateProductImage(productId: string, imageUrl: string): Promise<void> {
+    return this.setProductImage(productId, imageUrl);
+  }
+}
+
+export const storage = new DatabaseStorage();
