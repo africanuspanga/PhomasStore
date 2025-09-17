@@ -73,7 +73,7 @@ export function useUploadProductImage() {
       const response = await fetch('/api/images/upload', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('adminToken')}`,
+          'Authorization': `Bearer ${localStorage.getItem('phomas_admin_token')}`,
         },
         body: formData,
       });
@@ -103,7 +103,7 @@ export function useSetProductImageUrl() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('adminToken')}`,
+          'Authorization': `Bearer ${localStorage.getItem('phomas_admin_token')}`,
         },
         body: JSON.stringify({ productCode, imageUrl }),
       });
@@ -132,7 +132,7 @@ export function useDeleteProductImage() {
       const response = await fetch(`/api/images/${productCode}`, {
         method: 'DELETE',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('adminToken')}`,
+          'Authorization': `Bearer ${localStorage.getItem('phomas_admin_token')}`,
         },
       });
 
