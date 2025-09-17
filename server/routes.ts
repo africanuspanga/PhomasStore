@@ -219,21 +219,11 @@ const requireAdminAuth = async (req: Request, res: Response, next: NextFunction)
   }
 
   const token = authHeader.substring(7);
-  let session = adminSessions.get(token);
+  const session = adminSessions.get(token);
   
-  // If session not found (e.g., after server restart), try to recreate it for known admin token
-  if (!session && token.startsWith('admin-token-')) {
-    console.log('🔄 Recreating admin session after server restart');
-    session = {
-      userId: 'admin-phomas',
-      role: 'admin',
-      email: 'admin@phomas.com',
-      createdAt: new Date()
-    };
-    adminSessions.set(token, session);
-  }
-  
+  // Only allow sessions that were properly created through admin login
   if (!session) {
+    console.log('🔐 Admin auth failed: Invalid or missing session token');
     return res.status(401).json({ message: 'Invalid or expired admin session' });
   }
 
@@ -242,6 +232,7 @@ const requireAdminAuth = async (req: Request, res: Response, next: NextFunction)
   const sessionAge = now.getTime() - session.createdAt.getTime();
   if (sessionAge > 24 * 60 * 60 * 1000) {
     adminSessions.delete(token);
+    console.log('🔐 Admin auth failed: Session expired');
     return res.status(401).json({ message: 'Admin session expired' });
   }
 
@@ -249,6 +240,8 @@ const requireAdminAuth = async (req: Request, res: Response, next: NextFunction)
   (req as any).userId = session.userId;
   (req as any).userRole = session.role;
   (req as any).userEmail = session.email;
+  
+  console.log(`🔐 Admin auth successful: ${session.email}`);
   next();
 };
 
