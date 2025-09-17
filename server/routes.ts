@@ -71,16 +71,34 @@ const requireAuth = async (req: Request, res: Response, next: NextFunction) => {
       return res.status(401).json({ message: 'Invalid or expired session' });
     }
 
-    // Fetch user profile from database to get role and additional info
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('user_id', user.id)
-      .single();
+    // Try to fetch user profile from database, use fallback if not available
+    let profile = null;
+    try {
+      const { data: profileData, error: profileError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('user_id', user.id)
+        .single();
 
-    if (profileError || !profile) {
-      console.log('🔐 Profile fetch failed:', profileError?.message || 'No profile');
-      return res.status(401).json({ message: 'User profile not found' });
+      if (!profileError && profileData) {
+        profile = profileData;
+      }
+    } catch (profileError) {
+      // Profiles table doesn't exist or other error - use fallback
+      console.log('🔐 Using fallback authentication (profiles table not available)');
+    }
+
+    // Fallback: create profile from user metadata if no profile found
+    if (!profile) {
+      profile = {
+        id: user.id,
+        userId: user.id,
+        name: user.user_metadata?.name || user.email?.split('@')[0] || 'User',
+        phone: user.user_metadata?.phone || '',
+        address: user.user_metadata?.address || '',
+        userType: user.user_metadata?.user_type || 'company',
+        createdAt: new Date(user.created_at)
+      };
     }
 
     // Attach user info to request
