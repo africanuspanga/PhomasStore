@@ -18,7 +18,7 @@ interface CartContextType {
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
-const TAX_RATE = 0.18; // 18% tax rate
+const TAX_RATE = 0; // VAT inclusive pricing - no additional tax
 
 export function CartProvider({ children }: { children: React.ReactNode }) {
   const [items, setItems] = useState<CartItem[]>([]);
