@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useCart } from "@/contexts/CartContext";
 import { ShoppingCart, Clock, AlertTriangle } from "lucide-react";
+import { useProductImage, getImageWithFallback } from "@/hooks/useProductImages";
 import type { ProductWithInventory } from "@shared/schema";
 
 interface ProductCardProps {
@@ -16,6 +17,9 @@ export function ProductCard({ product, viewMode = "grid" }: ProductCardProps) {
   const [quantity, setQuantity] = useState(1);
   const { addItem, getItemQuantity } = useCart();
   const [isAdding, setIsAdding] = useState(false);
+  
+  // Fetch image separately from product data
+  const { data: productImageUrl } = useProductImage(product.id);
 
   const currentCartQuantity = getItemQuantity(product.id);
   const maxQuantity = product.availableQuantity - currentCartQuantity;
@@ -30,7 +34,7 @@ export function ProductCard({ product, viewMode = "grid" }: ProductCardProps) {
         name: product.name,
         price: product.price,
         referenceNumber: product.referenceNumber,
-        imageUrl: product.imageUrl || undefined,
+        imageUrl: productImageUrl || undefined,
       },
       quantity,
       product.availableQuantity
@@ -53,7 +57,7 @@ export function ProductCard({ product, viewMode = "grid" }: ProductCardProps) {
         <CardContent className="p-4">
           <div className="flex items-center space-x-4">
             <img
-              src={product.imageUrl || "https://images.unsplash.com/photo-1584362917165-526a968579e8?ixlib=rb-4.0.3&auto=format&fit=crop&w=150&h=150"}
+              src={getImageWithFallback(productImageUrl)}
               alt={product.name}
               className="w-20 h-20 object-cover rounded-lg"
             />
@@ -129,7 +133,7 @@ export function ProductCard({ product, viewMode = "grid" }: ProductCardProps) {
     <Card className="overflow-hidden hover:shadow-md transition-shadow">
       <div className="relative">
         <img
-          src={product.imageUrl || "https://images.unsplash.com/photo-1584362917165-526a968579e8?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300"}
+          src={getImageWithFallback(productImageUrl)}
           alt={product.name}
           className="w-full h-48 object-cover"
         />

@@ -10,6 +10,7 @@ import { ecountService } from '@/services/ecountService';
 import { ImageUpload } from './ImageUpload';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest, queryClient } from '@/lib/queryClient';
+import { useProductImages, getImageWithFallback, useSetProductImageUrl } from '@/hooks/useProductImages';
 import type { ProductWithInventory } from '@shared/schema';
 
 export function AdminProductManager() {
@@ -21,6 +22,10 @@ export function AdminProductManager() {
     queryKey: ['/api/products'],
     queryFn: () => ecountService.getProducts(),
   });
+
+  // Fetch images for all products in batch
+  const productCodes = products.map(p => p.id);
+  const { data: productImages = {} } = useProductImages(productCodes);
 
   // Sort products: Real names first, generic names last (same as homepage)
   const sortedProducts = useMemo(() => {
@@ -37,32 +42,30 @@ export function AdminProductManager() {
     });
   }, [products]);
 
-  const updateImageMutation = useMutation({
-    mutationFn: async ({ productId, imageUrl }: { productId: string; imageUrl: string }) => {
-      const response = await apiRequest('PUT', `/api/admin/products/${productId}/image`, { imageUrl });
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/products'] });
-      toast({
-        title: "Image updated successfully",
-        description: "The product image has been updated",
-      });
-      setImageDialogOpen(false);
-      setSelectedProduct(null);
-    },
-    onError: () => {
-      toast({
-        title: "Update failed",
-        description: "Failed to update product image",
-        variant: "destructive",
-      });
-    }
-  });
+  const setImageUrlMutation = useSetProductImageUrl();
 
   const handleImageUpload = (imageUrl: string) => {
     if (selectedProduct && imageUrl) {
-      updateImageMutation.mutate({ productId: selectedProduct.id, imageUrl });
+      setImageUrlMutation.mutate(
+        { productCode: selectedProduct.id, imageUrl },
+        {
+          onSuccess: () => {
+            toast({
+              title: "Image updated successfully",
+              description: "The product image has been updated",
+            });
+            setImageDialogOpen(false);
+            setSelectedProduct(null);
+          },
+          onError: (error) => {
+            toast({
+              title: "Update failed",
+              description: error instanceof Error ? error.message : "Failed to update product image",
+              variant: "destructive",
+            });
+          }
+        }
+      );
     }
   };
 
@@ -135,7 +138,7 @@ export function AdminProductManager() {
                     <Card key={product.id} className="overflow-hidden">
                       <div className="aspect-video bg-gray-100 relative group">
                         <img
-                          src={product.imageUrl || 'https://images.unsplash.com/photo-1559757148-5c350d0d3c56?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300'}
+                          src={getImageWithFallback(productImages[product.id])}
                           alt={product.name}
                           className="w-full h-full object-cover"
                         />
@@ -206,7 +209,7 @@ export function AdminProductManager() {
                         <tr key={product.id} className="hover:bg-gray-50">
                           <td className="border border-gray-200 p-3">
                             <img
-                              src={product.imageUrl || 'https://images.unsplash.com/photo-1559757148-5c350d0d3c56?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300'}
+                              src={getImageWithFallback(productImages[product.id])}
                               alt={product.name}
                               className="w-12 h-12 object-cover rounded"
                             />
@@ -267,7 +270,7 @@ export function AdminProductManager() {
               </div>
               
               <ImageUpload
-                currentImage={selectedProduct.imageUrl || undefined}
+                currentImage={productImages[selectedProduct.id] || undefined}
                 onImageUploaded={handleImageUpload}
               />
               
