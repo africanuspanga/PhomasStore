@@ -891,55 +891,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // NEW IMAGE API - completely separate from eCount system
-  
-  // Upload image for specific product code
-  app.post("/api/images/upload", requireAdminAuth, upload.single('image'), async (req, res) => {
-    try {
-      const { productCode } = req.body;
-      
-      if (!req.file) {
-        return res.status(400).json({ error: "No image file provided" });
-      }
-      
-      if (!productCode) {
-        return res.status(400).json({ error: "Product code is required" });
-      }
-
-      // Upload to Cloudinary
-      const result = await new Promise<any>((resolve, reject) => {
-        cloudinary.uploader.upload_stream(
-          {
-            resource_type: "image",
-            folder: "phomas-products",
-            transformation: [
-              { width: 800, height: 600, crop: "limit" },
-              { quality: "auto" },
-              { format: "auto" }
-            ]
-          },
-          (error, result) => {
-            if (error) reject(error);
-            else resolve(result);
-          }
-        ).end(req.file!.buffer);
-      });
-
-      // Store image mapping
-      await storage.setProductImage(productCode, result.secure_url);
-      
-      console.log(`🖼️ New image uploaded for product ${productCode}: ${result.secure_url}`);
-      
-      res.json({
-        success: true,
-        productCode,
-        imageUrl: result.secure_url,
-        publicId: result.public_id
-      });
-    } catch (error) {
-      console.error('Image upload error:', error);
-      res.status(500).json({ error: "Failed to upload image" });
-    }
-  });
+  // Note: Image uploads now happen directly from frontend to Cloudinary
+  // These endpoints only manage image URL storage and retrieval
 
   // Set image URL for product code (for external URLs)
   app.post("/api/images/set-url", requireAdminAuth, async (req, res) => {
