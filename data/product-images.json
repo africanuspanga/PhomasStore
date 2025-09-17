@@ -1,0 +1,42 @@
+[
+  {
+    "id": "198cbd23-0a05-466d-92ad-97137785d8f4",
+    "productCode": "99411",
+    "imageUrl": "https://res.cloudinary.com/dvrdcyymo/image/upload/v1758150169/phomas-products/jhlkiqty7kgownpkeram.png",
+    "priority": 0,
+    "createdAt": "2025-09-17T23:02:50.512Z",
+    "updatedAt": "2025-09-17T23:02:50.512Z"
+  },
+  {
+    "id": "65579a3e-701a-421c-b7a9-3156e4913a10",
+    "productCode": "16890/31",
+    "imageUrl": "https://res.cloudinary.com/dvrdcyymo/image/upload/v1758150467/phomas-products/ea4ioj1hf9ovafctvr52.png",
+    "priority": 0,
+    "createdAt": "2025-09-17T23:04:23.755Z",
+    "updatedAt": "2025-09-17T23:07:48.219Z"
+  },
+  {
+    "id": "2d58fb0c-d5dd-402c-b350-515b7966697f",
+    "productCode": "LYOFIAAF25",
+    "imageUrl": "https://res.cloudinary.com/dvrdcyymo/image/upload/v1758150356/phomas-products/nry9jhkjztajquibhm9i.jpg",
+    "priority": 0,
+    "createdAt": "2025-09-17T23:05:57.880Z",
+    "updatedAt": "2025-09-17T23:05:57.880Z"
+  },
+  {
+    "id": "112d313a-90ec-46a6-a4f7-14f45e9170d7",
+    "productCode": "990292",
+    "imageUrl": "https://res.cloudinary.com/dvrdcyymo/image/upload/v1758150543/phomas-products/tb2y0xgnaeckihvfk5ad.jpg",
+    "priority": 0,
+    "createdAt": "2025-09-17T23:09:08.191Z",
+    "updatedAt": "2025-09-17T23:09:08.191Z"
+  },
+  {
+    "id": "16a1cab1-6be5-4ed2-a733-285b93191165",
+    "productCode": "9005",
+    "imageUrl": "https://res.cloudinary.com/dvrdcyymo/image/upload/v1758150614/phomas-products/zyurow7gpcbe2sdgsgid.png",
+    "priority": 0,
+    "createdAt": "2025-09-17T23:10:17.254Z",
+    "updatedAt": "2025-09-17T23:10:17.254Z"
+  }
+]
