@@ -1,5 +1,7 @@
 import { type User, type InsertUser, type Product, type InsertProduct, type Inventory, type InsertInventory, type Order, type InsertOrder, type ProductWithInventory, type OrderItem, type ProductImage, type InsertProductImage } from "@shared/schema";
 import { randomUUID } from "crypto";
+import * as fs from "fs";
+import * as path from "path";
 
 export interface IStorage {
   // User management
@@ -45,9 +47,56 @@ export class MemStorage implements IStorage {
   private inventory: Map<string, Inventory> = new Map();
   private orders: Map<string, Order> = new Map();
   private productImages: Map<string, ProductImage> = new Map();
+  
+  // File path for persisting image mappings
+  private readonly imagesMappingFile = path.join(process.cwd(), 'data', 'product-images.json');
 
   constructor() {
     this.initializeData();
+    this.loadImageMappings();
+  }
+
+  private async ensureDataDirectory(): Promise<void> {
+    const dataDir = path.dirname(this.imagesMappingFile);
+    if (!fs.existsSync(dataDir)) {
+      fs.mkdirSync(dataDir, { recursive: true });
+    }
+  }
+
+  private async loadImageMappings(): Promise<void> {
+    try {
+      if (fs.existsSync(this.imagesMappingFile)) {
+        const data = fs.readFileSync(this.imagesMappingFile, 'utf8');
+        const imageArray: ProductImage[] = JSON.parse(data);
+        
+        // Convert array back to Map
+        for (const image of imageArray) {
+          this.productImages.set(image.productCode, {
+            ...image,
+            createdAt: new Date(image.createdAt),
+            updatedAt: new Date(image.updatedAt)
+          });
+        }
+        
+        console.log(`🖼️ Loaded ${this.productImages.size} image mappings from persistent storage`);
+      }
+    } catch (error) {
+      console.error('Failed to load image mappings:', error);
+    }
+  }
+
+  private async saveImageMappings(): Promise<void> {
+    try {
+      await this.ensureDataDirectory();
+      
+      // Convert Map to array for JSON serialization
+      const imageArray = Array.from(this.productImages.values());
+      
+      fs.writeFileSync(this.imagesMappingFile, JSON.stringify(imageArray, null, 2));
+      console.log(`💾 Saved ${this.productImages.size} image mappings to persistent storage`);
+    } catch (error) {
+      console.error('Failed to save image mappings:', error);
+    }
   }
 
   private initializeData() {
@@ -249,6 +298,9 @@ export class MemStorage implements IStorage {
     }
     
     console.log(`🖼️ Set image for product ${productCode}: ${imageUrl}`);
+    
+    // Save to persistent storage
+    await this.saveImageMappings();
   }
 
   async getProductImages(productCodes: string[]): Promise<Record<string, string>> {
@@ -268,6 +320,9 @@ export class MemStorage implements IStorage {
     const deleted = this.productImages.delete(productCode);
     if (deleted) {
       console.log(`🗑️ Deleted image for product ${productCode}`);
+      
+      // Save to persistent storage
+      await this.saveImageMappings();
     }
   }
 
