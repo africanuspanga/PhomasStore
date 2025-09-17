@@ -436,38 +436,136 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Order routes - now with eCount integration and rate limiting
+  // Order routes - now with CORRECTED eCount sales integration
   app.post("/api/orders", requireAuth, enforceSaveRateLimit, async (req, res) => {
     try {
       const orderData = insertOrderSchema.parse(req.body);
+      const userProfile = (req as any).userProfile;
       
       // Create order in local storage first
       const order = await storage.createOrder(orderData);
       
-      // Then try to create it in eCount ERP
+      // Submit to eCount ERP using CORRECTED endpoint and proper error handling
       try {
-        const ecountOrderId = await ecountApi.createSalesOrder(order);
-        console.log(`Order ${order.orderNumber} created in eCount with ID: ${ecountOrderId}`);
+        const erpResult = await ecountApi.submitSaleOrder(order, userProfile);
         
-        // Could update order status to indicate eCount sync success
+        // Update order with ERP reference numbers using correct schema fields
+        const updatedOrder = await storage.updateOrderErpInfo(order.id, {
+          erpDocNumber: erpResult.docNo,
+          erpIoDate: erpResult.ioDate,
+          erpSyncStatus: 'synced'
+        });
+        
+        console.log(`✅ Order ${order.orderNumber} successfully synced to eCount ERP`);
+        console.log(`📄 ERP Doc: ${erpResult.docNo}, Date: ${erpResult.ioDate}`);
+        
         res.json({ 
           success: true, 
-          order: {
-            ...order,
-            ecountOrderId
+          order: updatedOrder,
+          erp: {
+            docNumber: erpResult.docNo,
+            ioDate: erpResult.ioDate,
+            syncStatus: 'synced'
           }
         });
       } catch (ecountError) {
-        console.error('Failed to create order in eCount:', ecountError);
-        // Still return success for local order, but log the eCount failure
+        console.error('❌ Failed to sync order to eCount ERP:', ecountError);
+        
+        // Update order with error status
+        await storage.updateOrderErpInfo(order.id, {
+          erpSyncStatus: 'failed',
+          erpSyncError: ecountError instanceof Error ? ecountError.message : 'Unknown ERP error'
+        });
+        
+        // Still return success for local order, but indicate ERP sync failure
         res.json({ 
           success: true, 
           order,
-          warning: "Order created locally but failed to sync with ERP"
+          warning: "Order created but failed to sync with eCount ERP",
+          erpError: ecountError instanceof Error ? ecountError.message : 'Unknown ERP error'
         });
       }
     } catch (error) {
-      res.status(400).json({ message: "Failed to create order", error });
+      console.error('❌ Failed to create order:', error);
+      res.status(400).json({ 
+        message: "Failed to create order", 
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
+  // Dedicated eCount sales endpoint for manual testing/retries
+  app.post("/api/ecount/sales", requireAuth, enforceSaveRateLimit, async (req, res) => {
+    try {
+      const { orderId } = req.body;
+      const userProfile = (req as any).userProfile;
+      
+      if (!orderId) {
+        return res.status(400).json({ message: "Order ID is required" });
+      }
+      
+      // Get order from storage
+      const order = await storage.getOrderById(orderId);
+      if (!order) {
+        return res.status(404).json({ message: "Order not found" });
+      }
+      
+      // Check if already synced
+      if (order.erpSyncStatus === 'synced') {
+        return res.json({
+          success: true,
+          message: "Order already synced to eCount ERP",
+          erp: {
+            docNumber: order.erpDocNumber,
+            ioDate: order.erpIoDate,
+            syncStatus: order.erpSyncStatus
+          }
+        });
+      }
+      
+      // Submit to eCount ERP
+      const erpResult = await ecountApi.submitSaleOrder(order, userProfile);
+      
+      // Update order with ERP reference numbers
+      const updatedOrder = await storage.updateOrderErpInfo(order.id, {
+        erpDocNumber: erpResult.docNo,
+        erpIoDate: erpResult.ioDate,
+        erpSyncStatus: 'synced',
+        erpSyncError: null // Clear any previous error
+      });
+      
+      console.log(`✅ Manual ERP sync successful for order ${order.orderNumber}`);
+      
+      res.json({
+        success: true,
+        message: "Order successfully synced to eCount ERP",
+        order: updatedOrder,
+        erp: {
+          docNumber: erpResult.docNo,
+          ioDate: erpResult.ioDate,
+          syncStatus: 'synced'
+        }
+      });
+    } catch (error) {
+      console.error('❌ Manual ERP sync failed:', error);
+      
+      // Update order with error status if we have the order
+      if (req.body.orderId) {
+        try {
+          await storage.updateOrderErpInfo(req.body.orderId, {
+            erpSyncStatus: 'failed',
+            erpSyncError: error instanceof Error ? error.message : 'Unknown ERP error'
+          });
+        } catch (updateError) {
+          console.error('Failed to update order error status:', updateError);
+        }
+      }
+      
+      res.status(500).json({
+        success: false,
+        message: "Failed to sync order to eCount ERP",
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
     }
   });
 

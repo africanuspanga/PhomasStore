@@ -38,6 +38,11 @@ export const orders = pgTable("orders", {
   tax: decimal("tax", { precision: 10, scale: 2 }).notNull(),
   total: decimal("total", { precision: 10, scale: 2 }).notNull(),
   status: text("status").notNull().default("processing"),
+  // eCount ERP Integration fields
+  erpDocNumber: text("erp_doc_number"), // DOC_NO from eCount SaveSale response
+  erpIoDate: text("erp_io_date"), // IO_DATE from eCount SaveSale (YYYYMMDD format)
+  erpSyncStatus: text("erp_sync_status").default("pending"), // "pending", "synced", "failed"
+  erpSyncError: text("erp_sync_error"), // Error message if sync fails
   createdAt: timestamp("created_at").defaultNow(),
 });
 

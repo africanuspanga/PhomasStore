@@ -1,0 +1,43 @@
+Based on the documents and requests you've shared, I can give you a deep dive into the primary eCOUNT ERP API endpoints. This is the "map" you need to navigate the system's capabilities.
+
+The key to understanding these URLs is to remember the two placeholder variables that are unique to your setup:
+
+* **`{ZONE}`**: Your specific eCOUNT instance zone. You've already confirmed this is **`IA`**.
+* **`{SESSION_ID}`**: The session ID you get after a successful login. It is valid for a limited time.
+
+Here are the most common endpoints, categorized by their function.
+
+---
+
+### **1. Authentication Endpoints**
+
+This is always the first step. You `POST` your company code and authentication key to the login API to receive your `SESSION_ID`.
+
+| Endpoint | Method | URL Format |
+| :--- | :--- | :--- |
+| **Login** | `POST` | `https://oapi{ZONE}.ecount.com/OAPI/V2/Login` |
+
+### **2. `GET` Endpoints: For Reading Data**
+
+These endpoints are used to "pull" or retrieve data from your ERP, such as inventory levels, customer lists, or past sales records. They use a **`GET`** method and do not require a JSON body.
+
+| Endpoint | Method | URL Format | Description |
+| :--- | :--- | :--- | :--- |
+| **GetProductList** | `GET` | `https://oapi{ZONE}.ecount.com/OAPI/V2/Product/GetProductList?SESSION_ID={SESSION_ID}` | Retrieves all your product information, including inventory balances. This is the call you'll need for your external shop. |
+| **GetCustomerList** | `GET` | `https://oapi{ZONE}.ecount.com/OAPI/V2/Customer/GetCustomerList?SESSION_ID={SESSION_ID}` | Retrieves a list of all customers in your ERP. |
+| **GetSalesList** | `GET` | `https://oapi{ZONE}.ecount.com/OAPI/V2/Sales/GetSalesList?SESSION_ID={SESSION_ID}` | Retrieves a list of past sales orders. You can usually filter this by date. |
+| **GetJobOrderList** | `GET` | `https://oapi{ZONE}.ecount.com/OAPI/V2/JobOrder/GetJobOrderList?SESSION_ID={SESSION_ID}` | Retrieves a list of your job orders. |
+
+### **3. `POST` Endpoints: For Creating or Updating Data**
+
+These endpoints are used to "push" or save data to your ERP. They require a **`POST`** method and a JSON body containing the data you want to save. 
+
+| Endpoint | Method | URL Format | Description |
+| :--- | :--- | :--- | :--- |
+| **SaveSale** | `POST` | `https://oapi{ZONE}.ecount.com/OAPI/V2/Sales/SaveSale?SESSION_ID={SESSION_ID}` | Creates a new sales record in your ERP. |
+| **SaveQuotation** | `POST` | `https://oapi{ZONE}.ecount.com/OAPI/V2/Quotation/SaveQuotation?SESSION_ID={SESSION_ID}` | Creates a new quotation. The JSON payload is different from a sales record. |
+| **SaveJobOrder** | `POST` | `https://oapi{ZONE}.ecount.com/OAPI/V2/JobOrder/SaveJobOrder?SESSION_ID={SESSION_ID}` | Creates a new job order. This endpoint uses a `BulkDatas` structure as we've already identified. |
+| **SaveCustomer** | `POST` | `https://oapi{ZONE}.ecount.com/OAPI/V2/Customer/SaveCustomer?SESSION_ID={SESSION_ID}` | Creates a new customer record. |
+| **SaveProduct** | `POST` | `https://oapi{ZONE}.ecount.com/OAPI/V2/Product/SaveProduct?SESSION_ID={SESSION_ID}` | Creates a new product item in your ERP. |
+
+I recommend you bookmark this list. Now that you have the URLs and methods, you can test each one with your `ZONE` and `SESSION_ID` to understand their specific data requirements.

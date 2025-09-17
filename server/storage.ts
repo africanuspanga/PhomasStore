@@ -28,8 +28,15 @@ export interface IStorage {
 
   // Order management
   createOrder(order: InsertOrder): Promise<Order>;
+  getOrderById(id: string): Promise<Order | undefined>;
   getOrdersByUserId(userId: string): Promise<Order[]>;
   getAllOrders(): Promise<Order[]>;
+  updateOrderErpInfo(orderId: string, erpInfo: {
+    erpDocNumber?: string;
+    erpIoDate?: string;
+    erpSyncStatus?: string;
+    erpSyncError?: string | null;
+  }): Promise<Order>;
 }
 
 export class MemStorage implements IStorage {
@@ -274,6 +281,11 @@ export class MemStorage implements IStorage {
       orderNumber,
       status: insertOrder.status || "processing",
       createdAt: new Date(),
+      // Initialize ERP fields with null values
+      erpDocNumber: null,
+      erpIoDate: null,
+      erpSyncStatus: "pending",
+      erpSyncError: null,
     };
     
     this.orders.set(id, order);
@@ -296,6 +308,34 @@ export class MemStorage implements IStorage {
   async getAllOrders(): Promise<Order[]> {
     return Array.from(this.orders.values())
       .sort((a, b) => new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime());
+  }
+
+  async getOrderById(id: string): Promise<Order | undefined> {
+    return this.orders.get(id);
+  }
+
+  async updateOrderErpInfo(orderId: string, erpInfo: {
+    erpDocNumber?: string;
+    erpIoDate?: string;
+    erpSyncStatus?: string;
+    erpSyncError?: string | null;
+  }): Promise<Order> {
+    const order = this.orders.get(orderId);
+    if (!order) {
+      throw new Error(`Order with ID ${orderId} not found`);
+    }
+
+    // Update order with ERP information
+    const updatedOrder: Order = {
+      ...order,
+      erpDocNumber: erpInfo.erpDocNumber !== undefined ? erpInfo.erpDocNumber : order.erpDocNumber,
+      erpIoDate: erpInfo.erpIoDate !== undefined ? erpInfo.erpIoDate : order.erpIoDate,
+      erpSyncStatus: erpInfo.erpSyncStatus !== undefined ? erpInfo.erpSyncStatus : order.erpSyncStatus,
+      erpSyncError: erpInfo.erpSyncError !== undefined ? erpInfo.erpSyncError : order.erpSyncError,
+    };
+
+    this.orders.set(orderId, updatedOrder);
+    return updatedOrder;
   }
 }
 

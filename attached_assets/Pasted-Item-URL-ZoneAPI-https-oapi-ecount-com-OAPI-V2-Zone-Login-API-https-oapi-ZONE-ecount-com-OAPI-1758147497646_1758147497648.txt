@@ -1,0 +1,23 @@
+Item	URL
+ZoneAPI	https://oapi.ecount.com/OAPI/V2/Zone
+Login API	https://oapi{ZONE}.ecount.com/OAPI/V2/OAPILogin
+Reg. Customer/Vendor	https://oapi{ZONE}.ecount.com/OAPI/V2/AccountBasic/SaveBasicCust?SESSION_ID={SESSION_ID}
+New Item	https://oapi{ZONE}.ecount.com/OAPI/V2/InventoryBasic/SaveBasicProduct?SESSION_ID={SESSION_ID}
+Search Item (1 data)	https://oapi{ZONE}.ecount.com/OAPI/V2/InventoryBasic/ViewBasicProduct?SESSION_ID={SESSION_ID}
+Search Item	https://oapi{ZONE}.ecount.com/OAPI/V2/InventoryBasic/GetBasicProductsList?SESSION_ID={SESSION_ID}
+New Quotation	https://oapi{ZONE}.ecount.com/OAPI/V2/Quotation/SaveQuotation?SESSION_ID={SESSION_ID}
+New Sales Order	https://oapi{ZONE}.ecount.com/OAPI/V2/SaleOrder/SaveSaleOrder?SESSION_ID={SESSION_ID}
+New Sales	https://oapi{ZONE}.ecount.com/OAPI/V2/Sale/SaveSale?SESSION_ID={SESSION_ID}
+Purchase Order List	https://oapi{ZONE}.ecount.com/OAPI/V2/Purchases/GetPurchasesOrderList?SESSION_ID={SESSION_ID}
+New Purchases	https://oapi{ZONE}.ecount.com/OAPI/V2/Purchases/SavePurchases?SESSION_ID={SESSION_ID}
+New Job Order	https://oapi{ZONE}.ecount.com/OAPI/V2/JobOrder/SaveJobOrder?SESSION_ID={SESSION_ID}
+New Goods Issued	https://oapi{ZONE}.ecount.com/OAPI/V2/GoodsIssued/SaveGoodsIssued?SESSION_ID={SESSION_ID}
+Goods Receipt I	https://oapi{ZONE}.ecount.com/OAPI/V2/GoodsReceipt/SaveGoodsReceipt?SESSION_ID={SESSION_ID}
+Sales · Purchase Invoice II Auto Journalization	https://oapi{ZONE}.ecount.com/OAPI/V2/InvoiceAuto/SaveInvoiceAuto?SESSION_ID={SESSION_ID}
+Inventory Balance (1 data)	https://oapi{ZONE}.ecount.com/OAPI/V2/InventoryBalance/ViewInventoryBalanceStatus?SESSION_ID={SESSION_ID}
+Inventory Balance	https://oapi{ZONE}.ecount.com/OAPI/V2/InventoryBalance/GetListInventoryBalanceStatus?SESSION_ID={SESSION_ID}
+Inv. Balance by Location (single item)	https://oapi{ZONE}.ecount.com/OAPI/V2/InventoryBalance/ViewInventoryBalanceStatusByLocation?SESSION_ID={SESSION_ID}
+Inv. Balance by Location	https://oapi{ZONE}.ecount.com/OAPI/V2/InventoryBalance/GetListInventoryBalanceStatusByLocation?SESSION_ID={SESSION_ID}
+Order API (Online Store Mgmt)	https://oapi{ZONE}.ecount.com/OAPI/V2/OpenMarket/SaveOpenMarketOrderNew?SESSION_ID={SESSION_ID}
+Clock In/Out Record(Employee)	https://oapi{ZONE}.ecount.com/OAPI/V2/TimeMgmt/SaveClockInOut?SESSION_ID={SESSION_ID}
+Board Input	https://oapi{ZONE}.ecount.com/ec5/api/app.oapi.v3/action/CreateOApiBoardAction?SESSION_ID={SESSION_ID}
