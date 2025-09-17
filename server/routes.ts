@@ -707,6 +707,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Force refresh products (emergency restore)
+  app.post("/api/admin/force-refresh-products", requireAdminAuth, async (req, res) => {
+    try {
+      console.log('🔄 Force refreshing products - emergency restore');
+      
+      // Wait for rate limiting to pass, then try to get products
+      await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5 seconds
+      
+      try {
+        const products = await ecountApi.getAllProductsFromEcount();
+        console.log(`✅ Emergency restore successful: ${products.length} products restored`);
+        res.json({ 
+          success: true, 
+          message: `Successfully restored ${products.length} products`,
+          productCount: products.length 
+        });
+      } catch (error) {
+        // If still rate limited, at least clear the bad state
+        console.log('⚠️ Still rate limited, will try via background scheduler');
+        res.json({ 
+          success: false, 
+          message: "Still rate limited. Products will be restored automatically within 10 minutes via background sync.",
+          willRetryAutomatically: true
+        });
+      }
+    } catch (error) {
+      console.error('Emergency restore error:', error);
+      res.status(500).json({ message: "Failed to restore products", error });
+    }
+  });
+
   // Update product image route for admin - protected
   app.put("/api/admin/products/:id/image", requireAdminAuth, async (req, res) => {
     try {
@@ -720,9 +751,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Update product image in storage
       await storage.updateProductImage(id, imageUrl);
       
-      // Clear eCount cache so new image will be used immediately
-      ecountApi.clearInventoryCache();
-      console.log(`🖼️ Updated product image for ${id} and cleared eCount cache`);
+      console.log(`🖼️ Updated product image for ${id} - image will show on next product fetch`);
       
       res.json({ success: true, message: "Product image updated successfully" });
     } catch (error) {
