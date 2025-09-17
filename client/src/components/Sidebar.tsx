@@ -12,6 +12,7 @@ import {
   List, 
   AlertTriangle, 
   Settings,
+  LogOut,
   X
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
@@ -23,8 +24,13 @@ interface SidebarProps {
 
 export function Sidebar({ open, onClose }: SidebarProps) {
   const { itemCount } = useCart();
-  const { isAdmin } = useAuth();
+  const { isAdmin, user, adminUser, logout } = useAuth();
   const [location] = useLocation();
+  
+  const handleLogout = () => {
+    logout();
+    onClose(); // Close sidebar after logout
+  };
 
   const navItems = [
     { href: "/", icon: Home, label: "Home Page", active: location === "/" },
@@ -115,6 +121,30 @@ export function Sidebar({ open, onClose }: SidebarProps) {
                 ))}
               </div>
             )}
+
+            {/* User Info and Logout Section */}
+            <div className="border-t border-gray-200 mt-6 pt-6">
+              {/* User Welcome Message */}
+              <div className="px-4 py-2 mb-3">
+                <p className="text-sm text-gray-600 font-medium">
+                  Welcome, {adminUser?.email || user?.name || 'User'}
+                </p>
+              </div>
+
+              {/* Logout Button */}
+              <div className="px-4">
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={handleLogout}
+                  className="w-full justify-start text-gray-700 hover:bg-gray-100"
+                  data-testid="button-logout-mobile"
+                >
+                  <LogOut className="w-5 h-5 mr-3" />
+                  <span className="font-medium">Logout</span>
+                </Button>
+              </div>
+            </div>
           </div>
         </div>
       </nav>

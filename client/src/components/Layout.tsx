@@ -41,7 +41,7 @@ export function Layout({ children }: LayoutProps) {
 
             <div className="hidden md:flex items-center space-x-6">
               <div className="flex items-center space-x-4">
-                <span className="text-sm text-gray-600">Welcome, {user?.companyName}</span>
+                <span className="text-sm text-gray-600">Welcome, {user?.name}</span>
                 <div className="flex items-center space-x-2">
                   <Link href="/cart">
                     <Button variant="ghost" size="sm" className="relative">
