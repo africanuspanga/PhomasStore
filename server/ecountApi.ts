@@ -392,21 +392,21 @@ class EcountApiService {
       const productList = await this.getProductList();
       
       if (productList && productList.length > 0) {
-        // Transform eCount product data to our format
-        const products = await Promise.all(productList.map(async (product: any) => ({
+        // Transform eCount product data to our format (no images - handled separately)
+        const products = productList.map((product: any) => ({
           id: product.PROD_CD,
           name: this.generateProductName(product.PROD_CD),
           packaging: 'Standard',
           referenceNumber: product.PROD_CD,
           price: '25000', // Will be updated from admin later
-          imageUrl: await this.getProductImage(product.PROD_CD),
+          imageUrl: null, // Images handled by separate /api/images system
           category: this.getCategoryFromCode(product.PROD_CD),
           availableQuantity: parseInt(product.BAL_QTY || '0'),
           isLowStock: parseInt(product.BAL_QTY || '0') < 10,
           isExpiringSoon: false,
           hasRealTimeData: true,
           lastUpdated: new Date().toISOString()
-        })));
+        }));
         
         console.log(`✅ Successfully got ${products.length} products from eCount GetProductList`);
         return products;
@@ -550,7 +550,7 @@ class EcountApiService {
    * Transform eCount item data to product format with inventory information
    */
   private async transformItemsToProducts(itemData: EcountProduct[], inventoryMap: Map<string, number>): Promise<ProductWithInventory[]> {
-    return await Promise.all(itemData.map(async (item) => {
+    return itemData.map((item) => {
       const availableQuantity = inventoryMap.get(item.PROD_CD) || 0;
       return {
         id: item.PROD_CD,
@@ -558,31 +558,31 @@ class EcountApiService {
         packaging: item.SIZE_DES || 'Standard',
         referenceNumber: item.PROD_CD,
         price: this.convertEcountPrice(item.PRICE || '25000'),
-        imageUrl: await this.getProductImage(item.PROD_CD),
+        imageUrl: null, // Images handled by separate /api/images system
         category: item.CATEGORY || this.getCategoryFromCode(item.PROD_CD),
         availableQuantity,
         isLowStock: availableQuantity < 10,
         isExpiringSoon: false
       };
-    }));
+    });
   }
 
   /**
    * Transform eCount inventory data to product format (fallback)
    */
   private async transformInventoryToProducts(inventoryData: EcountInventory[]): Promise<ProductWithInventory[]> {
-    return await Promise.all(inventoryData.map(async (item) => ({
+    return inventoryData.map((item) => ({
       id: item.PROD_CD,
       name: this.generateProductName(item.PROD_CD),
       packaging: 'Standard',
       referenceNumber: item.PROD_CD,
       price: '25000', // Default price, will be updated from admin later
-      imageUrl: await this.getProductImage(item.PROD_CD),
+      imageUrl: null, // Images handled by separate /api/images system
       category: this.getCategoryFromCode(item.PROD_CD),
       availableQuantity: item.BAL_QTY || 0,
       isLowStock: (item.BAL_QTY || 0) < 10,
       isExpiringSoon: false
-    })));
+    }));
   }
 
   /**
@@ -718,33 +718,6 @@ class EcountApiService {
     return Math.round(numPrice).toString();
   }
 
-  /**
-   * Get product image URL - checks for custom uploaded images first, then fallback to default
-   */
-  private async getProductImage(productCode: string): Promise<string> {
-    try {
-      // First check if there's a custom uploaded image in storage
-      const products = await storage.getAllProducts();
-      const productWithCustomImage = products.find((p: any) => p.id === productCode);
-      
-      if (productWithCustomImage?.imageUrl) {
-        console.log(`🖼️ Using custom uploaded image for ${productCode}`);
-        return productWithCustomImage.imageUrl;
-      }
-      
-      // Fallback to default medical supply images based on product code patterns
-      const defaultImages = {
-        'default': 'https://images.unsplash.com/photo-1559757148-5c350d0d3c56?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300'
-      };
-      
-      console.log(`📷 Using default image for ${productCode}`);
-      return defaultImages.default;
-    } catch (error) {
-      console.error(`❌ Error getting image for ${productCode}:`, error);
-      // Return default on error
-      return 'https://images.unsplash.com/photo-1559757148-5c350d0d3c56?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300';
-    }
-  }
 
   /**
    * Bulk product sync - downloads complete product catalog (rate limited: 1 per 10 minutes)
@@ -777,7 +750,7 @@ class EcountApiService {
       
       if (inventoryResult.Status === "200" && inventoryData.length > 0) {
         // Build products using USER'S EXCEL DATA + live stock
-        const products = await Promise.all(inventoryData.map(async (product: any, index: number) => {
+        const products = inventoryData.map((product: any, index: number) => {
           const productCode = product.PROD_CD;
           const excelProduct = ProductMapping.getProduct(productCode);
           
@@ -793,7 +766,7 @@ class EcountApiService {
             packaging: excelProduct?.uom || 'Standard',
             referenceNumber: productCode,
             price: excelProduct?.price?.toString() || '25000', // USER'S REAL PRICES!
-            imageUrl: await this.getProductImage(productCode),
+            imageUrl: null, // Images handled by separate /api/images system
             category: excelProduct?.category || this.getCategoryFromCode(productCode),
             availableQuantity: parseInt(product.BAL_QTY || '0'), // LIVE stock from eCount
             isLowStock: parseInt(product.BAL_QTY || '0') < 10,
@@ -803,7 +776,7 @@ class EcountApiService {
             description: excelProduct?.name || '',
             specification: excelProduct?.uom || ''
           };
-        }));
+        });
         
         // Count real vs generated names
         const realNamesCount = products.filter((p: any) => !p.name.includes('Medical Product') && !p.name.includes('Medical Supply')).length;
@@ -1015,7 +988,7 @@ class EcountApiService {
       const productList = await this.getProductList(); // Just stock data
       
       // Transform eCount data using REAL product names from USER'S EXCEL FILE + live stock
-      const products = await Promise.all(productList.map(async (product: any, index: number) => {
+      const products = productList.map((product: any, index: number) => {
         const productCode = product.PROD_CD;
         
         // Get REAL product data from user's Excel file
@@ -1033,7 +1006,7 @@ class EcountApiService {
           packaging: excelProduct?.uom || 'Standard', // Real UOM from Excel
           referenceNumber: productCode,
           price: excelProduct?.price?.toString() || '25000', // USER'S REAL PRICES!
-          imageUrl: await this.getProductImage(productCode),
+          imageUrl: null, // Images handled by separate /api/images system
           category: excelProduct?.category || this.getCategoryFromCode(productCode), // Smart categories
           availableQuantity: parseInt(product.BAL_QTY || '0'), // LIVE stock from eCount
           isLowStock: parseInt(product.BAL_QTY || '0') < 10,
@@ -1043,7 +1016,7 @@ class EcountApiService {
           description: excelProduct?.name || '', // Use product name as description
           specification: excelProduct?.uom || ''
         };
-      }));
+      });
       
       // Count how many products have real vs generated names  
       const realNamesCount = products.filter(p => !p.name.includes('Medical Product') && !p.name.includes('Medical Supply')).length;

@@ -738,7 +738,135 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Update product image route for admin - protected
+  // NEW IMAGE API - completely separate from eCount system
+  
+  // Upload image for specific product code
+  app.post("/api/images/upload", requireAdminAuth, upload.single('image'), async (req, res) => {
+    try {
+      const { productCode } = req.body;
+      
+      if (!req.file) {
+        return res.status(400).json({ error: "No image file provided" });
+      }
+      
+      if (!productCode) {
+        return res.status(400).json({ error: "Product code is required" });
+      }
+
+      // Upload to Cloudinary
+      const result = await new Promise<any>((resolve, reject) => {
+        cloudinary.uploader.upload_stream(
+          {
+            resource_type: "image",
+            folder: "phomas-products",
+            transformation: [
+              { width: 800, height: 600, crop: "limit" },
+              { quality: "auto" },
+              { format: "auto" }
+            ]
+          },
+          (error, result) => {
+            if (error) reject(error);
+            else resolve(result);
+          }
+        ).end(req.file!.buffer);
+      });
+
+      // Store image mapping
+      await storage.setProductImage(productCode, result.secure_url);
+      
+      console.log(`🖼️ New image uploaded for product ${productCode}: ${result.secure_url}`);
+      
+      res.json({
+        success: true,
+        productCode,
+        imageUrl: result.secure_url,
+        publicId: result.public_id
+      });
+    } catch (error) {
+      console.error('Image upload error:', error);
+      res.status(500).json({ error: "Failed to upload image" });
+    }
+  });
+
+  // Set image URL for product code (for external URLs)
+  app.post("/api/images/set-url", requireAdminAuth, async (req, res) => {
+    try {
+      const { productCode, imageUrl } = req.body;
+      
+      if (!productCode || !imageUrl) {
+        return res.status(400).json({ error: "Product code and image URL are required" });
+      }
+
+      await storage.setProductImage(productCode, imageUrl);
+      
+      console.log(`🖼️ Set external image for product ${productCode}: ${imageUrl}`);
+      
+      res.json({
+        success: true,
+        productCode,
+        imageUrl
+      });
+    } catch (error) {
+      console.error('Set image URL error:', error);
+      res.status(500).json({ error: "Failed to set image URL" });
+    }
+  });
+
+  // Get images for multiple product codes (batch)
+  app.get("/api/images", async (req, res) => {
+    try {
+      const codes = req.query.codes;
+      
+      if (!codes) {
+        return res.status(400).json({ error: "codes parameter is required" });
+      }
+      
+      const productCodes = typeof codes === 'string' ? codes.split(',') : [];
+      const images = await storage.getProductImages(productCodes);
+      
+      res.setHeader('Cache-Control', 'public, max-age=300'); // 5 minute cache
+      res.json({ images });
+    } catch (error) {
+      console.error('Get images error:', error);
+      res.status(500).json({ error: "Failed to get images" });
+    }
+  });
+
+  // Get single image by product code
+  app.get("/api/images/:code", async (req, res) => {
+    try {
+      const { code } = req.params;
+      const imageUrl = await storage.getProductImage(code);
+      
+      if (!imageUrl) {
+        return res.status(404).json({ error: "Image not found" });
+      }
+      
+      res.setHeader('Cache-Control', 'public, max-age=300'); // 5 minute cache
+      res.json({ imageUrl });
+    } catch (error) {
+      console.error('Get single image error:', error);
+      res.status(500).json({ error: "Failed to get image" });
+    }
+  });
+
+  // Delete image by product code
+  app.delete("/api/images/:code", requireAdminAuth, async (req, res) => {
+    try {
+      const { code } = req.params;
+      await storage.deleteProductImage(code);
+      
+      console.log(`🗑️ Deleted image for product ${code}`);
+      
+      res.json({ success: true, productCode: code });
+    } catch (error) {
+      console.error('Delete image error:', error);
+      res.status(500).json({ error: "Failed to delete image" });
+    }
+  });
+
+  // Update product image route for admin - protected (LEGACY - will be removed)
   app.put("/api/admin/products/:id/image", requireAdminAuth, async (req, res) => {
     try {
       const { id } = req.params;

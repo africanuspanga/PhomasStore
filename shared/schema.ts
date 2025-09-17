@@ -52,6 +52,16 @@ export const profiles = pgTable("profiles", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// Product Images - completely separate from eCount system
+export const productImages = pgTable("product_images", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  productCode: text("product_code").notNull().unique(), // eCount product code
+  imageUrl: text("image_url").notNull(), // Cloudinary URL
+  priority: integer("priority").default(0), // For multiple images per product
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 export const insertUserSchema = createInsertSchema(users).pick({
   email: true,
   password: true,
@@ -92,6 +102,12 @@ export const insertOrderSchema = createInsertSchema(orders).omit({
   createdAt: true,
 });
 
+export const insertProductImageSchema = createInsertSchema(productImages).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type LoginUser = z.infer<typeof loginSchema>;
 export type User = typeof users.$inferSelect;
@@ -106,6 +122,8 @@ export type SupabaseLogin = z.infer<typeof supabaseLoginSchema>;
 export type Profile = typeof profiles.$inferSelect;
 export type InsertInventory = z.infer<typeof insertInventorySchema>;
 export type InsertOrder = z.infer<typeof insertOrderSchema>;
+export type ProductImage = typeof productImages.$inferSelect;
+export type InsertProductImage = z.infer<typeof insertProductImageSchema>;
 
 // Extended types for API responses
 export type ProductWithInventory = Product & {

@@ -1,4 +1,4 @@
-import { type User, type InsertUser, type Product, type InsertProduct, type Inventory, type InsertInventory, type Order, type InsertOrder, type ProductWithInventory, type OrderItem } from "@shared/schema";
+import { type User, type InsertUser, type Product, type InsertProduct, type Inventory, type InsertInventory, type Order, type InsertOrder, type ProductWithInventory, type OrderItem, type ProductImage, type InsertProductImage } from "@shared/schema";
 import { randomUUID } from "crypto";
 
 export interface IStorage {
@@ -19,8 +19,12 @@ export interface IStorage {
   getAllInventory(): Promise<Inventory[]>;
   updateInventory(productId: string, quantity: number): Promise<void>;
 
-  // Product image management
-  updateProductImage(productId: string, imageUrl: string): Promise<void>;
+  // Product image management (NEW - completely separate from eCount)
+  getProductImage(productCode: string): Promise<string | null>;
+  setProductImage(productCode: string, imageUrl: string, priority?: number): Promise<void>;
+  getProductImages(productCodes: string[]): Promise<Record<string, string>>;
+  deleteProductImage(productCode: string): Promise<void>;
+  updateProductImage(productId: string, imageUrl: string): Promise<void>; // Legacy - will be removed
 
   // Order management
   createOrder(order: InsertOrder): Promise<Order>;
@@ -33,6 +37,7 @@ export class MemStorage implements IStorage {
   private products: Map<string, Product> = new Map();
   private inventory: Map<string, Inventory> = new Map();
   private orders: Map<string, Order> = new Map();
+  private productImages: Map<string, ProductImage> = new Map();
 
   constructor() {
     this.initializeData();
@@ -206,6 +211,56 @@ export class MemStorage implements IStorage {
       this.inventory.set(productId, defaultInventory);
       
       console.log(`✅ Created metadata record for eCount-only product: ${productId}`);
+    }
+  }
+
+  // NEW IMAGE MANAGEMENT METHODS - completely separate from eCount
+  async getProductImage(productCode: string): Promise<string | null> {
+    const productImage = this.productImages.get(productCode);
+    return productImage?.imageUrl || null;
+  }
+
+  async setProductImage(productCode: string, imageUrl: string, priority: number = 0): Promise<void> {
+    const existingImage = this.productImages.get(productCode);
+    
+    if (existingImage) {
+      // Update existing image
+      existingImage.imageUrl = imageUrl;
+      existingImage.priority = priority;
+      existingImage.updatedAt = new Date();
+    } else {
+      // Create new image record
+      const newImage: ProductImage = {
+        id: randomUUID(),
+        productCode,
+        imageUrl,
+        priority,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      this.productImages.set(productCode, newImage);
+    }
+    
+    console.log(`🖼️ Set image for product ${productCode}: ${imageUrl}`);
+  }
+
+  async getProductImages(productCodes: string[]): Promise<Record<string, string>> {
+    const result: Record<string, string> = {};
+    
+    for (const code of productCodes) {
+      const productImage = this.productImages.get(code);
+      if (productImage) {
+        result[code] = productImage.imageUrl;
+      }
+    }
+    
+    return result;
+  }
+
+  async deleteProductImage(productCode: string): Promise<void> {
+    const deleted = this.productImages.delete(productCode);
+    if (deleted) {
+      console.log(`🗑️ Deleted image for product ${productCode}`);
     }
   }
 
