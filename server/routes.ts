@@ -720,6 +720,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Update product image in storage
       await storage.updateProductImage(id, imageUrl);
       
+      // Clear eCount cache so new image will be used immediately
+      ecountApi.clearInventoryCache();
+      console.log(`🖼️ Updated product image for ${id} and cleared eCount cache`);
+      
       res.json({ success: true, message: "Product image updated successfully" });
     } catch (error) {
       console.error('Update product image error:', error);
