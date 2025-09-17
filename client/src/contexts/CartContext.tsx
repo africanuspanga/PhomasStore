@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import type { CartItem } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface CartContextType {
   items: CartItem[];
@@ -22,23 +23,46 @@ const TAX_RATE = 0.18; // 18% tax rate
 export function CartProvider({ children }: { children: React.ReactNode }) {
   const [items, setItems] = useState<CartItem[]>([]);
   const { toast } = useToast();
+  const { user, adminUser, isAuthenticated } = useAuth();
 
-  // Load cart from localStorage on init
+  // Get current user identifier for cart storage
+  const getCurrentUserId = () => {
+    if (adminUser) return `admin-${adminUser.id}`;
+    if (user) return user.id || user.userId;
+    return 'guest';
+  };
+
+  const getCartKey = () => `phomas_cart_${getCurrentUserId()}`;
+
+  // Load cart from localStorage when user changes
   useEffect(() => {
-    const savedCart = localStorage.getItem("phomas_cart");
+    if (!isAuthenticated) {
+      // Clear cart when not authenticated
+      setItems([]);
+      return;
+    }
+
+    const cartKey = getCartKey();
+    const savedCart = localStorage.getItem(cartKey);
     if (savedCart) {
       try {
         setItems(JSON.parse(savedCart));
       } catch (error) {
-        localStorage.removeItem("phomas_cart");
+        localStorage.removeItem(cartKey);
+        setItems([]);
       }
+    } else {
+      setItems([]);
     }
-  }, []);
+  }, [user, adminUser, isAuthenticated]);
 
   // Save cart to localStorage whenever items change
   useEffect(() => {
-    localStorage.setItem("phomas_cart", JSON.stringify(items));
-  }, [items]);
+    if (isAuthenticated) {
+      const cartKey = getCartKey();
+      localStorage.setItem(cartKey, JSON.stringify(items));
+    }
+  }, [items, user, adminUser, isAuthenticated]);
 
   const itemCount = items.reduce((total, item) => total + item.quantity, 0);
 

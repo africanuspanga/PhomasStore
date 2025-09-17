@@ -91,32 +91,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const loadUserProfile = async (userId: string) => {
     try {
-      // Try to load profile from Supabase profiles table
-      const { data: profile, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('user_id', userId)
-        .single();
+      // Get current user data for fallback
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
 
-      if (error) {
-        console.error('Error loading profile:', error);
-        // If profiles table not available, create a basic user object from auth metadata
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          setUser({
-            id: user.id,
-            userId: user.id,
-            name: user.user_metadata?.name || user.email?.split('@')[0] || 'User',
-            phone: user.user_metadata?.phone || '',
-            address: user.user_metadata?.address || '',
-            userType: user.user_metadata?.user_type || 'company',
-            createdAt: new Date(user.created_at)
-          });
+      // Try to load profile from Supabase profiles table (if it exists)
+      try {
+        const { data: profile, error } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('user_id', userId)
+          .single();
+
+        if (!error && profile) {
+          setUser(profile);
+          return;
         }
-        return;
+      } catch (profileError) {
+        // Profiles table doesn't exist or other error - use fallback
+        console.log('Using fallback authentication (profiles table not available)');
       }
 
-      setUser(profile);
+      // Fallback: create user object from auth metadata
+      setUser({
+        id: user.id,
+        userId: user.id,
+        name: user.user_metadata?.name || user.email?.split('@')[0] || 'User',
+        phone: user.user_metadata?.phone || '',
+        address: user.user_metadata?.address || '',
+        userType: user.user_metadata?.user_type || 'company',
+        createdAt: new Date(user.created_at)
+      });
     } catch (error) {
       console.error('Error loading user profile:', error);
     }
