@@ -1299,9 +1299,79 @@ class EcountApiService {
       // Perform bulk sync operations in sequence
       await this.bulkSyncProductsAndInventory();
       
+      // Retry failed orders
+      await this.retryFailedOrders();
+      
       console.log('✅ Background bulk sync completed successfully');
     } catch (error) {
       console.error('❌ Background bulk sync failed:', error);
+    }
+  }
+
+  /**
+   * Retry failed orders automatically in background
+   */
+  private async retryFailedOrders(): Promise<void> {
+    try {
+      // Import storage from the same module used throughout the app
+      const { storage } = await import('./storage');
+      if (!storage) {
+        console.log('⚠️ Storage not available for order retry');
+        return;
+      }
+
+      const failedOrders = await storage.getFailedOrders();
+      if (failedOrders.length === 0) {
+        console.log('✅ No failed orders to retry');
+        return;
+      }
+
+      console.log(`🔄 Retrying ${failedOrders.length} failed orders...`);
+      let retryCount = 0;
+      let successCount = 0;
+
+      for (const order of failedOrders) {
+        try {
+          console.log(`🔄 Retrying order ${order.orderNumber} (ID: ${order.id})`);
+          
+          // Create a user profile object for the order
+          const userProfile = {
+            email: order.userEmail || 'unknown@system.retry',
+            name: order.userEmail || 'System Retry'
+          };
+
+          // Attempt to submit the order to eCount
+          const erpResult = await this.submitSaleOrder(order, userProfile);
+          
+          // Update order with success status
+          await storage.updateOrderErpInfo(order.id, {
+            erpDocNumber: erpResult.docNo,
+            erpIoDate: erpResult.ioDate,
+            erpSyncStatus: 'synced',
+            erpSyncError: null
+          });
+          
+          successCount++;
+          console.log(`✅ Order ${order.orderNumber} successfully retried and synced to eCount`);
+          
+        } catch (retryError) {
+          retryCount++;
+          console.log(`❌ Order ${order.orderNumber} retry failed: ${retryError instanceof Error ? retryError.message : 'Unknown error'}`);
+          
+          // Update error status (don't change failed status - will retry again later)
+          await storage.updateOrderErpInfo(order.id, {
+            erpSyncError: `Retry failed: ${retryError instanceof Error ? retryError.message : 'Unknown error'}`
+          });
+        }
+        
+        // Add small delay between retries to avoid overwhelming eCount
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+
+      console.log(`📊 Order retry summary: ${successCount} succeeded, ${retryCount} failed, ${failedOrders.length} total`);
+      
+    } catch (error) {
+      console.error('❌ Failed order retry process failed:', error);
     }
   }
 

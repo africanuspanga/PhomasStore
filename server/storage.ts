@@ -35,6 +35,7 @@ export interface IStorage {
   getOrderById(id: string): Promise<Order | undefined>;
   getOrdersByUserId(userId: string): Promise<Order[]>;
   getAllOrders(): Promise<Order[]>;
+  getFailedOrders(): Promise<Order[]>;
   updateOrderErpInfo(orderId: string, erpInfo: {
     erpDocNumber?: string;
     erpIoDate?: string;
@@ -364,6 +365,12 @@ export class MemStorage implements IStorage {
 
   async getAllOrders(): Promise<Order[]> {
     return Array.from(this.orders.values())
+      .sort((a, b) => new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime());
+  }
+
+  async getFailedOrders(): Promise<Order[]> {
+    return Array.from(this.orders.values())
+      .filter(order => order.erpSyncStatus === 'failed')
       .sort((a, b) => new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime());
   }
 
