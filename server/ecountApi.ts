@@ -637,8 +637,115 @@ class EcountApiService {
         }
       }
       
+      // 🚀 NEW SALES ORDER API - Transform to SaleOrderList format
+      const saleOrderPayload = {
+        "SaleOrderList": mappedItems.map(item => ({
+          "BulkDatas": {
+            "IO_DATE": currentDate,
+            "UPLOAD_SER_NO": `SO_${order.orderNumber}_${currentDate}`,
+            "CUST": "10839", // FIXED: Use correct customer code
+            "CUST_DES": "Online Store Sales", // FIXED: Use correct customer name
+            "EMP_CD": "",
+            "WH_CD": "00001",
+            "IO_TYPE": "",
+            "EXCHANGE_TYPE": "",
+            "EXCHANGE_RATE": "",
+            "PJT_CD": "",
+            "DOC_NO": "",
+            "TTL_CTT": "",
+            "REF_DES": "",
+            "COLL_TERM": "",
+            "AGREE_TERM": "",
+            "TIME_DATE": "",
+            "REMARKS_WIN": "",
+            "U_MEMO1": "",
+            "U_MEMO2": "",
+            "U_MEMO3": "",
+            "U_MEMO4": "",
+            "U_MEMO5": "",
+            "ADD_TXT_01_T": "",
+            "ADD_TXT_02_T": "",
+            "ADD_TXT_03_T": "",
+            "ADD_TXT_04_T": "",
+            "ADD_TXT_05_T": "",
+            "ADD_TXT_06_T": "",
+            "ADD_TXT_07_T": "",
+            "ADD_TXT_08_T": "",
+            "ADD_TXT_09_T": "",
+            "ADD_TXT_10_T": "",
+            "ADD_NUM_01_T": "",
+            "ADD_NUM_02_T": "",
+            "ADD_NUM_03_T": "",
+            "ADD_NUM_04_T": "",
+            "ADD_NUM_05_T": "",
+            "ADD_CD_01_T": "",
+            "ADD_CD_02_T": "",
+            "ADD_CD_03_T": "",
+            "ADD_DATE_01_T": "",
+            "ADD_DATE_02_T": "",
+            "ADD_DATE_03_T": "",
+            "U_TXT1": "",
+            "ADD_LTXT_01_T": "",
+            "ADD_LTXT_02_T": "",
+            "ADD_LTXT_03_T": "",
+            "PROD_CD": item.productCode,
+            "PROD_DES": item.productName,
+            "SIZE_DES": "", // Could map item size if available
+            "UQTY": "",
+            "QTY": item.quantity.toString(),
+            "PRICE": item.price.toString(),
+            "USER_PRICE_VAT": "",
+            "SUPPLY_AMT": (item.quantity * item.price).toString(),
+            "SUPPLY_AMT_F": "",
+            "VAT_AMT": "",
+            "ITEM_TIME_DATE": "",
+            "REMARKS": `Order from Phomas Online Store - ${order.orderNumber}`,
+            "ITEM_CD": "",
+            "P_REMARKS1": "",
+            "P_REMARKS2": "",
+            "P_REMARKS3": "",
+            "ADD_TXT_01": "",
+            "ADD_TXT_02": "",
+            "ADD_TXT_03": "",
+            "ADD_TXT_04": "",
+            "ADD_TXT_05": "",
+            "ADD_TXT_06": "",
+            "REL_DATE": "",
+            "REL_NO": "",
+            "P_AMT1": "",
+            "P_AMT2": "",
+            "ADD_NUM_01": "",
+            "ADD_NUM_02": "",
+            "ADD_NUM_03": "",
+            "ADD_NUM_04": "",
+            "ADD_NUM_05": "",
+            "ADD_CD_01": "",
+            "ADD_CD_02": "",
+            "ADD_CD_03": "",
+            "ADD_CD_NM_01": "",
+            "ADD_CD_NM_02": "",
+            "ADD_CD_NM_03": "",
+            "ADD_CDNM_01": "",
+            "ADD_CDNM_02": "",
+            "ADD_CDNM_03": "",
+            "ADD_DATE_01": "",
+            "ADD_DATE_02": "",
+            "ADD_DATE_03": ""
+          }
+        }))
+      };
+      
+      console.log('🚀 NEW SALES ORDER API - Payload preview:', {
+        orderNumber: order.orderNumber,
+        customerCode: "10839",
+        customerName: "Online Store Sales",
+        itemsCount: mappedItems.length,
+        totalValue: mappedItems.reduce((sum, item) => sum + (item.quantity * item.price), 0),
+        payloadSize: JSON.stringify(saleOrderPayload).length
+      });
+      
       // CRITICAL FIX: Make API call with enhanced error handling and session retry logic
-      console.log('🚀 Sending SaveSale API request to eCount ERP...');
+      console.log('🚀 Sending NEW SALES ORDER API request to eCount ERP...');
       let result;
       let retryCount = 0;
       const maxRetries = 1;
@@ -646,8 +753,8 @@ class EcountApiService {
       while (retryCount <= maxRetries) {
         try {
           result = await this.ecountRequest({
-            endpoint: '/OAPI/V2/Sale/SaveSale', // CORRECTED: Use exact endpoint from user's list
-            body: salesPayload
+            endpoint: '/OAPI/V2/SaleOrder/SaveSaleOrderList', // 🚀 NEW SALES ORDER API
+            body: saleOrderPayload
           });
           
           // Check for authentication error in the response
@@ -686,13 +793,14 @@ class EcountApiService {
       }
 
       // ENHANCED LOGGING: Comprehensive response analysis
-      console.log(`📋 SaveSale API response status: ${result.Status}`);
-      console.log('🔍 SaveSale API response data structure:', {
+      console.log(`📋 NEW SALES ORDER API response status: ${result.Status}`);
+      console.log('🔍 Sales Order API response data structure:', {
         hasData: !!result.Data,
         hasSlipNos: !!result.Data?.SlipNos,
         slipNosLength: result.Data?.SlipNos?.length,
         hasError: !!result.Error,
-        dataKeys: result.Data ? Object.keys(result.Data) : []
+        dataKeys: result.Data ? Object.keys(result.Data) : [],
+        fullResponse: result
       });
       
       // CRITICAL FIX: Enhanced response parsing with multiple fallback strategies
@@ -720,19 +828,20 @@ class EcountApiService {
         
         const ioDate = currentDate;
         
-        console.log(`✅ Sale order submitted successfully to eCount ERP!`);
+        console.log(`✅ NEW SALES ORDER successfully submitted to eCount ERP!`);
         console.log(`📄 ERP Document Number: ${docNo}`);
         console.log(`📅 ERP IO Date: ${ioDate}`);
+        console.log(`👤 Customer: 10839 "Online Store Sales"`);
         console.log(`📊 Order Summary: ${mappedItems.length} items, Total Value: ${mappedItems.reduce((sum, item) => sum + (item.quantity * item.price), 0)}`);
         
         return { docNo, ioDate };
       }
 
       // ENHANCED ERROR HANDLING: Detailed failure analysis with actionable information
-      const errorMsg = result.Error?.Message || 'Unknown SaveSale API error';
+      const errorMsg = result.Error?.Message || 'Unknown Sales Order API error';
       const statusCode = result.Status;
       
-      console.error('🚨 SaveSale API FAILED - Comprehensive Error Analysis:');
+      console.error('🚨 NEW SALES ORDER API FAILED - Comprehensive Error Analysis:');
       console.error(`  ❌ Status: ${statusCode}`);
       console.error(`  ❌ Error Message: ${errorMsg}`);
       console.error(`  📄 Order Number: ${order.orderNumber}`);
@@ -767,7 +876,7 @@ class EcountApiService {
         guidanceMsg = 'Server Error - eCount ERP system issue';
       }
       
-      const fullErrorMsg = `SaveSale API failed (${statusCode}): ${errorMsg}. ${guidanceMsg}`;
+      const fullErrorMsg = `Sales Order API failed (${statusCode}): ${errorMsg}. ${guidanceMsg}`;
       console.error(`  🎯 ${fullErrorMsg}`);
       
       throw new Error(fullErrorMsg);
