@@ -639,9 +639,9 @@ class EcountApiService {
         }
       }
       
-      // 🚀 NEW SALES ORDER API - Transform to SaleOrderList format
+      // 🚀 NEW SALES ORDER API - Transform to SaleList format (per documentation)
       const saleOrderPayload = {
-        "SaleOrderList": mappedItems.map(item => ({
+        "SaleList": mappedItems.map(item => ({
           "BulkDatas": {
             "IO_DATE": currentDate,
             "UPLOAD_SER_NO": `SO_${order.orderNumber}_${currentDate}`,
