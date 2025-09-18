@@ -70,6 +70,16 @@ export function ShoppingCart({ isOpen, onClose }: ShoppingCartProps) {
       });
       return;
     }
+    
+    if (!user) {
+      toast({
+        title: "Please log in",
+        description: "You need to log in to place an order. Please log in and try again.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     sendToEcountMutation.mutate();
   };
 
