@@ -587,12 +587,43 @@ class EcountApiService {
         }
       }
       
-      // CRITICAL FIX: Make API call with enhanced error handling and logging
+      // CRITICAL FIX: Make API call with enhanced error handling and session retry logic
       console.log('🚀 Sending SaveSale API request to eCount ERP...');
-      const result = await this.ecountRequest({
-        endpoint: '/OAPI/V2/Sale/SaveSale', // CORRECTED: Use exact endpoint from user's list
-        body: salesPayload
-      });
+      let result;
+      let retryCount = 0;
+      const maxRetries = 1;
+      
+      while (retryCount <= maxRetries) {
+        try {
+          result = await this.ecountRequest({
+            endpoint: '/OAPI/V2/Sale/SaveSale', // CORRECTED: Use exact endpoint from user's list
+            body: salesPayload
+          });
+          
+          // Check for authentication error in the response
+          if (result.Status === "500" && result.Error?.Message === "The API has not been authenticated.") {
+            console.log('🔄 Authentication expired - invalidating session and retrying...');
+            this.session = null; // Invalidate current session
+            
+            if (retryCount < maxRetries) {
+              retryCount++;
+              console.log(`🔄 Retry attempt ${retryCount}/${maxRetries} with fresh authentication...`);
+              continue; // Retry with fresh login
+            }
+          }
+          
+          break; // Success or non-auth error, exit retry loop
+          
+        } catch (error) {
+          if (retryCount < maxRetries && error instanceof Error && error.message.includes('not been authenticated')) {
+            console.log('🔄 Authentication error caught - retrying with fresh session...');
+            this.session = null; // Invalidate current session
+            retryCount++;
+            continue;
+          }
+          throw error; // Re-throw if not an auth error or max retries reached
+        }
+      }
 
       // ENHANCED LOGGING: Comprehensive response analysis
       console.log(`📋 SaveSale API response status: ${result.Status}`);
