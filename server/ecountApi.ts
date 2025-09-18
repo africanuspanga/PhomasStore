@@ -464,9 +464,9 @@ class EcountApiService {
       const orderItems = JSON.parse(order.items);
       const currentDate = new Date().toISOString().slice(0, 10).replace(/-/g, ''); // YYYYMMDD format
       
-      // Map customer to eCount CUST code - fallback to default retail customer
-      const customerCode = userProfile?.ecountCustCode || "2025";
-      const customerName = userProfile?.name || "Phomas Online Customer";
+      // Map customer to eCount CUST code - use correct Phomas Online Store customer
+      const customerCode = userProfile?.ecountCustCode || "10839";
+      const customerName = userProfile?.name || "Online Store Sales";
       
       console.log(`🧾 Submitting sale to eCount ERP: Order ${order.orderNumber} with ${orderItems.length} items`);
       
@@ -491,16 +491,20 @@ class EcountApiService {
         const mapping = ProductMapping.getProduct(item.productId);
         
         if (mapping) {
+          // CRITICAL FIX: Use the actual normalized eCount product code (the map key)
+          // The item.productId should already be the correct eCount code since it comes from eCount API
+          const ecountProdCode = item.productId; // Use normalized eCount code from eCount API
+          
           mappedItems.push({
             productId: item.productId,
-            ecountProdCd: item.productId, // Use the original productId as PROD_CD (it should already be from eCount)
+            ecountProdCd: ecountProdCode, // Use the correct normalized eCount PROD_CD
             name: mapping.name, // Use real name from Excel
             packaging: mapping.uom,
             quantity: item.quantity,
             price: mapping.price, // Use real price from Excel
             matchRule: mapping.matchRule || 'direct'
           });
-          console.log(`✅ Mapped ${item.productId} -> "${mapping.name}" (${mapping.matchRule})`);  
+          console.log(`✅ Mapped ${item.productId} -> eCount PROD_CD: ${ecountProdCode} "${mapping.name}" (${mapping.matchRule})`);  
         } else {
           unmappedItems.push(item.productId);
           console.error(`❌ No mapping found for product: ${item.productId}`);
@@ -523,76 +527,31 @@ class EcountApiService {
       
       console.log(`🎯 All ${mappedItems.length} products successfully mapped for eCount submission`);
       
-      // Build correct SaleOrderList structure as per documentation with mapped data
+      // Build correct SaleList structure as per user's provided format
       const salesPayload = {
-        SaleOrderList: mappedItems.map((item, index) => ({
-          BulkDatas: {
-            // Date and sequence
-            IO_DATE: currentDate,
-            UPLOAD_SER_NO: "", // Leave blank for auto sequence
-            
-            // Customer information
-            CUST: customerCode,
-            CUST_DES: customerName,
-            EMP_CD: "",
-            WH_CD: ECOUNT_CONFIG.warehouseCode,
-            
-            // Transaction details
-            IO_TYPE: "",
-            EXCHANGE_TYPE: "",
-            EXCHANGE_RATE: "",
-            PJT_CD: "",
-            DOC_NO: "", // Let eCount generate
-            TTL_CTT: "",
-            REF_DES: `WEB-${order.orderNumber}`, // For idempotency
-            COLL_TERM: "",
-            AGREE_TERM: "",
-            TIME_DATE: "",
-            REMARKS_WIN: "",
-            
-            // Custom memo fields
-            U_MEMO1: userProfile?.email || "",
-            U_MEMO2: "",
-            U_MEMO3: "",
-            U_MEMO4: "",
-            U_MEMO5: "",
-            
-            // Additional text fields (leave blank)
-            ADD_TXT_01_T: "", ADD_TXT_02_T: "", ADD_TXT_03_T: "", ADD_TXT_04_T: "", ADD_TXT_05_T: "",
-            ADD_TXT_06_T: "", ADD_TXT_07_T: "", ADD_TXT_08_T: "", ADD_TXT_09_T: "", ADD_TXT_10_T: "",
-            ADD_NUM_01_T: "", ADD_NUM_02_T: "", ADD_NUM_03_T: "", ADD_NUM_04_T: "", ADD_NUM_05_T: "",
-            ADD_CD_01_T: "", ADD_CD_02_T: "", ADD_CD_03_T: "",
-            ADD_DATE_01_T: "", ADD_DATE_02_T: "", ADD_DATE_03_T: "",
-            U_TXT1: "",
-            ADD_LTXT_01_T: "", ADD_LTXT_02_T: "", ADD_LTXT_03_T: "",
-            
-            // CRITICAL FIX: Product line item details using mapped data
-            PROD_CD: item.ecountProdCd, // Use mapped eCount product code
-            PROD_DES: item.name, // Use real name from Excel mapping
-            SIZE_DES: item.packaging || "", // Use UOM from Excel mapping
-            UQTY: "",
-            QTY: item.quantity.toString(),
-            PRICE: item.price.toString(), // Use real price from Excel mapping
-            USER_PRICE_VAT: "",
-            SUPPLY_AMT: (item.quantity * item.price).toString(), // Calculate with real price
-            SUPPLY_AMT_F: "",
-            VAT_AMT: "", // Let ERP calculate VAT
-            ITEM_TIME_DATE: "",
-            REMARKS: `Phomas Online Store - Order: ${order.orderNumber}`,
-            ITEM_CD: "",
-            
-            // Additional item fields (leave blank)
-            P_REMARKS1: "", P_REMARKS2: "", P_REMARKS3: "",
-            ADD_TXT_01: "", ADD_TXT_02: "", ADD_TXT_03: "", ADD_TXT_04: "", ADD_TXT_05: "", ADD_TXT_06: "",
-            REL_DATE: "", REL_NO: "",
-            P_AMT1: "", P_AMT2: "",
-            ADD_NUM_01: "", ADD_NUM_02: "", ADD_NUM_03: "", ADD_NUM_04: "", ADD_NUM_05: "",
-            ADD_CD_01: "", ADD_CD_02: "", ADD_CD_03: "",
-            ADD_CD_NM_01: "", ADD_CD_NM_02: "", ADD_CD_NM_03: "",
-            ADD_CDNM_01: "", ADD_CDNM_02: "", ADD_CDNM_03: "",
-            ADD_DATE_01: "", ADD_DATE_02: "", ADD_DATE_03: ""
+        SaleList: [
+          {
+            Sale: {
+              UPLOAD_SER_NO: `SO_${order.orderNumber}_${currentDate}`,
+              IO_DATE: currentDate,
+              CUST: customerCode,
+              CUST_DES: customerName,
+              VAT_EXPT: "0",
+              DELIVERY_ADDR: "Online Store Purchase",
+              RECEIVER: userProfile?.name || "Online Customer",
+              RECEIVER_TEL: userProfile?.phone || "",
+              REF_DES: `WEB-${order.orderNumber}` // For traceability and idempotency
+            },
+            DetailList: mappedItems.map(item => ({
+              WH_CD: ECOUNT_CONFIG.warehouseCode,
+              PROD_CD: item.ecountProdCd,
+              PROD_DES: item.name,
+              QTY: item.quantity,
+              PRICE: item.price,
+              PROD_DES_L: ""
+            }))
           }
-        }))
+        ]
       };
       
       // ENHANCED LOGGING: Log the actual payload being sent for debugging
@@ -604,18 +563,28 @@ class EcountApiService {
         console.log(`    ${idx + 1}. ${item.ecountProdCd} "${item.name}" x${item.quantity} @ ${item.price} (${item.matchRule})`);
       });
       
-      // Debug: Log first item's full payload structure (truncated)
-      if (salesPayload.SaleOrderList.length > 0) {
-        const firstItem = salesPayload.SaleOrderList[0].BulkDatas;
-        console.log('🔍 First item payload preview:', {
-          PROD_CD: firstItem.PROD_CD,
-          PROD_DES: firstItem.PROD_DES,
-          QTY: firstItem.QTY,
-          PRICE: firstItem.PRICE,
-          SUPPLY_AMT: firstItem.SUPPLY_AMT,
-          CUST: firstItem.CUST,
-          IO_DATE: firstItem.IO_DATE
+      // Debug: Log sale header and first item details
+      if (salesPayload.SaleList.length > 0) {
+        const sale = salesPayload.SaleList[0];
+        console.log('🔍 Sale header preview:', {
+          UPLOAD_SER_NO: sale.Sale.UPLOAD_SER_NO,
+          IO_DATE: sale.Sale.IO_DATE,
+          CUST: sale.Sale.CUST,
+          CUST_DES: sale.Sale.CUST_DES,
+          VAT_EXPT: sale.Sale.VAT_EXPT
         });
+        
+        if (sale.DetailList.length > 0) {
+          const firstItem = sale.DetailList[0];
+          console.log('🔍 First item detail preview:', {
+            WH_CD: firstItem.WH_CD,
+            PROD_CD: firstItem.PROD_CD,
+            PROD_DES: firstItem.PROD_DES,
+            QTY: firstItem.QTY,
+            PRICE: firstItem.PRICE,
+            PROD_DES_L: firstItem.PROD_DES_L
+          });
+        }
       }
       
       // CRITICAL FIX: Make API call with enhanced error handling and logging
@@ -652,10 +621,10 @@ class EcountApiService {
           console.log('🔄 Using fallback DOC_NO from result.Data.Datas[0]');
         }
         
-        // Fallback 3: Generate from order number if no DOC_NO available
+        // Fallback 3: If no DOC_NO available, indicate pending status
         if (!docNo) {
-          docNo = `WEB-${order.orderNumber}-${currentDate}`;
-          console.log('⚠️ No DOC_NO in response, using generated fallback:', docNo);
+          console.log('⚠️ No DOC_NO in eCount response - order may be pending or require manual review');
+          docNo = `PENDING-${order.orderNumber}`;
         }
         
         const ioDate = currentDate;
