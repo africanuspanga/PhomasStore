@@ -76,15 +76,17 @@ class EcountApiService {
   private loginInProgress = false;
   private loginPromise: Promise<string> | null = null;
   private lastLoginAttempt = 0;
-  private readonly MIN_LOGIN_INTERVAL = 5000; // 5 seconds minimum between login attempts
+  private readonly MIN_LOGIN_INTERVAL = 30000; // 30 seconds minimum between login attempts (increased)
 
   constructor() {
     // Use production URL with real API key
     this.baseUrl = PROD_BASE_URL;
     console.log('🚀 eCount API configured for PRODUCTION environment');
     
-    // Start background bulk sync scheduler (every 10 minutes)
-    this.startBackgroundScheduler();
+    // Start background bulk sync scheduler (every 10 minutes) with delay to prevent startup conflicts
+    setTimeout(() => {
+      this.startBackgroundScheduler();
+    }, 60000); // 60 second delay to let initial product load complete
   }
 
   /**
