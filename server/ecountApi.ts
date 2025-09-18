@@ -608,6 +608,11 @@ class EcountApiService {
             if (retryCount < maxRetries) {
               retryCount++;
               console.log(`🔄 Retry attempt ${retryCount}/${maxRetries} with fresh authentication...`);
+              
+              // CRITICAL FIX: Add delay to allow session to properly establish
+              console.log('⏳ Waiting 2 seconds for session to establish...');
+              await new Promise(resolve => setTimeout(resolve, 2000));
+              
               continue; // Retry with fresh login
             }
           }
@@ -619,6 +624,11 @@ class EcountApiService {
             console.log('🔄 Authentication error caught - retrying with fresh session...');
             this.session = null; // Invalidate current session
             retryCount++;
+            
+            // Add delay here too
+            console.log('⏳ Waiting 2 seconds for session to establish...');
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            
             continue;
           }
           throw error; // Re-throw if not an auth error or max retries reached
