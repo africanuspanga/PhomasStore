@@ -538,12 +538,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
           erpSyncError: ecountError instanceof Error ? ecountError.message : 'Unknown ERP error'
         });
         
-        // Still return success for local order, but indicate ERP sync failure
-        res.json({ 
-          success: true, 
+        // Return 502 Bad Gateway when ERP sync fails - order saved locally but not in ERP
+        res.status(502).json({ 
+          success: false,
+          localOrderSaved: true,
           order,
-          warning: "Order created but failed to sync with eCount ERP",
-          erpError: ecountError instanceof Error ? ecountError.message : 'Unknown ERP error'
+          error: "Order saved locally but failed to sync with eCount ERP system",
+          erpError: ecountError instanceof Error ? ecountError.message : 'Unknown ERP error',
+          action: "Order will be retried automatically. Contact support if this persists."
         });
       }
     } catch (error) {
