@@ -755,8 +755,8 @@ class EcountApiService {
       while (retryCount <= maxRetries) {
         try {
           result = await this.ecountRequest({
-            endpoint: '/OAPI/V2/Sales/SaveSale', // 🚀 Fixed: Use Sales (plural) endpoint from user's example
-            body: salesPayload
+            endpoint: '/OAPI/V2/Sale/SaveSale', // 🚀 CORRECT: Use Sale (singular) per documentation 
+            body: saleOrderPayload
           });
           
           // Check for authentication error in the response
