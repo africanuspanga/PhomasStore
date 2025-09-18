@@ -71,6 +71,12 @@ class EcountApiService {
   private backoffDelays = new Map<string, number>();
   private readonly MAX_BACKOFF = 60000; // 60 seconds max
   private readonly BASE_BACKOFF = 1000; // 1 second base
+  
+  // Login deduplication and rate limiting
+  private loginInProgress = false;
+  private loginPromise: Promise<string> | null = null;
+  private lastLoginAttempt = 0;
+  private readonly MIN_LOGIN_INTERVAL = 5000; // 5 seconds minimum between login attempts
 
   constructor() {
     // Use production URL with real API key
@@ -114,7 +120,12 @@ class EcountApiService {
     let cookies = '';
     
     if (requiresAuth) {
-      sessionId = await this.login();
+      // Only login if we don't have a valid session
+      if (!this.session || this.session.expiresAt <= new Date()) {
+        sessionId = await this.login();
+      } else {
+        sessionId = this.session.sessionId;
+      }
       zone = this.session?.zone || ECOUNT_CONFIG.zone;
       cookies = this.session?.cookies || '';
     }
@@ -255,6 +266,44 @@ class EcountApiService {
       if (this.session && this.session.expiresAt > new Date()) {
         return this.session.sessionId;
       }
+      
+      // Prevent concurrent login attempts - return existing promise if login in progress
+      if (this.loginInProgress && this.loginPromise) {
+        console.log('🔄 Login already in progress, waiting for existing attempt...');
+        return await this.loginPromise;
+      }
+      
+      // Rate limit login attempts - minimum 5 seconds between attempts
+      const timeSinceLastLogin = Date.now() - this.lastLoginAttempt;
+      if (timeSinceLastLogin < this.MIN_LOGIN_INTERVAL) {
+        const waitTime = this.MIN_LOGIN_INTERVAL - timeSinceLastLogin;
+        console.log(`⏳ Login rate limit: waiting ${waitTime}ms before next attempt`);
+        await new Promise(resolve => setTimeout(resolve, waitTime));
+      }
+      
+      // Mark login as in progress and store the promise
+      this.loginInProgress = true;
+      this.lastLoginAttempt = Date.now();
+      
+      this.loginPromise = this.performLogin();
+      const result = await this.loginPromise;
+      
+      return result;
+    } catch (error) {
+      console.error('❌ eCount login error:', error);
+      throw error;
+    } finally {
+      // Reset login state
+      this.loginInProgress = false;
+      this.loginPromise = null;
+    }
+  }
+  
+  /**
+   * Perform the actual login request with enhanced error handling
+   */
+  private async performLogin(): Promise<string> {
+    try {
 
       // Get zone first and pin it to session
       const zone = await this.getZone();
@@ -287,9 +336,10 @@ class EcountApiService {
       
       // Handle 412 Precondition Failed on login specifically
       if (response.status === 412) {
-        console.log('⚠️ Login got 412 Precondition Failed - rate limited, adding delay');
-        // Add longer delay to prevent further rate limiting
-        await new Promise(resolve => setTimeout(resolve, 8000));
+        console.log('⚠️ Login got 412 Precondition Failed - rate limited, extending backoff');
+        // Extend the backoff delay significantly for login rate limiting
+        this.backoffDelays.set('login', Math.min(this.MAX_BACKOFF, 15000)); // 15 second backoff for login
+        this.lastLoginAttempt = Date.now(); // Update last attempt time
         throw new Error('Login rate limited (412) - please wait before retry');
       }
       
