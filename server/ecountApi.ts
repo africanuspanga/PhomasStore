@@ -753,7 +753,7 @@ class EcountApiService {
       while (retryCount <= maxRetries) {
         try {
           result = await this.ecountRequest({
-            endpoint: '/OAPI/V2/SaleOrder/SaveSaleOrderList', // 🚀 NEW SALES ORDER API
+            endpoint: '/OAPI/V2/SaleOrder/SaveSaleOrderList_2', // 🚀 Correct NEW SALES ORDER API endpoint 
             body: saleOrderPayload
           });
           
