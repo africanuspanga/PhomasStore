@@ -597,7 +597,7 @@ class EcountApiService {
               REF_DES: `WEB-${order.orderNumber}` // For traceability and idempotency
             },
             DetailList: mappedItems.map(item => ({
-              WH_CD: ECOUNT_CONFIG.warehouseCode,
+              WH_CD: "00001", // CORRECTED: Use actual warehouse code (00009 was just documentation example)
               PROD_CD: item.ecountProdCd,
               PROD_DES: item.name,
               QTY: item.quantity,
@@ -650,7 +650,7 @@ class EcountApiService {
             "CUST": "10839", // FIXED: Use correct customer code
             "CUST_DES": "Online Store Sales", // FIXED: Use correct customer name
             "EMP_CD": "",
-            "WH_CD": "00009",
+            "WH_CD": "00001",
             "IO_TYPE": "",
             "EXCHANGE_TYPE": "",
             "EXCHANGE_RATE": "",
