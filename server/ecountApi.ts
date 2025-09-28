@@ -797,6 +797,10 @@ class EcountApiService {
       }
 
       // ENHANCED LOGGING: Comprehensive response analysis
+      if (!result) {
+        throw new Error('No response received from eCount API');
+      }
+      
       console.log(`📋 NEW SALES ORDER API response status: ${result.Status}`);
       console.log('🔍 Sales Order API response data structure:', {
         hasData: !!result.Data,
