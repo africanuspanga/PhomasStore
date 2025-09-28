@@ -35,7 +35,7 @@ export function useProductImages(productCodes: string[]) {
 }
 
 /**
- * Hook to get a single product image
+ * Hook to get a single product image with smart caching
  */
 export function useProductImage(productCode: string) {
   return useQuery({
@@ -55,8 +55,10 @@ export function useProductImage(productCode: string) {
       const data = await response.json();
       return data.imageUrl;
     },
-    staleTime: 5 * 60 * 1000, // 5 minutes (matches server cache)
+    staleTime: 15 * 60 * 1000, // 15 minutes (longer cache for failed requests)
     refetchOnWindowFocus: false,
+    retry: false, // Don't retry 404s
+    refetchOnMount: false, // Don't refetch if already cached
   });
 }
 
@@ -153,7 +155,11 @@ export function useDeleteProductImage() {
 
 /**
  * Helper function to get image URL with fallback
+ * Uses a lightweight SVG placeholder to avoid external requests
  */
 export function getImageWithFallback(imageUrl: string | null | undefined): string {
-  return imageUrl || "https://images.unsplash.com/photo-1584362917165-526a968579e8?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300";
+  if (imageUrl) return imageUrl;
+  
+  // Lightweight SVG placeholder (no external requests)
+  return 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAwIiBoZWlnaHQ9IjMwMCIgdmlld0JveD0iMCAwIDQwMCAzMDAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSI0MDAiIGhlaWdodD0iMzAwIiBmaWxsPSIjRjNGNEY2Ii8+CjxjaXJjbGUgY3g9IjIwMCIgY3k9IjEyMCIgcj0iMzAiIGZpbGw9IiNEMUQxRDYiLz4KPHJlY3QgeD0iMTUwIiB5PSIxODAiIHdpZHRoPSIxMDAiIGhlaWdodD0iODAiIGZpbGw9IiNEMUQxRDYiLz4KPHR5cGU+PHRzcGFuIGZpbGw9IiM2NjY2NjYiIGZvbnQtZmFtaWx5PSJBcmlhbCwgc2Fucy1zZXJpZiIgZm9udC1zaXplPSIxNiIgZm9udC13ZWlnaHQ9IjUwMCI+CjxnPgo8dGV4dCB4PSIyMDAiIHk9IjI5MCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+TWVkaWNhbCBQcm9kdWN0PC90ZXh0Pgo8L2c+CjwvdHlwZT4KPC9zdmc+';
 }
