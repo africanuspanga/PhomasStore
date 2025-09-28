@@ -1500,8 +1500,8 @@ class EcountApiService {
           
           // Create a user profile object for the order
           const userProfile = {
-            email: order.userEmail || 'unknown@system.retry',
-            name: order.userEmail || 'System Retry'
+            email: order.userId || 'unknown@system.retry',
+            name: order.userId || 'System Retry'
           };
 
           // Attempt to submit the order to eCount
