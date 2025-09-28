@@ -539,6 +539,8 @@ class EcountApiService {
       
       const unmappedItems: string[] = [];
       
+      console.log('🔍 Processing order items for eCount submission:', orderItems.length);
+      
       for (const item of orderItems) {
         const mapping = ProductMapping.getProduct(item.productId);
         
@@ -648,7 +650,7 @@ class EcountApiService {
             "CUST": "10839", // FIXED: Use correct customer code
             "CUST_DES": "Online Store Sales", // FIXED: Use correct customer name
             "EMP_CD": "",
-            "WH_CD": "00001",
+            "WH_CD": "00009",
             "IO_TYPE": "",
             "EXCHANGE_TYPE": "",
             "EXCHANGE_RATE": "",
@@ -690,8 +692,8 @@ class EcountApiService {
             "ADD_LTXT_01_T": "",
             "ADD_LTXT_02_T": "",
             "ADD_LTXT_03_T": "",
-            "PROD_CD": item.productCode,
-            "PROD_DES": item.productName,
+            "PROD_CD": item.ecountProdCd,
+            "PROD_DES": item.name,
             "SIZE_DES": "", // Could map item size if available
             "UQTY": "",
             "QTY": item.quantity.toString(),
@@ -1481,17 +1483,18 @@ class EcountApiService {
         return;
       }
 
-      const failedOrders = await storage.getFailedOrders();
-      if (failedOrders.length === 0) {
+      const failedOrders = await storage.getAllOrders();
+      const actualFailedOrders = failedOrders.filter(order => order.status === 'failed');
+      if (actualFailedOrders.length === 0) {
         console.log('✅ No failed orders to retry');
         return;
       }
 
-      console.log(`🔄 Retrying ${failedOrders.length} failed orders...`);
+      console.log(`🔄 Retrying ${actualFailedOrders.length} failed orders...`);
       let retryCount = 0;
       let successCount = 0;
 
-      for (const order of failedOrders) {
+      for (const order of actualFailedOrders) {
         try {
           console.log(`🔄 Retrying order ${order.orderNumber} (ID: ${order.id})`);
           
