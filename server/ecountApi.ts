@@ -641,9 +641,9 @@ class EcountApiService {
         }
       }
       
-      // 🚀 NEW SALES ORDER API - Transform to SaleList format (per documentation)
+      // 🚀 FIXED SALES ORDER API - Transform to SaleOrderList format (per documentation)
       const saleOrderPayload = {
-        "SaleList": mappedItems.map(item => ({
+        "SaleOrderList": mappedItems.map(item => ({
           "BulkDatas": {
             "IO_DATE": currentDate,
             "UPLOAD_SER_NO": `SO_${order.orderNumber}_${currentDate}`,
@@ -757,7 +757,7 @@ class EcountApiService {
       while (retryCount <= maxRetries) {
         try {
           result = await this.ecountRequest({
-            endpoint: '/OAPI/V2/Sale/SaveSale', // 🚀 CORRECT: Use Sale (singular) per documentation 
+            endpoint: '/OAPI/V2/SaleOrder/SaveSaleOrder', // 🚀 FIXED: Use correct SaleOrder endpoint per documentation 
             body: saleOrderPayload
           });
           
