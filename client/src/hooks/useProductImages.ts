@@ -160,6 +160,16 @@ export function useDeleteProductImage() {
 export function getImageWithFallback(imageUrl: string | null | undefined): string {
   if (imageUrl) return imageUrl;
   
-  // Lightweight SVG placeholder (no external requests)
-  return 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAwIiBoZWlnaHQ9IjMwMCIgdmlld0JveD0iMCAwIDQwMCAzMDAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSI0MDAiIGhlaWdodD0iMzAwIiBmaWxsPSIjRjNGNEY2Ii8+CjxjaXJjbGUgY3g9IjIwMCIgY3k9IjEyMCIgcj0iMzAiIGZpbGw9IiNEMUQxRDYiLz4KPHJlY3QgeD0iMTUwIiB5PSIxODAiIHdpZHRoPSIxMDAiIGhlaWdodD0iODAiIGZpbGw9IiNEMUQxRDYiLz4KPHR5cGU+PHRzcGFuIGZpbGw9IiM2NjY2NjYiIGZvbnQtZmFtaWx5PSJBcmlhbCwgc2Fucy1zZXJpZiIgZm9udC1zaXplPSIxNiIgZm9udC13ZWlnaHQ9IjUwMCI+CjxnPgo8dGV4dCB4PSIyMDAiIHk9IjI5MCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+TWVkaWNhbCBQcm9kdWN0PC90ZXh0Pgo8L2c+CjwvdHlwZT4KPC9zdmc+';
+  // Valid SVG placeholder with simple medical icon
+  const svg = `<svg width="400" height="300" viewBox="0 0 400 300" xmlns="http://www.w3.org/2000/svg">
+    <rect width="400" height="300" fill="#F3F4F6"/>
+    <g transform="translate(200, 150)">
+      <circle r="40" fill="#D1D5DB"/>
+      <rect x="-5" y="-25" width="10" height="50" fill="white" rx="2"/>
+      <rect x="-25" y="-5" width="50" height="10" fill="white" rx="2"/>
+    </g>
+    <text x="200" y="240" text-anchor="middle" fill="#6B7280" font-family="Arial, sans-serif" font-size="14">Medical Product</text>
+  </svg>`;
+  
+  return `data:image/svg+xml;base64,${btoa(svg)}`;
 }
