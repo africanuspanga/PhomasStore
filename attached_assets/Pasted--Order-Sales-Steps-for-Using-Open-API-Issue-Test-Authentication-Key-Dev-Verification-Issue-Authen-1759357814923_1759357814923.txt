@@ -1,0 +1,53 @@
+(Order, Sales)
+Steps for Using Open API
+Issue Test Authentication Key Dev. Verification Issue Authentication Key Login API Sales Order API
+Sales API
+1. Issue Test Authentication Key
+○ Prior to issuing an authentication key, a request with a test authentication key is required for
+verification.
+○ Login to ERP (a href='https://login.ecount.com' target=_blank>https://login.ecount.com
+https://login.ecount.com/a>) and issue an authentication key in User Customization >
+Information > API Authentication Key Issuance > API Authentication Status > Issue button.
+○ An authentication key is valid for 2 weeks since issued.
+○ An authentication key can be issued up to 3 times, and an additional issuance is available
+upon request and review.
+2. Dev. Verification
+○ For API verification, you need to verify only the API you want to use, not all items.
+○ Requests with a test authentication key will be examined by ECOUNT, and if acceptable, their
+verification will automatically proceed.
+※ If the data requested with a test authentication key is transmitted successfully, it will be
+turned to Verification status.
+○ Verification will be completed once a request is made to the test URL
+http://sboapi.ecount.com and the transmission is successful.
+※ As for directly running API, if running in the URL http://sboapi.ecount.com page, you can
+log in with the test authentication key.
+○ Verification is limited to requested API, and if you want to use an additional API, please
+submit an additional request by using a test authentication key.
+○ You can verify the list of authenticated API in User Customization > Information > API
+Authentication Key Issuance > API Authentication Status.
+3. Issue Authentication Key
+○ You have to issue an authentication key to use Ecount Open API.
+○ To issue the authentication key, log onto the ERP ( https://login.ecount.com ) and go to User
+Customization > Information > API Authentication Key Issuance.
+○ The issued authentication key is valid for one year.
+4. Use Open API
+○ You need a session ID to call the Ecount Open API and the session ID can be issued by
+using the Login API.
+○ The issued session ID is valid for time set in the program (ERP Login > User Customization >
+Configuration > Security Setup > Session Timeout), and you can call the Sale API or Sales
+Order API to renew the session time.
+※ If you don't call Sales/Sales Order API within the set time, the session ID will expire and
+you will have to have a new session ID issued again with the Login API.
+○ In order to use the Input API such as Sales Order, Sales, etc., the fields must be added to the
+ECOUNT Web Uploader.
+※ ECOUNT Web Uploader Settings can be accessed from each input menu > Web Uploader
+Button at the bottom > Add Web Uploader Fields.
+HTTP Status Code
+Status Description
+200 Processed Successfully
+302 If exceeding the API transmission count limit
+404
+When the called API does not exist since the API path is not
+correct.
+412 If exceeding the API transmission count limit
+500 API Service Internal System Error

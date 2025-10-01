@@ -647,8 +647,8 @@ class EcountApiService {
           "BulkDatas": {
             "IO_DATE": currentDate,
             "UPLOAD_SER_NO": `SO_${order.orderNumber}_${currentDate}`,
-            "CUST": "10839", // FIXED: Use correct customer code
-            "CUST_DES": "Online Store Sales", // FIXED: Use correct customer name
+            "CUST": "2025", // Customer code from successful test
+            "CUST_DES": "MedCare Pharmacy", // Customer name from successful test
             "EMP_CD": "",
             "WH_CD": "00001",
             "IO_TYPE": "",
@@ -1574,6 +1574,36 @@ class EcountApiService {
       clearInterval(this.backgroundScheduler);
       this.backgroundScheduler = null;
       console.log('⏹️ eCount background scheduler stopped');
+    }
+  }
+
+  /**
+   * Verify if a customer code exists in eCount
+   * Helps diagnose order submission issues
+   */
+  async verifyCustomer(customerCode: string): Promise<any> {
+    try {
+      console.log(`🔍 Verifying customer code: ${customerCode}`);
+      
+      const result = await this.ecountRequest({
+        endpoint: '/OAPI/V2/Customer',
+        body: {
+          CUST: customerCode,
+          Page: '1',
+          PageSize: '10'
+        }
+      });
+
+      if (result.Status === "200" && result.Data?.Datas) {
+        console.log(`✅ Customer ${customerCode} found:`, result.Data.Datas);
+        return result.Data.Datas;
+      } else {
+        console.log(`❌ Customer ${customerCode} not found or error:`, result);
+        return null;
+      }
+    } catch (error) {
+      console.error(`❌ Error verifying customer ${customerCode}:`, error);
+      return null;
     }
   }
 

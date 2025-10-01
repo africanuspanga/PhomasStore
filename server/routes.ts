@@ -822,6 +822,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Diagnostic endpoint: Verify if customer code exists in eCount
+  app.get("/api/admin/verify-customer/:customerCode", requireAdminAuth, async (req, res) => {
+    try {
+      const { customerCode } = req.params;
+      console.log(`🔍 Admin verifying customer code: ${customerCode}`);
+      
+      const customerData = await ecountApi.verifyCustomer(customerCode);
+      
+      if (customerData) {
+        res.json({
+          success: true,
+          exists: true,
+          message: `Customer ${customerCode} exists in eCount`,
+          data: customerData
+        });
+      } else {
+        res.json({
+          success: true,
+          exists: false,
+          message: `Customer ${customerCode} NOT found in eCount. Please create it or use a different customer code.`
+        });
+      }
+    } catch (error) {
+      console.error('Customer verification failed:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Customer verification failed',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
   // Image upload route for admin - protected
   app.post("/api/admin/upload-image", requireAdminAuth, upload.single('image'), async (req, res) => {
     try {
