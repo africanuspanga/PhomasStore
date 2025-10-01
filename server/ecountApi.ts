@@ -647,8 +647,8 @@ class EcountApiService {
           "BulkDatas": {
             "IO_DATE": currentDate,
             "UPLOAD_SER_NO": `SO_${order.orderNumber}_${currentDate}`,
-            "CUST": "2025", // Customer code from successful test
-            "CUST_DES": "MedCare Pharmacy", // Customer name from successful test
+            "CUST": "10839", // FIXED: Use correct customer code
+            "CUST_DES": "Online Store Sales", // FIXED: Use correct customer name
             "EMP_CD": "",
             "WH_CD": "00001",
             "IO_TYPE": "",
