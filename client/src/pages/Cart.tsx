@@ -49,11 +49,32 @@ export default function Cart() {
       queryClient.invalidateQueries({ queryKey: ["/api/products"] });
     },
     onError: (error) => {
-      toast({
-        title: "Order failed",
-        description: "There was an error processing your order. Please try again.",
-        variant: "destructive",
-      });
+      console.error('Order submission error:', error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      
+      // Check if it's a rate limit error
+      if (errorMessage.includes('412') || errorMessage.includes('rate limit')) {
+        toast({
+          title: "System Busy",
+          description: "eCount system is rate limited. Please wait 30 seconds and try again.",
+          variant: "destructive",
+          duration: 10000,
+        });
+      } else if (errorMessage.includes('502')) {
+        toast({
+          title: "Order Saved Locally",
+          description: "Your order is saved but couldn't sync to eCount right now. It will be retried automatically.",
+          variant: "destructive",
+          duration: 10000,
+        });
+      } else {
+        toast({
+          title: "Order failed",
+          description: errorMessage || "There was an error processing your order. Please try again.",
+          variant: "destructive",
+          duration: 10000,
+        });
+      }
     },
   });
 
