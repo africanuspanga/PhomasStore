@@ -758,7 +758,8 @@ class EcountApiService {
         try {
           result = await this.ecountRequest({
             endpoint: '/OAPI/V2/SaleOrder/SaveSaleOrder', // 🚀 FIXED: Use correct SaleOrder endpoint per documentation 
-            body: saleOrderPayload
+            body: saleOrderPayload,
+            requiresAuth: true // 🔐 CRITICAL FIX: Must include SESSION_ID parameter
           });
           
           // Check for authentication error in the response
