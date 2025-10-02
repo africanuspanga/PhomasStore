@@ -3,8 +3,16 @@ import { supabase } from "@/lib/supabase";
 
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
-    const text = (await res.text()) || res.statusText;
-    throw new Error(`${res.status}: ${text}`);
+    try {
+      // Try to parse as JSON first (most API errors are JSON)
+      const errorData = await res.json();
+      const errorMessage = errorData.error || errorData.erpError || errorData.message || JSON.stringify(errorData);
+      throw new Error(`${res.status}: ${errorMessage}`);
+    } catch (jsonError) {
+      // If JSON parsing fails, fall back to text
+      const text = res.statusText;
+      throw new Error(`${res.status}: ${text}`);
+    }
   }
 }
 

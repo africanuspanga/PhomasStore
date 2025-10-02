@@ -136,6 +136,9 @@ class EcountApiService {
     const url = requiresAuth ? `${baseUrlWithZone}${endpoint}?SESSION_ID=${sessionId}` : `${baseUrlWithZone}${endpoint}`;
     
     console.log(`Making eCount API request: ${endpoint} (Zone: ${zone})`);
+    if (requiresAuth) {
+      console.log(`🔗 Full URL with SESSION_ID: ${baseUrlWithZone}${endpoint}?SESSION_ID=${sessionId.substring(0, 8)}...`);
+    }
     
     try {
       // Production-ready headers with cookie support
