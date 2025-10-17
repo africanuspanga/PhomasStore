@@ -1,0 +1,24 @@
+Issue Test Authentication Key
+Before Issue Authentication Key, you must receive Verification of the Request content using the Test Authentication Key.
+Log in to the ERP (https://login.ecount.com), then go to User Customization > Information API Authentication Key Issuance > API Authentication Status > click the Key Issuance button to issue the Authentication Key.
+The issued Authentication Key is valid for two weeks.
+※ Since this is an Actual authentication through Verification, if there are continuous Request s using the Test Authentication Key without making a Request, access may be blocked without notice.
+Issue Authentication Key can be renewed up to 3 times, and additional renewals are possible after Request and review.
+Dev. Verification
+You only need to perform Verification for the APIs you want to use, not for all Item s.
+Analyze the content requested with the Test Authentication Key in Ecount, and if appropriate, automatically proceed with Verification.
+※ Verification is carried out simultaneously with the Request.
+Proceed with a Request to the test URL http://sboapi.ecount.com, and once the transmission Succeeded, the Verification will be completed.
+※ You can also log in with the Test Authentication Key when performing API Direct Execution on the URL http://sboapi.ecount.com page.
+Verification is limited to the requested API. If you wish to use additional APIs, please proceed with additional Request s using the Test Authentication Key.
+You can check the list of verified APIs in User Customization > Information > API Authentication Key Issuance > API Authentication Status.
+Issue Authentication Key
+You need to obtain an Authentication Key to integrate with the ECOUNT API.
+Log in to the ERP (https://login.ecount.com), then issue the Authentication Key from the User Customization > Information > API Authentication Key issuance screen.
+The issued authentication key is valid for one year.
+Use Open API
+To call the Ecount Open API, a session ID is required, and the session ID can be issued through the login API.
+The issued session ID can be used for the configured Hour(s) (ERP Login > User Customization > Configuration > Security Setup > Auto Logout settings), and if you call the Sales Order API or Sales API once, it can be used again for the configured Hour(s).
+※ If you do not call the Sales Order API, Sales API, etc. during the configured Hour(s), the session ID will no longer be valid and you will need to obtain a new one through the login API.
+To use the input API for Sales Order, Sales, etc., the Item you want to use must be added to the ERP Web Uploader.
+※ ECOUNT Web Uploader settings can be configured via each input menu > Bottom ECOUNT Web Uploader button > Add Web Uploader Fields.
