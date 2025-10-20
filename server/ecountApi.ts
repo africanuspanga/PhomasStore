@@ -11,6 +11,9 @@ const ECOUNT_CONFIG = {
   warehouseCode: process.env.ECOUNT_WAREHOUSE_CODE!,
 };
 
+// Log auth key status (first 8 chars only for security)
+console.log(`🔑 Using AUTH_KEY: ${ECOUNT_CONFIG.authKey?.substring(0, 8)}...${ECOUNT_CONFIG.authKey?.substring(ECOUNT_CONFIG.authKey.length - 4)} (length: ${ECOUNT_CONFIG.authKey?.length})`);
+
 const TEST_BASE_URL = "https://sboapi{ZONE}.ecount.com";
 const PROD_BASE_URL = "https://oapi{ZONE}.ecount.com";
 
@@ -82,6 +85,10 @@ class EcountApiService {
     // Use production URL with real API key
     this.baseUrl = PROD_BASE_URL;
     console.log('🚀 eCount API configured for PRODUCTION environment');
+    
+    // CRITICAL: Clear any cached sessions to force fresh authentication with new key
+    this.session = null;
+    console.log('🔄 Session cache cleared - will authenticate with fresh credentials');
     
     // Start background bulk sync scheduler (every 10 minutes) with delay to prevent startup conflicts
     setTimeout(() => {
