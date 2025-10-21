@@ -824,10 +824,23 @@ class EcountApiService {
       });
       
       // CRITICAL: Log ResultDetails if submission failed
-      if (result.Data?.ResultDetails && Array.isArray(result.Data.ResultDetails) && result.Data.ResultDetails.length > 0) {
-        console.error('🚨 eCount API returned failure details:');
-        console.error(`  SuccessCnt: ${result.Data.SuccessCnt}, FailCnt: ${result.Data.FailCnt}`);
-        console.error('  📋 ResultDetails:', JSON.stringify(result.Data.ResultDetails, null, 2));
+      if (result.Data?.FailCnt > 0 || result.Data?.ResultDetails) {
+        console.error('🚨 eCount API VALIDATION FAILED:');
+        console.error(`  ✅ SuccessCnt: ${result.Data.SuccessCnt || 0}`);
+        console.error(`  ❌ FailCnt: ${result.Data.FailCnt || 0}`);
+        
+        if (result.Data.ResultDetails) {
+          console.error('  📋 DETAILED ERROR MESSAGES:');
+          try {
+            const details = JSON.stringify(result.Data.ResultDetails, null, 2);
+            console.error(details);
+          } catch (e) {
+            console.error('  ResultDetails:', result.Data.ResultDetails);
+          }
+        }
+        
+        // Also log the raw data for debugging
+        console.error('  🔍 Full Data object:', JSON.stringify(result.Data, null, 2));
       }
       
       // CRITICAL FIX: Enhanced response parsing with multiple fallback strategies
