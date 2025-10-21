@@ -82,9 +82,10 @@ class EcountApiService {
   private readonly MIN_LOGIN_INTERVAL = 30000; // 30 seconds minimum between login attempts (increased)
 
   constructor() {
-    // Use production URL with real API key
-    this.baseUrl = PROD_BASE_URL;
-    console.log('🚀 eCount API configured for PRODUCTION environment');
+    // TEMPORARY: Use TEST URL to get SaveSaleOrder API verified per eCount support instructions
+    this.baseUrl = TEST_BASE_URL;
+    console.log('🧪 eCount API configured for TEST environment (for verification)');
+    console.log('📝 Using TEST URL to verify SaveSaleOrder API as per eCount support instructions');
     
     // CRITICAL: Clear any cached sessions to force fresh authentication with new key
     this.session = null;
