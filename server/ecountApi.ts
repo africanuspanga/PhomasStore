@@ -823,6 +823,13 @@ class EcountApiService {
         fullResponse: result
       });
       
+      // CRITICAL: Log ResultDetails if submission failed
+      if (result.Data?.ResultDetails && Array.isArray(result.Data.ResultDetails) && result.Data.ResultDetails.length > 0) {
+        console.error('🚨 eCount API returned failure details:');
+        console.error(`  SuccessCnt: ${result.Data.SuccessCnt}, FailCnt: ${result.Data.FailCnt}`);
+        console.error('  📋 ResultDetails:', JSON.stringify(result.Data.ResultDetails, null, 2));
+      }
+      
       // CRITICAL FIX: Enhanced response parsing with multiple fallback strategies
       if (result.Status === "200") {
         // Primary: Extract DOC_NO from SlipNos array (most common)
