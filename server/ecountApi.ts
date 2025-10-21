@@ -661,7 +661,7 @@ class EcountApiService {
       const saleOrderPayload = {
         "SaleOrderList": mappedItems.map(item => ({
           "BulkDatas": {
-            "IO_DATE": currentDate,
+            "IO_DATE": "",
             "UPLOAD_SER_NO": sequenceNumber,
             "CUST": "10839", // FIXED: Use correct customer code
             "CUST_DES": "Online Store Sales", // FIXED: Use correct customer name
