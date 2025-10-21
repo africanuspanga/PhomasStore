@@ -10,6 +10,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabaseSignUpSchema, supabaseLoginSchema } from "@shared/schema";
 import { useLocation } from "wouter";
 import { z } from "zod";
+import { Eye, EyeOff } from "lucide-react";
 import logoImage from "@assets/Screenshot 2025-07-31 at 21.36.28_1753988684264.png";
 
 const registerFormSchema = supabaseSignUpSchema.extend({
@@ -23,6 +24,8 @@ type RegisterFormData = z.infer<typeof registerFormSchema>;
 
 export default function Login() {
   const [isLogin, setIsLogin] = useState(true);
+  const [showLoginPassword, setShowLoginPassword] = useState(false);
+  const [showRegisterPassword, setShowRegisterPassword] = useState(false);
   const { login, register, isLoading } = useAuth();
   const [, setLocation] = useLocation();
 
@@ -112,11 +115,28 @@ export default function Login() {
                     <FormItem>
                       <FormLabel>Password</FormLabel>
                       <FormControl>
-                        <Input
-                          type="password"
-                          placeholder="Enter your password"
-                          {...field}
-                        />
+                        <div className="relative">
+                          <Input
+                            type={showLoginPassword ? "text" : "password"}
+                            placeholder="Enter your password"
+                            data-testid="input-login-password"
+                            {...field}
+                          />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                            onClick={() => setShowLoginPassword(!showLoginPassword)}
+                            data-testid="button-toggle-login-password"
+                          >
+                            {showLoginPassword ? (
+                              <EyeOff className="h-4 w-4 text-gray-400" />
+                            ) : (
+                              <Eye className="h-4 w-4 text-gray-400" />
+                            )}
+                          </Button>
+                        </div>
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -259,16 +279,32 @@ export default function Login() {
                     <FormItem>
                       <FormLabel>Password</FormLabel>
                       <FormControl>
-                        <Input
-                          type="password"
-                          placeholder="Create a secure password"
-                          data-testid="input-register-password"
-                          value={field.value || ""}
-                          onChange={field.onChange}
-                          onBlur={field.onBlur}
-                          name={field.name}
-                          ref={field.ref}
-                        />
+                        <div className="relative">
+                          <Input
+                            type={showRegisterPassword ? "text" : "password"}
+                            placeholder="Create a secure password"
+                            data-testid="input-register-password"
+                            value={field.value || ""}
+                            onChange={field.onChange}
+                            onBlur={field.onBlur}
+                            name={field.name}
+                            ref={field.ref}
+                          />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                            onClick={() => setShowRegisterPassword(!showRegisterPassword)}
+                            data-testid="button-toggle-register-password"
+                          >
+                            {showRegisterPassword ? (
+                              <EyeOff className="h-4 w-4 text-gray-400" />
+                            ) : (
+                              <Eye className="h-4 w-4 text-gray-400" />
+                            )}
+                          </Button>
+                        </div>
                       </FormControl>
                       <FormMessage />
                     </FormItem>
