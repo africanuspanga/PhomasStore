@@ -3,10 +3,12 @@
 This is a full-stack e-commerce application called "Phomas Online Store" built for PHOMAS DIAGNOSTICS, a medical supplier in Tanzania. The application has been successfully transformed from a demo system into a **real-time integrated platform** connected to their eCount ERP system. It features live product inventory, automated order processing, and administrative oversight with direct ERP connectivity.
 
 ## Integration Status ✅
-- **eCount ERP Integration**: Successfully connected and operational
+- **eCount ERP Integration**: PRODUCTION API active (https://oapi{ZONE}.ecount.com)
+- **Production Auth Key**: Using 1-year validity production credentials (01bfa323...eb59)
 - **Live Authentication**: Zone-pinned session management with auto-retry
-- **Hybrid Product Catalog**: Real product metadata merged with live inventory data
-- **Order Processing**: Ready for end-to-end ERP order submission
+- **Hybrid Product Catalog**: 546 real products with 428 having mapped names from Excel
+- **Order Processing**: Active production order submission to eCount SaveSaleOrder API
+- **Proven Success**: Test orders #20251021-3 and #20251021-4 successfully submitted
 
 # User Preferences
 
@@ -38,10 +40,13 @@ The server is built with Express.js and uses an in-memory storage system for the
 - Local storage persistence for cart items and user sessions
 
 ## API Layer
-- **Live eCount ERP Integration**: Production-ready connection with authentication
+- **Live eCount ERP Integration**: ✅ PRODUCTION environment (https://oapi{ZONE}.ecount.com)
+- **Production Auth Key**: 01bfa323...eb59 (1-year validity, activated October 2025)
 - **Zone-Pinned Sessions**: Solves zone/session mismatch with consistent API calls
 - **Hybrid Data Strategy**: Local metadata merged with real-time ERP inventory
 - **Centralized Request Handler**: JSON validation, auto-retry, and session management
+- **Order Submission**: SaveSaleOrder API with customer 10839, warehouse 00001, VAT-inclusive
+- **Critical Success**: IO_DATE="" allows eCount to auto-populate current date
 - RESTful endpoints following standard HTTP conventions
 - Consistent error handling and response formatting
 
@@ -81,6 +86,16 @@ The server is built with Express.js and uses an in-memory storage system for the
 ## Routing & Navigation
 - **Wouter**: Lightweight client-side routing
 
-## Future Integration
-- **eCOUNT API**: Enterprise resource planning system (configured but not active)
-- The application is architecturally prepared for eCOUNT integration through the service layer abstraction
+## Active Integrations
+- **eCount ERP**: ✅ LIVE in production environment
+  - Production API: https://oapi{ZONE}.ecount.com
+  - Auth Key: 01bfa323...eb59 (valid until October 2026)
+  - Features: Real-time inventory sync, automated order submission
+  - Customer Code: 10839 "Online Store Sales"
+  - Warehouse: 00001
+  - Proven working with successful test orders
+
+## UI Enhancements
+- **Password Visibility Toggle**: Login and registration forms include Eye/EyeOff icons for password viewing
+- **Responsive Design**: Full mobile and desktop support with Tailwind CSS
+- **Dark Mode Ready**: Theme infrastructure in place using shadcn/ui theming
