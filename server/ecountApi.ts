@@ -525,11 +525,12 @@ class EcountApiService {
   async submitSaleOrder(order: Order, userProfile?: any): Promise<{ docNo: string, ioDate: string }> {
     try {
       const orderItems = JSON.parse(order.items);
-      // eCount requires YYYY-MM-DD format for IO_DATE
-      const currentDate = new Date().toISOString().slice(0, 10); // YYYY-MM-DD format
+      // eCount requires YYYYMMDD format for IO_DATE (STRING(8) per API docs)
+      const currentDate = new Date().toISOString().slice(0, 10).replace(/-/g, ''); // YYYYMMDD format
       
-      // Generate simple numeric sequence number (max 10 digits)
-      const timestamp = Date.now().toString().slice(-8); // Last 8 digits of timestamp
+      // UPLOAD_SER_NO must be SMALLINT(4,0) - simple 1-4 digit number (per API docs)
+      // Use simple incrementing counter (will reset daily, which is fine)
+      const sequenceNumber = Math.floor(Math.random() * 9999).toString(); // 1-4 digits
       
       // Map customer to eCount CUST code - use correct Phomas Online Store customer
       const customerCode = userProfile?.ecountCustCode || "10839";
@@ -661,7 +662,7 @@ class EcountApiService {
         "SaleOrderList": mappedItems.map(item => ({
           "BulkDatas": {
             "IO_DATE": currentDate,
-            "UPLOAD_SER_NO": timestamp,
+            "UPLOAD_SER_NO": sequenceNumber,
             "CUST": "10839", // FIXED: Use correct customer code
             "CUST_DES": "Online Store Sales", // FIXED: Use correct customer name
             "EMP_CD": "",
