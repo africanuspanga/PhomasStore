@@ -843,8 +843,31 @@ class EcountApiService {
         console.error('  🔍 Full Data object:', JSON.stringify(result.Data, null, 2));
       }
       
-      // CRITICAL FIX: Enhanced response parsing with multiple fallback strategies
+      // CRITICAL FIX: Check for validation failures BEFORE treating as success
       if (result.Status === "200") {
+        // CRITICAL: Check if any items failed validation
+        if (result.Data?.FailCnt > 0) {
+          console.error('❌ eCount API rejected order - validation failed');
+          
+          // Extract specific error messages from ResultDetails
+          let errorMessages = [];
+          if (result.Data.ResultDetails && Array.isArray(result.Data.ResultDetails)) {
+            errorMessages = result.Data.ResultDetails.map((detail: any) => {
+              if (typeof detail === 'object' && detail.Message) {
+                return detail.Message;
+              }
+              return JSON.stringify(detail);
+            });
+          }
+          
+          const errorSummary = errorMessages.length > 0 
+            ? errorMessages.join('; ') 
+            : 'eCount validation failed - check Web Uploader configuration';
+          
+          throw new Error(`eCount validation error (${result.Data.FailCnt} items failed): ${errorSummary}`);
+        }
+        
+        // Only proceed if all items succeeded
         // Primary: Extract DOC_NO from SlipNos array (most common)
         let docNo = result.Data?.SlipNos?.[0] || '';
         
