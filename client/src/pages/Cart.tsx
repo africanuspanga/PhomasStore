@@ -22,7 +22,8 @@ export default function Cart() {
 
   const sendToEcountMutation = useMutation({
     mutationFn: async () => {
-      if (!user) throw new Error("User not authenticated");
+      // Allow guest checkout - userId will be set by backend
+      const userId = user?.id || 'guest-user';
       
       const orderItems: OrderItem[] = items.map(item => ({
         productId: item.productId,
@@ -33,7 +34,7 @@ export default function Cart() {
       }));
 
       return ecountService.placeOrder({
-        userId: user.id,
+        userId: userId,
         items: JSON.stringify(orderItems),
         subtotal: subtotal.toFixed(2),
         tax: tax.toFixed(2),
