@@ -26,14 +26,16 @@ const ensureUploadPreset = async () => {
     return;
   }
   
+  const presetName = process.env.CLOUDINARY_UPLOAD_PRESET || 'phomas_products';
+  
   try {
     // Check if preset already exists
     const existingPresets = await cloudinary.api.upload_presets();
-    const presetExists = existingPresets.presets.some((preset: any) => preset.name === 'phomas_products');
+    const presetExists = existingPresets.presets.some((preset: any) => preset.name === presetName);
     
     if (!presetExists) {
       await cloudinary.api.create_upload_preset({
-        name: 'phomas_products',
+        name: presetName,
         unsigned: true,
         folder: 'phomas-products',
         allowed_formats: ['jpg', 'png', 'gif', 'webp'],
@@ -43,9 +45,9 @@ const ensureUploadPreset = async () => {
           { format: 'auto' }
         ]
       });
-      console.log('✅ Created Cloudinary upload preset for direct frontend uploads');
+      console.log(`✅ Created Cloudinary upload preset: ${presetName}`);
     } else {
-      console.log('✅ Cloudinary upload preset already exists');
+      console.log(`✅ Cloudinary upload preset already exists: ${presetName}`);
     }
   } catch (error) {
     console.error('⚠️ Failed to create Cloudinary upload preset:', error);
@@ -413,9 +415,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Public Cloudinary configuration for frontend direct uploads
   app.get("/api/cloudinary-config", (req, res) => {
+    const uploadPreset = process.env.CLOUDINARY_UPLOAD_PRESET || 'phomas_products';
     res.json({ 
       cloudName: process.env.CLOUDINARY_CLOUD_NAME,
-      uploadPreset: process.env.CLOUDINARY_UPLOAD_PRESET || 'phomas_products'
+      uploadPreset: uploadPreset
     });
   });
 
