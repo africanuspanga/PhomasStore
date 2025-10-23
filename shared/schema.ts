@@ -9,6 +9,7 @@ export const users = pgTable("users", {
   password: text("password").notNull(),
   companyName: text("company_name").notNull(),
   role: text("role").notNull().default("client"), // "client" or "admin"
+  approved: boolean("approved").notNull().default(false), // Admin approval required
   createdAt: timestamp("created_at").defaultNow(),
 });
 

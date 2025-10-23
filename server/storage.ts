@@ -11,6 +11,8 @@ export interface IStorage {
   getUserByEmail(email: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
   getAllUsers(): Promise<User[]>;
+  getPendingUsers(): Promise<User[]>; // New: get users awaiting approval
+  approveUser(userId: string): Promise<User | undefined>; // New: approve a user
 
   // Product management
   getProduct(id: string): Promise<Product | undefined>;
@@ -111,6 +113,7 @@ export class MemStorage implements IStorage {
       password: "admin123", // In real app, this would be hashed
       companyName: "Phomas Diagnostics",
       role: "admin",
+      approved: true, // Admin is always approved
       createdAt: new Date(),
     });
 
@@ -122,6 +125,7 @@ export class MemStorage implements IStorage {
       password: "medcare123",
       companyName: "MedCare Clinic",
       role: "client",
+      approved: true, // Pre-existing users are approved
       createdAt: new Date(),
     });
 
@@ -176,6 +180,7 @@ export class MemStorage implements IStorage {
       ...insertUser, 
       id, 
       role: "client",
+      approved: false, // New users need admin approval
       createdAt: new Date()
     };
     this.users.set(id, user);
@@ -184,6 +189,19 @@ export class MemStorage implements IStorage {
 
   async getAllUsers(): Promise<User[]> {
     return Array.from(this.users.values());
+  }
+
+  async getPendingUsers(): Promise<User[]> {
+    return Array.from(this.users.values()).filter(user => !user.approved && user.role !== 'admin');
+  }
+
+  async approveUser(userId: string): Promise<User | undefined> {
+    const user = this.users.get(userId);
+    if (user) {
+      user.approved = true;
+      this.users.set(userId, user);
+    }
+    return user;
   }
 
   async getProduct(id: string): Promise<Product | undefined> {

@@ -254,7 +254,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const validatedData = supabaseSignUpSchema.parse(req.body);
       const { email, password, name, phone, address, user_type } = validatedData;
 
-      // Create user in Supabase Auth
+      // Create user in Supabase Auth (unapproved by default)
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email,
         password,
@@ -263,7 +263,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             name,
             phone,
             address,
-            user_type
+            user_type,
+            approved: false // Requires admin approval
           }
         }
       });
@@ -337,7 +338,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ message: 'Login failed - no session created' });
       }
 
-      console.log('🔐 Login successful:', { email, userId: authData.user.id });
+      // Check if user is approved
+      const metadata = authData.user.user_metadata || {};
+      const isApproved = metadata.approved === true;
+      const isAdmin = email === 'admin@phomas.com';
+      
+      if (!isApproved && !isAdmin) {
+        console.log('🔐 Login blocked - user not approved:', { email, userId: authData.user.id });
+        return res.status(403).json({ 
+          success: false,
+          message: 'Your account is pending admin approval. Please contact Phomas Diagnostics.',
+          pending: true
+        });
+      }
+      
+      console.log('🔐 Login successful:', { email, userId: authData.user.id, approved: isApproved || isAdmin });
       
       res.json({ 
         success: true, 
@@ -645,6 +660,67 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('❌ Admin users fetch error:', error);
       res.status(500).json({ message: "Failed to fetch users", error: error instanceof Error ? error.message : 'Unknown error' });
+    }
+  });
+
+  // Get pending user registrations (users waiting for approval)
+  app.get("/api/admin/pending-users", requireAdminAuth, async (req, res) => {
+    try {
+      console.log('🔍 Admin fetching pending user registrations...');
+      
+      const { data: { users }, error } = await supabase.auth.admin.listUsers();
+      
+      if (error) {
+        console.error('❌ Failed to fetch users:', error);
+        return res.status(500).json({ message: "Failed to fetch users", error: error.message });
+      }
+      
+      // Filter for pending users (approved: false in metadata)
+      const pendingUsers = users.filter(user => {
+        const metadata = user.user_metadata || {};
+        return metadata.approved === false && user.email !== 'admin@phomas.com';
+      }).map(user => {
+        const metadata = user.user_metadata || {};
+        return {
+          id: user.id,
+          email: user.email || '',
+          companyName: metadata.name || metadata.company_name || 'Unknown Company',
+          phone: metadata.phone || '',
+          address: metadata.address || '',
+          userType: metadata.user_type || 'individual',
+          createdAt: user.created_at ? new Date(user.created_at) : new Date(),
+        };
+      });
+      
+      console.log(`📋 Found ${pendingUsers.length} pending user registrations`);
+      res.json(pendingUsers);
+    } catch (error) {
+      console.error('❌ Failed to get pending users:', error);
+      res.status(500).json({ message: "Failed to get pending users", error: error instanceof Error ? error.message : 'Unknown error' });
+    }
+  });
+
+  // Approve a user registration
+  app.post("/api/admin/approve-user/:userId", requireAdminAuth, async (req, res) => {
+    try {
+      const { userId } = req.params;
+      console.log(`✅ Admin approving user: ${userId}`);
+      
+      // Update user metadata to set approved = true
+      const { data, error } = await supabase.auth.admin.updateUserById(userId, {
+        user_metadata: { approved: true }
+      });
+      
+      if (error) {
+        console.error('❌ Failed to approve user:', error);
+        return res.status(500).json({ message: "Failed to approve user", error: error.message });
+      }
+      
+      console.log(`✅ User approved successfully: ${data.user.email}`);
+      res.json({ success: true, message: "User approved successfully", user: data.user });
+    } catch (error) {
+      console.error('❌ Approve user error:', error);
+      res.status(500).json({ message: "Failed to approve user", error: error instanceof Error ? error.message : 'Unknown error' });
     }
   });
 
