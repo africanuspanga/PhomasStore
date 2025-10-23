@@ -678,10 +678,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(500).json({ message: "Failed to fetch users", error: error.message });
       }
       
-      // Filter for pending users (approved: false in metadata)
+      // Filter for pending users (anyone not explicitly approved)
+      // This includes both new users (approved: false) and existing users (approved: undefined)
       const pendingUsers = users.filter(user => {
         const metadata = user.user_metadata || {};
-        return metadata.approved === false && user.email !== 'admin@phomas.com';
+        return metadata.approved !== true && user.email !== 'admin@phomas.com';
       }).map(user => {
         const metadata = user.user_metadata || {};
         return {
@@ -709,9 +710,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { userId } = req.params;
       console.log(`✅ Admin approving user: ${userId}`);
       
-      // Update user metadata to set approved = true
+      // First, get the current user to preserve their metadata
+      const { data: { user: currentUser }, error: getUserError } = await supabase.auth.admin.getUserById(userId);
+      
+      if (getUserError || !currentUser) {
+        console.error('❌ Failed to get user:', getUserError);
+        return res.status(500).json({ message: "Failed to get user", error: getUserError?.message });
+      }
+      
+      // Merge existing metadata with approved flag
+      const updatedMetadata = {
+        ...currentUser.user_metadata,
+        approved: true
+      };
+      
+      // Update user metadata to set approved = true while preserving other fields
       const { data, error } = await supabase.auth.admin.updateUserById(userId, {
-        user_metadata: { approved: true }
+        user_metadata: updatedMetadata
       });
       
       if (error) {
