@@ -10,9 +10,185 @@ import { format } from "date-fns";
 import { useLocation } from "wouter";
 import { AdminProductManager } from "@/components/AdminProductManager";
 import { BulkSyncManager } from "@/components/BulkSyncManager";
-import type { User } from "@shared/schema";
+import type { User, Order, OrderItem } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+
+// Orders Management Component - shows all orders with customer attribution
+function OrdersManagement() {
+  const { data: orders = [], isLoading } = useQuery<Order[]>({
+    queryKey: ["/api/orders"],
+    queryFn: () => ecountService.getAllOrders(),
+  });
+
+  const getStatusColor = (status: string) => {
+    switch (status.toLowerCase()) {
+      case "delivered":
+        return "bg-green-100 text-green-800";
+      case "shipped":
+        return "bg-blue-100 text-blue-800";
+      case "processing":
+        return "bg-amber-100 text-amber-800";
+      default:
+        return "bg-gray-100 text-gray-800";
+    }
+  };
+
+  const getErpSyncBadge = (syncStatus?: string | null) => {
+    switch (syncStatus) {
+      case "synced":
+        return <Badge className="bg-green-100 text-green-800 text-xs">✓ ERP Synced</Badge>;
+      case "failed":
+        return <Badge className="bg-red-100 text-red-800 text-xs">✗ ERP Failed</Badge>;
+      case "pending":
+        return <Badge className="bg-amber-100 text-amber-800 text-xs">⏳ Pending</Badge>;
+      default:
+        return <Badge className="bg-gray-100 text-gray-800 text-xs">Unknown</Badge>;
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>All Customer Orders</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="text-center py-8">
+            <p className="text-gray-600">Loading orders...</p>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (orders.length === 0) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>All Customer Orders</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="text-center py-8">
+            <Package className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+            <p className="text-gray-600">No orders yet</p>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <CardTitle>All Customer Orders</CardTitle>
+          <Badge variant="outline" className="text-sm">
+            {orders.length} Total Orders
+          </Badge>
+        </div>
+        <p className="text-sm text-gray-600 mt-2">
+          Track which customer placed which order (all orders use eCount customer code 10839)
+        </p>
+      </CardHeader>
+      <CardContent>
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-gray-200">
+                <th className="text-left py-3 px-4 font-semibold text-gray-700">Order #</th>
+                <th className="text-left py-3 px-4 font-semibold text-gray-700">Customer</th>
+                <th className="text-left py-3 px-4 font-semibold text-gray-700">Contact</th>
+                <th className="text-left py-3 px-4 font-semibold text-gray-700">Date</th>
+                <th className="text-left py-3 px-4 font-semibold text-gray-700">Items</th>
+                <th className="text-left py-3 px-4 font-semibold text-gray-700">Total</th>
+                <th className="text-left py-3 px-4 font-semibold text-gray-700">Status</th>
+                <th className="text-left py-3 px-4 font-semibold text-gray-700">ERP</th>
+              </tr>
+            </thead>
+            <tbody>
+              {orders.map((order: Order) => {
+                // Defensive parsing for order items
+                let items: OrderItem[] = [];
+                try {
+                  items = JSON.parse(order.items);
+                } catch (e) {
+                  console.error(`Failed to parse items for order ${order.orderNumber}:`, e);
+                }
+                
+                const firstItem = items[0];
+                const remainingCount = items.length - 1;
+
+                return (
+                  <tr key={order.id} className="border-b border-gray-100 hover:bg-gray-50" data-testid={`order-row-${order.id}`}>
+                    <td className="py-4 px-4">
+                      <div className="font-medium text-phomas-green" data-testid={`order-number-${order.id}`}>
+                        {order.orderNumber}
+                      </div>
+                      {order.erpDocNumber && (
+                        <div className="text-xs text-gray-500">
+                          eCount: {order.erpDocNumber}
+                        </div>
+                      )}
+                    </td>
+                    <td className="py-4 px-4">
+                      <div className="text-sm">
+                        <div className="font-medium text-gray-900" data-testid={`customer-name-${order.id}`}>
+                          {order.customerName || 'N/A'}
+                        </div>
+                        {order.customerCompany && (
+                          <div className="text-gray-500 text-xs">{order.customerCompany}</div>
+                        )}
+                      </div>
+                    </td>
+                    <td className="py-4 px-4">
+                      <div className="text-xs space-y-1">
+                        <div className="text-gray-700" data-testid={`customer-email-${order.id}`}>{order.customerEmail}</div>
+                        {order.customerPhone && (
+                          <div className="text-gray-500">{order.customerPhone}</div>
+                        )}
+                      </div>
+                    </td>
+                    <td className="py-4 px-4 text-sm text-gray-600">
+                      {order.createdAt ? format(new Date(order.createdAt), 'MMM d, yyyy') : 'N/A'}
+                    </td>
+                    <td className="py-4 px-4">
+                      <div className="text-sm">
+                        {firstItem ? (
+                          <>
+                            <div>{firstItem.name} ({firstItem.quantity}x)</div>
+                            {remainingCount > 0 && (
+                              <div className="text-gray-500 text-xs">
+                                +{remainingCount} more item{remainingCount > 1 ? 's' : ''}
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          <div className="text-gray-500 text-xs">No items</div>
+                        )}
+                      </div>
+                    </td>
+                    <td className="py-4 px-4 font-semibold text-phomas-green">
+                      TZS {Math.round(parseFloat(order.total)).toLocaleString()}
+                    </td>
+                    <td className="py-4 px-4">
+                      <Badge className={`${getStatusColor(order.status)} text-xs capitalize`}>
+                        {order.status}
+                      </Badge>
+                    </td>
+                    <td className="py-4 px-4">
+                      {getErpSyncBadge(order.erpSyncStatus)}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 export default function AdminPanel() {
   const { user, isAdmin } = useAuth();
@@ -111,6 +287,7 @@ export default function AdminPanel() {
           <TabsList className="mb-6">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="approvals">Pending Approvals</TabsTrigger>
+            <TabsTrigger value="orders">Orders</TabsTrigger>
             <TabsTrigger value="products">Product Management</TabsTrigger>
             <TabsTrigger value="sync">Bulk Sync</TabsTrigger>
           </TabsList>
@@ -371,6 +548,10 @@ export default function AdminPanel() {
                 )}
               </CardContent>
             </Card>
+          </TabsContent>
+          
+          <TabsContent value="orders">
+            <OrdersManagement />
           </TabsContent>
           
           <TabsContent value="products">
