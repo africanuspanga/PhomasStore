@@ -54,5 +54,13 @@
     "priority": 0,
     "createdAt": "2025-10-23T12:49:07.376Z",
     "updatedAt": "2025-10-23T12:49:07.376Z"
+  },
+  {
+    "id": "b0838b60-0b17-4ce2-9309-5eeb4f317f55",
+    "productCode": "18968",
+    "imageUrl": "https://res.cloudinary.com/dvrdcyymo/image/upload/v1761225150/phomas-products/gqwjj2cc2itm8atumxmj.jpg",
+    "priority": 0,
+    "createdAt": "2025-10-23T13:12:31.726Z",
+    "updatedAt": "2025-10-23T13:12:31.726Z"
   }
 ]
