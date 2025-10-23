@@ -95,6 +95,13 @@ The server is built with Express.js and uses an in-memory storage system for the
   - Warehouse: 00001
   - Proven working with successful test orders
 
+- **Cloudinary**: ✅ Direct upload integration for product images
+  - Cloud Name: dvrdcyymo
+  - Upload Preset: PHOMAS (configured in environment variable)
+  - Frontend uploads directly to Cloudinary without server proxy
+  - Automatic image optimization and transformation
+  - Storage: phomas-products folder with 800x600 limit, auto quality/format
+
 ## UI Enhancements
 - **Password Visibility Toggle**: Login and registration forms include Eye/EyeOff icons for password viewing
 - **Responsive Design**: Full mobile and desktop support with Tailwind CSS
