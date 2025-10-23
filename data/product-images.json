@@ -46,5 +46,13 @@
     "priority": 0,
     "createdAt": "2025-09-17T23:31:19.930Z",
     "updatedAt": "2025-09-17T23:31:19.930Z"
+  },
+  {
+    "id": "618ed3a8-393c-4572-8c28-948a7ca980bd",
+    "productCode": "ABS132HPA",
+    "imageUrl": "https://res.cloudinary.com/dvrdcyymo/image/upload/v1761223746/phomas-products/l7tlgaduvxlsuubrwczx.jpg",
+    "priority": 0,
+    "createdAt": "2025-10-23T12:49:07.376Z",
+    "updatedAt": "2025-10-23T12:49:07.376Z"
   }
 ]

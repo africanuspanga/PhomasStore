@@ -46,7 +46,7 @@ export function ImageUpload({ onImageUploaded, currentImage, className }: ImageU
       const formData = new FormData();
       formData.append('file', file);
       formData.append('upload_preset', config.uploadPreset);
-      formData.append('folder', 'phomas-products');
+      // Note: folder is configured in the preset, don't override it here
       
       // Direct upload to Cloudinary
       const response = await fetch(`https://api.cloudinary.com/v1_1/${config.cloudName}/image/upload`, {
