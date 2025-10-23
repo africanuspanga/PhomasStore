@@ -3,9 +3,10 @@ import { useQuery, useMutation } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Package, Edit, Upload, Eye, AlertTriangle, CheckCircle } from 'lucide-react';
+import { Package, Edit, Upload, Eye, AlertTriangle, CheckCircle, Search, X } from 'lucide-react';
 import { ecountService } from '@/services/ecountService';
 import { ImageUpload } from './ImageUpload';
 import { useToast } from '@/hooks/use-toast';
@@ -16,6 +17,7 @@ import type { ProductWithInventory } from '@shared/schema';
 export function AdminProductManager() {
   const [selectedProduct, setSelectedProduct] = useState<ProductWithInventory | null>(null);
   const [imageDialogOpen, setImageDialogOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   const { toast } = useToast();
 
   const { data: products = [], isLoading, refetch } = useQuery({
@@ -27,9 +29,23 @@ export function AdminProductManager() {
   const productCodes = products.map(p => p.id);
   const { data: productImages = {} } = useProductImages(productCodes);
 
-  // Sort products: Real names first, generic names last (same as homepage)
-  const sortedProducts = useMemo(() => {
-    return products.sort((a, b) => {
+  // Sort and filter products
+  const filteredProducts = useMemo(() => {
+    let filtered = products;
+    
+    // Apply search filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase().trim();
+      filtered = products.filter(product => 
+        product.name.toLowerCase().includes(query) ||
+        product.id.toLowerCase().includes(query) ||
+        product.referenceNumber.toLowerCase().includes(query) ||
+        product.packaging.toLowerCase().includes(query)
+      );
+    }
+    
+    // Sort: Real names first, generic names last
+    return filtered.sort((a, b) => {
       const aIsGeneric = a.name.includes('Medical Supply') || a.name.includes('Medical Product');
       const bIsGeneric = b.name.includes('Medical Supply') || b.name.includes('Medical Product');
       
@@ -40,7 +56,7 @@ export function AdminProductManager() {
       // If both are same type (both generic or both real), sort alphabetically
       return a.name.localeCompare(b.name);
     });
-  }, [products]);
+  }, [products, searchQuery]);
 
   const setImageUrlMutation = useSetProductImageUrl();
 
@@ -116,12 +132,48 @@ export function AdminProductManager() {
     <>
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center space-x-2">
-            <Package className="w-5 h-5" />
-            <span>Product Management</span>
+          <CardTitle className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <Package className="w-5 h-5" />
+              <span>Product Management</span>
+              <Badge variant="outline" className="ml-2">
+                {filteredProducts.length} {filteredProducts.length === 1 ? 'product' : 'products'}
+              </Badge>
+            </div>
           </CardTitle>
         </CardHeader>
         <CardContent>
+          {/* Search Bar */}
+          <div className="mb-6">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+              <Input
+                type="text"
+                placeholder="Search by name, code, reference, or packaging..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10 pr-10"
+                data-testid="input-search-products"
+              />
+              {searchQuery && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="absolute right-1 top-1/2 transform -translate-y-1/2 h-7 w-7 p-0"
+                  onClick={() => setSearchQuery('')}
+                  data-testid="button-clear-search"
+                >
+                  <X className="w-4 h-4" />
+                </Button>
+              )}
+            </div>
+            {searchQuery && (
+              <p className="text-sm text-gray-600 mt-2">
+                Found {filteredProducts.length} result{filteredProducts.length === 1 ? '' : 's'} for "{searchQuery}"
+              </p>
+            )}
+          </div>
+
           <Tabs defaultValue="grid" className="w-full">
             <TabsList className="mb-6">
               <TabsTrigger value="grid">Grid View</TabsTrigger>
@@ -129,8 +181,19 @@ export function AdminProductManager() {
             </TabsList>
             
             <TabsContent value="grid">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {sortedProducts.map((product) => {
+              {filteredProducts.length === 0 ? (
+                <div className="text-center py-12">
+                  <Package className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-gray-600 mb-2">
+                    No products found
+                  </h3>
+                  <p className="text-sm text-gray-500">
+                    {searchQuery ? `No products match "${searchQuery}"` : 'No products available'}
+                  </p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {filteredProducts.map((product) => {
                   const status = getStockStatus(product);
                   const StatusIcon = status.icon;
                   
@@ -182,26 +245,38 @@ export function AdminProductManager() {
                       </CardContent>
                     </Card>
                   );
-                })}
-              </div>
+                  })}
+                </div>
+              )}
             </TabsContent>
             
             <TabsContent value="table">
-              <div className="overflow-x-auto">
-                <table className="w-full border-collapse border border-gray-200">
-                  <thead>
-                    <tr className="bg-gray-50">
-                      <th className="border border-gray-200 p-3 text-left">Image</th>
-                      <th className="border border-gray-200 p-3 text-left">Product</th>
-                      <th className="border border-gray-200 p-3 text-left">Reference</th>
-                      <th className="border border-gray-200 p-3 text-left">Price</th>
-                      <th className="border border-gray-200 p-3 text-left">Stock</th>
-                      <th className="border border-gray-200 p-3 text-left">Status</th>
-                      <th className="border border-gray-200 p-3 text-left">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sortedProducts.map((product) => {
+              {filteredProducts.length === 0 ? (
+                <div className="text-center py-12">
+                  <Package className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-gray-600 mb-2">
+                    No products found
+                  </h3>
+                  <p className="text-sm text-gray-500">
+                    {searchQuery ? `No products match "${searchQuery}"` : 'No products available'}
+                  </p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse border border-gray-200">
+                    <thead>
+                      <tr className="bg-gray-50">
+                        <th className="border border-gray-200 p-3 text-left">Image</th>
+                        <th className="border border-gray-200 p-3 text-left">Product</th>
+                        <th className="border border-gray-200 p-3 text-left">Reference</th>
+                        <th className="border border-gray-200 p-3 text-left">Price</th>
+                        <th className="border border-gray-200 p-3 text-left">Stock</th>
+                        <th className="border border-gray-200 p-3 text-left">Status</th>
+                        <th className="border border-gray-200 p-3 text-left">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredProducts.map((product) => {
                       const status = getStockStatus(product);
                       const StatusIcon = status.icon;
                       
@@ -248,10 +323,11 @@ export function AdminProductManager() {
                           </td>
                         </tr>
                       );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </TabsContent>
           </Tabs>
         </CardContent>
