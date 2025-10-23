@@ -55,7 +55,15 @@ export function ImageUpload({ onImageUploaded, currentImage, className }: ImageU
       });
 
       if (!response.ok) {
-        throw new Error(`Upload failed: ${response.status}`);
+        const errorData = await response.json().catch(() => ({}));
+        console.error('Cloudinary upload error:', {
+          status: response.status,
+          statusText: response.statusText,
+          errorData,
+          uploadPreset: config.uploadPreset,
+          cloudName: config.cloudName
+        });
+        throw new Error(`Upload failed: ${response.status} - ${errorData.error?.message || response.statusText}`);
       }
 
       const result = await response.json();
