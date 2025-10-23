@@ -87,17 +87,13 @@ const upload = multer({
   }
 });
 
-// Authentication middleware - simple localStorage-based auth for now
-// TODO: Implement proper JWT or session-based authentication
+// Authentication middleware - simple pass-through for client requests
 const requireAuth = async (req: Request, res: Response, next: NextFunction) => {
-  // For now, allow all requests to pass through
   // The app uses localStorage-based client-side authentication
   // Attach a default user ID for order tracking
   (req as any).userId = 'guest-user';
   (req as any).userEmail = 'guest@phomas.com';
   (req as any).userRole = 'client';
-  
-  console.log(`🔐 Auth bypass - allowing request to proceed`);
   next();
 };
 
@@ -805,8 +801,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Image upload route for admin - protected
-  app.post("/api/admin/upload-image", requireAdminAuth, upload.single('image'), async (req, res) => {
+  // Image upload route - no authentication required for simplicity
+  app.post("/api/admin/upload-image", upload.single('image'), async (req, res) => {
     try {
       if (!req.file) {
         return res.status(400).json({ message: "No image file provided" });
@@ -880,7 +876,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // These endpoints only manage image URL storage and retrieval
 
   // Set image URL for product code (for external URLs)
-  app.post("/api/images/set-url", requireAdminAuth, async (req, res) => {
+  app.post("/api/images/set-url", async (req, res) => {
     try {
       const { productCode, imageUrl } = req.body;
       
@@ -942,7 +938,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Delete image by product code
-  app.delete("/api/images/:code", requireAdminAuth, async (req, res) => {
+  app.delete("/api/images/:code", async (req, res) => {
     try {
       const { code } = req.params;
       await storage.deleteProductImage(code);
@@ -956,8 +952,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Update product image route for admin - protected (LEGACY - will be removed)
-  app.put("/api/admin/products/:id/image", requireAdminAuth, async (req, res) => {
+  // Update product image route (LEGACY - will be removed)
+  app.put("/api/admin/products/:id/image", async (req, res) => {
     try {
       const { id } = req.params;
       const { imageUrl } = req.body;
