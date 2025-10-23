@@ -37,9 +37,9 @@ export async function apiRequest(
     headers["Content-Type"] = "application/json";
   }
   
-  // This app uses localStorage-based authentication, NOT Supabase
-  // The session token is stored in localStorage by the AuthProvider
-  const token = localStorage.getItem("phomas_auth_token");
+  // This app uses localStorage-based authentication
+  // Check for both admin and customer tokens
+  const token = localStorage.getItem("phomas_admin_token") || localStorage.getItem("phomas_auth_token");
   if (token) {
     headers["Authorization"] = `Bearer ${token}`;
   }
@@ -64,7 +64,8 @@ export const getQueryFn: <T>(options: {
     const headers: Record<string, string> = {};
     
     // This app uses localStorage-based authentication
-    const token = localStorage.getItem("phomas_auth_token");
+    // Check for both admin and customer tokens
+    const token = localStorage.getItem("phomas_admin_token") || localStorage.getItem("phomas_auth_token");
     if (token) {
       headers["Authorization"] = `Bearer ${token}`;
     }

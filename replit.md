@@ -132,3 +132,4 @@ The server is built with Express.js and uses an in-memory storage system for the
   - POST /api/admin/approve-user/:userId - Approves a user
   - Approval status stored in Supabase user metadata (approved field)
 - **WhatsApp Integration**: Contact number +255 678 389075 for approval requests
+- **Bug Fix**: Fixed admin token authorization issue where apiRequest wasn't checking for `phomas_admin_token` in localStorage
