@@ -10,6 +10,7 @@ import { supabaseSignUpSchema } from "@shared/schema";
 import { useLocation } from "wouter";
 import { z } from "zod";
 import logoImage from "@assets/Screenshot 2025-07-31 at 21.36.28_1753988684264.png";
+import { MessageCircle, CheckCircle } from "lucide-react";
 
 const registerFormSchema = supabaseSignUpSchema.extend({
   terms: z.boolean().refine((val) => val === true, {
@@ -22,6 +23,8 @@ type RegisterFormData = z.infer<typeof registerFormSchema>;
 export default function Registration() {
   const { register, isLoading } = useAuth();
   const [, setLocation] = useLocation();
+  const [registrationComplete, setRegistrationComplete] = useState(false);
+  const [userEmail, setUserEmail] = useState("");
 
   const form = useForm<RegisterFormData>({
     resolver: zodResolver(registerFormSchema),
@@ -41,9 +44,79 @@ export default function Registration() {
     const { terms, ...userData } = data;
     const success = await register(userData);
     if (success) {
-      setLocation("/");
+      setUserEmail(data.email);
+      setRegistrationComplete(true);
     }
   };
+
+  const whatsappNumber = "255678389075";
+  const whatsappMessage = encodeURIComponent(`Hello Phomas Diagnostics, I just registered a new account with email: ${userEmail}. Please approve my account so I can start ordering medical supplies.`);
+  const whatsappUrl = `https://wa.me/${whatsappNumber}?text=${whatsappMessage}`;
+
+  // Show pending approval message if registration is complete
+  if (registrationComplete) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-100 p-4">
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center">
+            <div className="flex items-center justify-center mb-4">
+              <img 
+                src={logoImage} 
+                alt="Phomas Diagnostics Logo" 
+                className="h-16 w-auto"
+              />
+            </div>
+            <div className="flex justify-center mb-4">
+              <CheckCircle className="h-16 w-16 text-green-500" />
+            </div>
+            <CardTitle className="text-xl text-green-600">Registration Successful!</CardTitle>
+          </CardHeader>
+
+          <CardContent className="space-y-6">
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <h3 className="font-semibold text-blue-900 mb-2">Account Pending Approval</h3>
+              <p className="text-sm text-blue-800 mb-3">
+                Your account has been created successfully. However, it requires admin approval before you can start placing orders.
+              </p>
+              <p className="text-sm text-blue-800">
+                <strong>Email:</strong> {userEmail}
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              <p className="text-sm text-gray-600 text-center">
+                For faster approval, please contact us on WhatsApp:
+              </p>
+              
+              <Button
+                onClick={() => window.open(whatsappUrl, '_blank')}
+                className="w-full bg-green-600 hover:bg-green-700 text-white flex items-center justify-center gap-2"
+                data-testid="button-contact-whatsapp"
+              >
+                <MessageCircle className="h-5 w-5" />
+                Contact Admin on WhatsApp
+              </Button>
+
+              <p className="text-xs text-gray-500 text-center">
+                +255 678 389075
+              </p>
+            </div>
+
+            <div className="pt-4 border-t">
+              <Button
+                variant="outline"
+                onClick={() => setLocation("/login")}
+                className="w-full"
+                data-testid="button-go-to-login"
+              >
+                Go to Login Page
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-100 p-4">

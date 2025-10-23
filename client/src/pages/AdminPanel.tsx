@@ -1,20 +1,23 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/contexts/AuthContext";
 import { ecountService } from "@/services/ecountService";
-import { Users, Package, AlertTriangle, Clock, CheckCircle, Edit, Trash2, Plus, Upload } from "lucide-react";
+import { Users, Package, AlertTriangle, Clock, CheckCircle, Edit, Trash2, Plus, Upload, UserCheck, MessageCircle } from "lucide-react";
 import { format } from "date-fns";
 import { useLocation } from "wouter";
 import { AdminProductManager } from "@/components/AdminProductManager";
 import { BulkSyncManager } from "@/components/BulkSyncManager";
 import type { User } from "@shared/schema";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 export default function AdminPanel() {
   const { user, isAdmin } = useAuth();
   const [, setLocation] = useLocation();
+  const { toast } = useToast();
 
   // Redirect non-admin users
   if (!isAdmin) {
@@ -25,6 +28,35 @@ export default function AdminPanel() {
   const { data: users = [], isLoading: usersLoading } = useQuery({
     queryKey: ["/api/admin/users"],
     queryFn: () => ecountService.getAllUsers(),
+  });
+
+  const { data: pendingUsers = [], isLoading: pendingLoading } = useQuery<any[]>({
+    queryKey: ["/api/admin/pending-users"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/admin/pending-users");
+      return await res.json();
+    },
+  });
+
+  const approveUserMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      const res = await apiRequest("POST", `/api/admin/approve-user/${userId}`);
+      return await res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries();
+      toast({
+        title: "User Approved",
+        description: "The user can now access the store",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Approval Failed",
+        description: error instanceof Error ? error.message : "Failed to approve user",
+        variant: "destructive",
+      });
+    },
   });
 
   const { data: products = [], isLoading: productsLoading } = useQuery({
@@ -78,6 +110,7 @@ export default function AdminPanel() {
         <Tabs defaultValue="overview" className="w-full">
           <TabsList className="mb-6">
             <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="approvals">Pending Approvals</TabsTrigger>
             <TabsTrigger value="products">Product Management</TabsTrigger>
             <TabsTrigger value="sync">Bulk Sync</TabsTrigger>
           </TabsList>
@@ -237,6 +270,107 @@ export default function AdminPanel() {
             </CardContent>
           </Card>
             </div>
+          </TabsContent>
+
+          <TabsContent value="approvals">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center space-x-2">
+                  <UserCheck className="w-5 h-5" />
+                  <span>Pending User Approvals</span>
+                  {pendingUsers.length > 0 && (
+                    <Badge className="ml-2 bg-amber-500">{pendingUsers.length}</Badge>
+                  )}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {pendingLoading ? (
+                  <div className="space-y-3">
+                    {Array.from({ length: 3 }).map((_, i) => (
+                      <div key={i} className="p-4 border border-gray-200 rounded-lg animate-pulse">
+                        <div className="h-4 bg-gray-200 rounded w-48 mb-2" />
+                        <div className="h-3 bg-gray-200 rounded w-32 mb-2" />
+                        <div className="h-3 bg-gray-200 rounded w-24" />
+                      </div>
+                    ))}
+                  </div>
+                ) : pendingUsers.length === 0 ? (
+                  <div className="text-center py-12">
+                    <UserCheck className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                    <h3 className="text-lg font-medium text-gray-600 mb-2">
+                      No Pending Approvals
+                    </h3>
+                    <p className="text-sm text-gray-500">
+                      All registered users have been approved
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {pendingUsers.map((pendingUser: any) => {
+                      const whatsappNumber = pendingUser.phone?.replace(/[^0-9]/g, '') || '';
+                      const whatsappUrl = whatsappNumber ? `https://wa.me/${whatsappNumber}` : null;
+
+                      return (
+                        <div
+                          key={pendingUser.id}
+                          className="p-4 border border-amber-200 bg-amber-50 rounded-lg"
+                          data-testid={`pending-user-${pendingUser.id}`}
+                        >
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-2">
+                                <h4 className="font-semibold text-gray-800">
+                                  {pendingUser.companyName}
+                                </h4>
+                                <Badge className="text-xs bg-amber-100 text-amber-800">
+                                  {pendingUser.userType === 'company' ? 'Company' : 'Individual'}
+                                </Badge>
+                              </div>
+                              <div className="space-y-1 text-sm text-gray-600">
+                                <p><strong>Email:</strong> {pendingUser.email}</p>
+                                {pendingUser.phone && (
+                                  <p className="flex items-center gap-2">
+                                    <strong>Phone:</strong> {pendingUser.phone}
+                                    {whatsappUrl && (
+                                      <a
+                                        href={whatsappUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="inline-flex items-center text-green-600 hover:text-green-700"
+                                        data-testid={`whatsapp-${pendingUser.id}`}
+                                      >
+                                        <MessageCircle className="w-4 h-4 ml-1" />
+                                      </a>
+                                    )}
+                                  </p>
+                                )}
+                                {pendingUser.address && (
+                                  <p><strong>Address:</strong> {pendingUser.address}</p>
+                                )}
+                                <p className="text-xs text-gray-500">
+                                  <strong>Registered:</strong> {format(new Date(pendingUser.createdAt), 'MMM d, yyyy h:mm a')}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="ml-4">
+                              <Button
+                                onClick={() => approveUserMutation.mutate(pendingUser.id)}
+                                disabled={approveUserMutation.isPending}
+                                className="bg-green-600 hover:bg-green-700"
+                                data-testid={`approve-user-${pendingUser.id}`}
+                              >
+                                <CheckCircle className="w-4 h-4 mr-2" />
+                                {approveUserMutation.isPending ? "Approving..." : "Approve"}
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </TabsContent>
           
           <TabsContent value="products">

@@ -29,10 +29,15 @@ The server is built with Express.js and uses an in-memory storage system for the
 - **Type Safety**: Full TypeScript coverage with shared types between client and server
 
 ## Authentication & Authorization
-- Session-based authentication with localStorage persistence
+- **Supabase Authentication**: Production authentication using Supabase Auth
+- **User Approval System**: ✅ NEW - All new registrations require admin approval before access
+  - New users register with approved=false in Supabase user metadata
+  - Login checks approval status and blocks unapproved users
+  - WhatsApp integration (+255 678 389075) for approval requests
+  - Admin panel "Pending Approvals" tab for reviewing and approving users
 - Role-based access control (admin vs client users)
-- Password-based login (note: passwords are stored in plain text for demo purposes)
 - Protected routes with authentication middleware
+- Admin users (admin@phomas.com) bypass approval requirement
 
 ## State Management
 - React Context API for authentication state and shopping cart
@@ -104,5 +109,26 @@ The server is built with Express.js and uses an in-memory storage system for the
 
 ## UI Enhancements
 - **Password Visibility Toggle**: Login and registration forms include Eye/EyeOff icons for password viewing
+- **User Approval Workflow**: 
+  - Registration success page with pending approval message
+  - WhatsApp quick-contact button for faster approval
+  - Login blocked for unapproved users with helpful messaging
+  - Admin panel tab for viewing and approving pending registrations
+- **Low-Stock Indicators**: Visible only to admin users (hidden from customers)
 - **Responsive Design**: Full mobile and desktop support with Tailwind CSS
 - **Dark Mode Ready**: Theme infrastructure in place using shadcn/ui theming
+
+# Recent Changes (October 2025)
+
+## User Approval System Implementation
+- **Registration Flow**: New users see pending approval message after successful registration
+- **Login Protection**: Unapproved users cannot login and receive WhatsApp contact info
+- **Admin Management**: New "Pending Approvals" tab in admin panel shows:
+  - User details (company name, email, phone, address, registration date)
+  - One-click approval button
+  - WhatsApp contact link for each user
+- **Backend API**: 
+  - GET /api/admin/pending-users - Lists users awaiting approval
+  - POST /api/admin/approve-user/:userId - Approves a user
+  - Approval status stored in Supabase user metadata (approved field)
+- **WhatsApp Integration**: Contact number +255 678 389075 for approval requests

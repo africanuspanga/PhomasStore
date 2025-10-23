@@ -145,6 +145,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (data.user) {
+        // Check if user is approved (unless they're admin)
+        const metadata = data.user.user_metadata || {};
+        const isApproved = metadata.approved === true;
+        const isAdmin = credentials.email === 'admin@phomas.com';
+
+        if (!isApproved && !isAdmin) {
+          // Sign out the user immediately
+          await supabase.auth.signOut();
+          
+          // Show pending approval message with WhatsApp option
+          const whatsappNumber = "255678389075";
+          const whatsappMessage = encodeURIComponent(`Hello Phomas Diagnostics, I would like to request approval for my account: ${credentials.email}`);
+          const whatsappUrl = `https://wa.me/${whatsappNumber}?text=${whatsappMessage}`;
+          
+          toast({
+            title: "Account Pending Approval",
+            description: (
+              <div className="space-y-2">
+                <p>Your account is waiting for admin approval.</p>
+                <button 
+                  onClick={() => window.open(whatsappUrl, '_blank')}
+                  className="text-green-600 hover:underline font-medium"
+                >
+                  Contact us on WhatsApp (+255 678 389075)
+                </button>
+              </div>
+            ) as any,
+            variant: "destructive",
+            duration: 8000,
+          });
+          return false;
+        }
+
         await loadUserProfile(data.user.id);
         toast({
           title: "Welcome back!",
