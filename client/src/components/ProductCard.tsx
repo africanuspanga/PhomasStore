@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useCart } from "@/contexts/CartContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { ShoppingCart, Clock, AlertTriangle } from "lucide-react";
 import { useProductImage, getImageWithFallback } from "@/hooks/useProductImages";
 import type { ProductWithInventory } from "@shared/schema";
@@ -16,6 +17,7 @@ interface ProductCardProps {
 export function ProductCard({ product, viewMode = "grid" }: ProductCardProps) {
   const [quantity, setQuantity] = useState(1);
   const { addItem, getItemQuantity } = useCart();
+  const { user } = useAuth();
   const [isAdding, setIsAdding] = useState(false);
   
   // Fetch image separately from product data
@@ -77,7 +79,7 @@ export function ProductCard({ product, viewMode = "grid" }: ProductCardProps) {
                       Exp: {new Date(product.expirationDate!).toLocaleDateString()}
                     </Badge>
                   )}
-                  {product.isLowStock && (
+                  {product.isLowStock && user?.role === 'admin' && (
                     <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">
                       <AlertTriangle className="w-3 h-3 mr-1" />
                       Low Stock
@@ -145,7 +147,7 @@ export function ProductCard({ product, viewMode = "grid" }: ProductCardProps) {
               Exp: {new Date(product.expirationDate!).toLocaleDateString().split('/').slice(0, 2).join('/')}
             </Badge>
           )}
-          {product.isLowStock && (
+          {product.isLowStock && user?.role === 'admin' && (
             <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200 block">
               <AlertTriangle className="w-3 h-3 mr-1" />
               Low Stock

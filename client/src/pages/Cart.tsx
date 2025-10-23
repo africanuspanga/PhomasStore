@@ -249,7 +249,7 @@ export default function Cart() {
                 </svg>
               </div>
               <h3 className="text-xl font-semibold text-gray-800 mb-2">Order Sent Successfully!</h3>
-              <p className="text-gray-600 mb-4">Your order has been sent to E-count for processing.</p>
+              <p className="text-gray-600 mb-4">Your order has been sent to Phomas for processing.</p>
               <p className="text-sm text-gray-500 mb-6">
                 Order Number: <span className="font-medium text-phomas-green">{orderNumber}</span>
               </p>
