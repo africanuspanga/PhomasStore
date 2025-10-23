@@ -485,8 +485,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Order routes - now with CORRECTED eCount sales integration
   app.post("/api/orders", requireAuth, enforceSaveRateLimit, async (req, res) => {
     try {
-      const orderData = insertOrderSchema.parse(req.body);
       const userProfile = (req as any).userProfile;
+      
+      // Add customer information from user profile to order data
+      const orderDataWithCustomer = {
+        ...req.body,
+        customerName: userProfile?.name || 'Guest Customer',
+        customerEmail: userProfile?.email || req.body.customerEmail || 'guest@example.com',
+        customerPhone: userProfile?.phone || req.body.customerPhone,
+        customerCompany: userProfile?.name || req.body.customerCompany,
+        customerAddress: userProfile?.address || req.body.customerAddress,
+      };
+      
+      const orderData = insertOrderSchema.parse(orderDataWithCustomer);
       
       // Create order in local storage first
       const order = await storage.createOrder(orderData);
@@ -626,9 +637,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/orders", async (req, res) => {
+  // Get all orders (admin only) - shows customer information for order attribution
+  app.get("/api/orders", requireAdminAuth, async (req, res) => {
     try {
       const orders = await storage.getAllOrders();
+      console.log(`📦 Admin fetched ${orders.length} orders with customer information`);
       res.json(orders);
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch all orders", error });
