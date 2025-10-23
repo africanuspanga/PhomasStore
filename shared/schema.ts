@@ -39,6 +39,12 @@ export const orders = pgTable("orders", {
   tax: decimal("tax", { precision: 10, scale: 2 }).notNull(),
   total: decimal("total", { precision: 10, scale: 2 }).notNull(),
   status: text("status").notNull().default("processing"),
+  // Customer information (stored directly for admin visibility)
+  customerName: text("customer_name").notNull(),
+  customerEmail: text("customer_email").notNull(),
+  customerPhone: text("customer_phone"),
+  customerCompany: text("customer_company"),
+  customerAddress: text("customer_address"),
   // eCount ERP Integration fields
   erpDocNumber: text("erp_doc_number"), // DOC_NO from eCount SaveSale response
   erpIoDate: text("erp_io_date"), // IO_DATE from eCount SaveSale (YYYYMMDD format)
@@ -106,6 +112,14 @@ export const insertOrderSchema = createInsertSchema(orders).omit({
   id: true,
   orderNumber: true,
   createdAt: true,
+  erpDocNumber: true,
+  erpIoDate: true,
+}).extend({
+  customerName: z.string().min(1, "Customer name is required"),
+  customerEmail: z.string().email("Valid email is required"),
+  customerPhone: z.string().optional(),
+  customerCompany: z.string().optional(),
+  customerAddress: z.string().optional(),
 });
 
 export const insertProductImageSchema = createInsertSchema(productImages).omit({
