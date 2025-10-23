@@ -228,7 +228,7 @@ export default function Cart() {
                   ) : (
                     <>
                       <Send className="w-5 h-5 mr-2" />
-                      PAY NOW
+                      ORDER NOW
                     </>
                   )}
                 </Button>
