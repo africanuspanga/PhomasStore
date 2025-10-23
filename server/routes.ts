@@ -416,9 +416,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Public Cloudinary configuration for frontend direct uploads
   app.get("/api/cloudinary-config", (req, res) => {
     const uploadPreset = process.env.CLOUDINARY_UPLOAD_PRESET || 'phomas_products';
+    const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+    
+    console.log('📸 Cloudinary config requested:', {
+      cloudName,
+      uploadPreset,
+      hasCloudName: !!cloudName,
+      hasPreset: !!uploadPreset
+    });
+    
     res.json({ 
-      cloudName: process.env.CLOUDINARY_CLOUD_NAME,
-      uploadPreset: uploadPreset
+      cloudName,
+      uploadPreset
+    });
+  });
+
+  // Debug endpoint to test Cloudinary connection
+  app.get("/api/debug/cloudinary", (req, res) => {
+    res.json({
+      cloudName: process.env.CLOUDINARY_CLOUD_NAME || 'NOT_SET',
+      uploadPreset: process.env.CLOUDINARY_UPLOAD_PRESET || 'NOT_SET',
+      apiKey: process.env.CLOUDINARY_API_KEY ? 'SET' : 'NOT_SET',
+      apiSecret: process.env.CLOUDINARY_API_SECRET ? 'SET' : 'NOT_SET',
+      uploadUrl: `https://api.cloudinary.com/v1_1/${process.env.CLOUDINARY_CLOUD_NAME || 'MISSING'}/image/upload`
     });
   });
 
