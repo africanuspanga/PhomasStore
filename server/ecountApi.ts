@@ -257,11 +257,14 @@ class EcountApiService {
 
       console.log(`Zone API response status: ${response.status}`);
       const result = await response.json();
-      if (result.Status === "200") {
-        const zone = result.Data?.Zone || ECOUNT_CONFIG.zone;
+      
+      // FIX: Status can be either number 200 or string "200"
+      if (result.Status === "200" || result.Status === 200) {
+        const zone = result.Data?.ZONE || result.Data?.Zone || ECOUNT_CONFIG.zone;
         console.log(`✅ Zone API successful: ${zone}`);
         return zone;
       }
+      console.error('🔍 Zone API Error:', result.Error);
       throw new Error(`Zone API failed: ${result.Error?.Message || 'Unknown error'}`);
     } catch (error) {
       console.error('Zone API error:', error);
@@ -356,9 +359,12 @@ class EcountApiService {
         throw new Error('Login rate limited (412) - please wait before retry');
       }
       
-      // Capture cookies from login response
-      const setCookieHeaders = response.headers.get('set-cookie') || '';
-      console.log(`🍪 Login Set-Cookie headers: [REDACTED FOR SECURITY]`);
+      // Capture ALL cookies from login response (Node.js fetch returns raw headers)
+      // @ts-ignore - Node.js fetch has a raw() method to get all headers
+      const rawHeaders = response.headers.raw ? response.headers.raw() : {};
+      const setCookieArray = rawHeaders['set-cookie'] || [];
+      const setCookieHeaders = Array.isArray(setCookieArray) ? setCookieArray.join('; ') : String(response.headers.get('set-cookie') || '');
+      console.log(`🍪 Login Set-Cookie headers captured: ${setCookieArray.length || 1} cookies`);
       
       // Check content type before parsing JSON
       const contentType = response.headers.get('content-type');
@@ -369,13 +375,17 @@ class EcountApiService {
       
       const result = await response.json();
       
-      if (result.Status === "200" && result.Data?.Datas?.SESSION_ID) {
+      // FIX: Check for session_guid (new API) or SESSION_ID (old API)
+      const sessionId = result.Data?.session_guid || result.Data?.Datas?.SESSION_ID;
+      
+      // FIX: Status can be either number 200 or string "200"
+      if ((result.Status === "200" || result.Status === 200) && sessionId) {
         // Session expires in 30 minutes by default (can be configured in ERP)
         const expiresAt = new Date(Date.now() + 25 * 60 * 1000); // 25 min for safety
         
         // Store session with cookies for subsequent requests
         this.session = {
-          sessionId: result.Data.Datas.SESSION_ID,
+          sessionId: sessionId,
           expiresAt,
           zone,
           cookies: setCookieHeaders // Store cookies for auth
