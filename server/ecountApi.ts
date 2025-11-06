@@ -58,10 +58,13 @@ class EcountApiService {
   private inventoryCache = new Map<string, { data: any, timestamp: number }>();
   private readonly CACHE_DURATION = 60 * 60 * 1000; // 1 hour in milliseconds
   
-  // Rate limiting for eCount APIs (per documentation)
+  // CRITICAL: eCount rate limits (from API documentation)
+  // Inventory Balance: 1 call per 20 minutes
+  // Sales Order: 1 call per 20 seconds
+  private inventoryLastCall = 0;
+  private readonly INVENTORY_RATE_LIMIT = 20 * 60 * 1000; // 20 minutes in milliseconds
   private bulkSyncLastCall = 0;
   private readonly BULK_RATE_LIMIT = 10 * 60 * 1000; // 10 minutes in milliseconds
-  private backgroundScheduler: NodeJS.Timeout | null = null;
 
   // Circuit breaker for handling 412 errors and lockouts
   private circuitBreakerState: 'CLOSED' | 'OPEN' | 'HALF_OPEN' = 'CLOSED';
@@ -91,10 +94,9 @@ class EcountApiService {
     this.session = null;
     console.log('🔄 Session cache cleared - will authenticate with fresh credentials');
     
-    // Start background bulk sync scheduler (every 10 minutes) with delay to prevent startup conflicts
-    setTimeout(() => {
-      this.startBackgroundScheduler();
-    }, 60000); // 60 second delay to let initial product load complete
+    // REMOVED: Background scheduler (causes rate limit violations)
+    // eCount Inventory Balance API: 1 call per 20 minutes maximum
+    console.log('⏱️  Rate limit: Inventory Balance API limited to 1 call per 20 minutes');
   }
 
   /**
@@ -457,7 +459,19 @@ class EcountApiService {
    */
   async getProductList(): Promise<any[]> {
     try {
-      console.log('🔍 Using InventoryBalance endpoint for products (fixing data parsing)');
+      // CRITICAL: Check rate limit (1 call per 20 minutes)
+      const timeSinceLastCall = Date.now() - this.inventoryLastCall;
+      const timeRemaining = this.INVENTORY_RATE_LIMIT - timeSinceLastCall;
+      
+      if (this.inventoryLastCall > 0 && timeRemaining > 0) {
+        const minutesRemaining = Math.ceil(timeRemaining / 60000);
+        console.log(`⏱️  Rate limit: Must wait ${minutesRemaining} more minutes before calling Inventory API`);
+        console.log(`📦 Using cached product data instead`);
+        return []; // Return empty to use cache
+      }
+      
+      console.log('🔍 Using InventoryBalance endpoint for products (respecting 20-min rate limit)');
+      this.inventoryLastCall = Date.now(); // Mark this call
       
       // Use the inventory endpoint that was working with proper parameters AND warehouse code
       const result = await this.ecountRequest({
@@ -1539,54 +1553,55 @@ class EcountApiService {
 
 
   /**
-   * Background Scheduler: Automatic 10-minute bulk sync cycles
-   * This respects eCount rate limits and keeps cache fresh
+   * DISABLED: Background Scheduler - Causes rate limit violations
+   * eCount Inventory API: Limited to 1 call per 20 minutes
+   * Manual refresh or on-demand loading is preferred
    */
-  private startBackgroundScheduler(): void {
-    console.log('⏰ Starting eCount background scheduler (10-minute cycles)');
-    
-    // Initial sync after 30 seconds
-    setTimeout(() => {
-      this.performBackgroundBulkSync();
-    }, 30000);
-    
-    // Then sync every 10 minutes
-    this.backgroundScheduler = setInterval(() => {
-      this.performBackgroundBulkSync();
-    }, this.BULK_RATE_LIMIT); // 10 minutes
-  }
+  // private startBackgroundScheduler(): void {
+  //   console.log('⏰ Starting eCount background scheduler (10-minute cycles)');
+  //   
+  //   // Initial sync after 30 seconds
+  //   setTimeout(() => {
+  //     this.performBackgroundBulkSync();
+  //   }, 30000);
+  //   
+  //   // Then sync every 10 minutes
+  //   this.backgroundScheduler = setInterval(() => {
+  //     this.performBackgroundBulkSync();
+  //   }, this.BULK_RATE_LIMIT); // 10 minutes
+  // }
 
   /**
-   * Perform background bulk sync with rate limiting
+   * DISABLED: Background bulk sync - Causes rate limit violations
    */
-  private async performBackgroundBulkSync(): Promise<void> {
-    const now = Date.now();
-    const timeSinceLastCall = now - this.bulkSyncLastCall;
-    
-    // Respect 10-minute rate limit
-    if (timeSinceLastCall < this.BULK_RATE_LIMIT) {
-      const waitTime = this.BULK_RATE_LIMIT - timeSinceLastCall;
-      console.log(`⏳ Rate limit: waiting ${Math.round(waitTime / 1000)}s before next bulk sync`);
-      return;
-    }
-    
-    try {
-      console.log('🔄 Background bulk sync started (Production eCount)');
-      
-      // Update rate limit tracker
-      this.bulkSyncLastCall = now;
-      
-      // Perform bulk sync operations in sequence
-      await this.bulkSyncProductsAndInventory();
-      
-      // Retry failed orders
-      await this.retryFailedOrders();
-      
-      console.log('✅ Background bulk sync completed successfully');
-    } catch (error) {
-      console.error('❌ Background bulk sync failed:', error);
-    }
-  }
+  // private async performBackgroundBulkSync(): Promise<void> {
+  //   const now = Date.now();
+  //   const timeSinceLastCall = now - this.bulkSyncLastCall;
+  //   
+  //   // Respect 10-minute rate limit
+  //   if (timeSinceLastCall < this.BULK_RATE_LIMIT) {
+  //     const waitTime = this.BULK_RATE_LIMIT - timeSinceLastCall;
+  //     console.log(`⏳ Rate limit: waiting ${Math.round(waitTime / 1000)}s before next bulk sync`);
+  //     return;
+  //   }
+  //   
+  //   try {
+  //     console.log('🔄 Background bulk sync started (Production eCount)');
+  //     
+  //     // Update rate limit tracker
+  //     this.bulkSyncLastCall = now;
+  //     
+  //     // Perform bulk sync operations in sequence
+  //     await this.bulkSyncProductsAndInventory();
+  //     
+  //     // Retry failed orders
+  //     await this.retryFailedOrders();
+  //     
+  //     console.log('✅ Background bulk sync completed successfully');
+  //   } catch (error) {
+  //     console.error('❌ Background bulk sync failed:', error);
+  //   }
+  // }
 
   /**
    * Retry failed orders automatically in background
