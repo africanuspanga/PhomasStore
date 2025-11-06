@@ -163,14 +163,13 @@ class EcountApiService {
         'Pragma': 'no-cache'
       };
       
-      // CRITICAL TEST: Try WITHOUT cookies - maybe eCount doesn't like both cookies AND session ID
-      // if (cookies) {
-      //   headers['Cookie'] = cookies;
-      //   console.log(`🍪 Sending Cookie header: ${cookies.substring(0, 100)}...`);
-      // } else {
-      //   console.log(`⚠️ No cookies available for this request`);
-      // }
-      console.log(`🧪 Testing without cookies - using ONLY session ID in URL and body`);
+      // CRITICAL FIX: InventoryBalance API REQUIRES cookies + session ID (both!)
+      if (cookies) {
+        headers['Cookie'] = cookies;
+        console.log(`🍪 Sending Cookie header: ${cookies.substring(0, 100)}...`);
+      } else {
+        console.log(`⚠️ No cookies available for this request`);
+      }
       
       // Build request body - include SESSION_ID AND AUTH_KEY for authenticated requests
       const requestBody: any = {
