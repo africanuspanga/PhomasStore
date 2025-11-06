@@ -162,16 +162,26 @@ class EcountApiService {
       // Add cookies if we have them from login
       if (cookies) {
         headers['Cookie'] = cookies;
-        console.log(`🍪 Using session cookies [REDACTED]`);
+        console.log(`🍪 Sending Cookie header: ${cookies.substring(0, 100)}...`);
+      } else {
+        console.log(`⚠️ No cookies available for this request`);
+      }
+      
+      // Build request body - include SESSION_ID for authenticated requests
+      const requestBody: any = {
+        COM_CODE: ECOUNT_CONFIG.companyCode,
+        ...body
+      };
+      
+      // CRITICAL FIX: eCount requires SESSION_ID in BOTH URL and body for API requests
+      if (requiresAuth && sessionId) {
+        requestBody.SESSION_ID = sessionId;
       }
       
       const response = await fetch(url, {
         method: 'POST',
         headers,
-        body: JSON.stringify({
-          COM_CODE: ECOUNT_CONFIG.companyCode,
-          ...body
-        })
+        body: JSON.stringify(requestBody)
       });
       
       console.log(`Response status: ${response.status}, Content-Type: ${response.headers.get('content-type')}`);
@@ -359,12 +369,30 @@ class EcountApiService {
         throw new Error('Login rate limited (412) - please wait before retry');
       }
       
-      // Capture ALL cookies from login response (Node.js fetch returns raw headers)
-      // @ts-ignore - Node.js fetch has a raw() method to get all headers
-      const rawHeaders = response.headers.raw ? response.headers.raw() : {};
-      const setCookieArray = rawHeaders['set-cookie'] || [];
-      const setCookieHeaders = Array.isArray(setCookieArray) ? setCookieArray.join('; ') : String(response.headers.get('set-cookie') || '');
-      console.log(`🍪 Login Set-Cookie headers captured: ${setCookieArray.length || 1} cookies`);
+      // FIX: Properly parse Set-Cookie headers in Node.js
+      // In Node.js, fetch may return multiple Set-Cookie as a single comma-separated string
+      // or as an array (depending on the fetch implementation)
+      const setCookieHeader = response.headers.get('set-cookie') || '';
+      
+      // Parse cookies: extract just the cookie name=value pairs (before semicolons)
+      const cookieValues: string[] = [];
+      
+      if (setCookieHeader) {
+        // Split by comma, but be careful - cookie values can contain commas
+        // The safest approach is to split by '; ' and take the first part of each cookie
+        const cookieParts = setCookieHeader.split(',').map(c => c.trim());
+        
+        for (const cookiePart of cookieParts) {
+          // Extract just "name=value" (before first semicolon)
+          const cookieValue = cookiePart.split(';')[0].trim();
+          if (cookieValue) {
+            cookieValues.push(cookieValue);
+          }
+        }
+      }
+      
+      const cookieString = cookieValues.join('; ');
+      console.log(`🍪 Captured ${cookieValues.length} cookies from login`);
       
       // Check content type before parsing JSON
       const contentType = response.headers.get('content-type');
@@ -388,12 +416,12 @@ class EcountApiService {
           sessionId: sessionId,
           expiresAt,
           zone,
-          cookies: setCookieHeaders // Store cookies for auth
+          cookies: cookieString // Store parsed cookies for auth
         };
 
         console.log(`✅ eCount login successful! (Zone: ${zone}, Session: ${this.session.sessionId.substring(0, 8)}...)`);
-        if (setCookieHeaders) {
-          console.log(`🍪 Stored cookies for session authentication`);
+        if (cookieString) {
+          console.log(`🍪 Stored ${cookieValues.length} cookies for session authentication`);
         }
         return this.session.sessionId;
       }
