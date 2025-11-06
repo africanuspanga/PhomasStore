@@ -369,24 +369,33 @@ class EcountApiService {
         throw new Error('Login rate limited (412) - please wait before retry');
       }
       
-      // FIX: Properly parse Set-Cookie headers in Node.js
-      // In Node.js, fetch may return multiple Set-Cookie as a single comma-separated string
-      // or as an array (depending on the fetch implementation)
+      // FIX: Properly parse Set-Cookie headers and extract session from cookie
       const setCookieHeader = response.headers.get('set-cookie') || '';
       
-      // Parse cookies: extract just the cookie name=value pairs (before semicolons)
+      // Parse cookies and extract session ID from ECOUNT_SessionId cookie
       const cookieValues: string[] = [];
+      let sessionIdFromCookie = ''; // Will be extracted from cookie if available
       
       if (setCookieHeader) {
-        // Split by comma, but be careful - cookie values can contain commas
-        // The safest approach is to split by '; ' and take the first part of each cookie
         const cookieParts = setCookieHeader.split(',').map(c => c.trim());
         
         for (const cookiePart of cookieParts) {
-          // Extract just "name=value" (before first semicolon)
           const cookieValue = cookiePart.split(';')[0].trim();
           if (cookieValue) {
             cookieValues.push(cookieValue);
+            
+            // Extract session ID from ECOUNT_SessionId cookie (more reliable)
+            if (cookieValue.startsWith('ECOUNT_SessionId=')) {
+              const cookieSessionValue = cookieValue.split('=')[1];
+              if (cookieSessionValue) {
+                // Session ID is everything before the special separator (!)
+                const sessionMatch = cookieSessionValue.match(/^([^!]+)/);
+                if (sessionMatch) {
+                  sessionIdFromCookie = sessionMatch[1];
+                  console.log(`🍪 Extracted session from cookie: ${sessionIdFromCookie.substring(0, 12)}...`);
+                }
+              }
+            }
           }
         }
       }
@@ -412,8 +421,11 @@ class EcountApiService {
         const expiresAt = new Date(Date.now() + 25 * 60 * 1000); // 25 min for safety
         
         // Store session with cookies for subsequent requests
+        // CRITICAL: Use session ID from cookie if available (more reliable than response body)
+        const finalSessionId = sessionIdFromCookie || sessionId;
+        
         this.session = {
-          sessionId: sessionId,
+          sessionId: finalSessionId,
           expiresAt,
           zone,
           cookies: cookieString // Store parsed cookies for auth
@@ -422,6 +434,9 @@ class EcountApiService {
         console.log(`✅ eCount login successful! (Zone: ${zone}, Session: ${this.session.sessionId.substring(0, 8)}...)`);
         if (cookieString) {
           console.log(`🍪 Stored ${cookieValues.length} cookies for session authentication`);
+        }
+        if (finalSessionId !== sessionId) {
+          console.log(`🔄 Using session ID from cookie instead of response body`);
         }
         return this.session.sessionId;
       }
