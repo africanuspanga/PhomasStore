@@ -143,11 +143,13 @@ class EcountApiService {
     }
     
     const baseUrlWithZone = this.baseUrl.replace('{ZONE}', zone);
-    const url = requiresAuth ? `${baseUrlWithZone}${endpoint}?SESSION_ID=${sessionId}` : `${baseUrlWithZone}${endpoint}`;
+    // CRITICAL FIX: URL-encode session ID (contains special characters like ! and =)
+    const encodedSessionId = requiresAuth ? encodeURIComponent(sessionId) : '';
+    const url = requiresAuth ? `${baseUrlWithZone}${endpoint}?SESSION_ID=${encodedSessionId}` : `${baseUrlWithZone}${endpoint}`;
     
     console.log(`Making eCount API request: ${endpoint} (Zone: ${zone})`);
     if (requiresAuth) {
-      console.log(`🔗 Full URL with SESSION_ID: ${baseUrlWithZone}${endpoint}?SESSION_ID=${sessionId.substring(0, 8)}...`);
+      console.log(`🔗 Full URL with SESSION_ID: ${baseUrlWithZone}${endpoint}?SESSION_ID=${encodedSessionId.substring(0, 20)}...`);
     }
     
     try {
@@ -169,15 +171,16 @@ class EcountApiService {
         console.log(`⚠️ No cookies available for this request`);
       }
       
-      // Build request body - include SESSION_ID for authenticated requests
+      // Build request body - include SESSION_ID AND AUTH_KEY for authenticated requests
       const requestBody: any = {
         COM_CODE: ECOUNT_CONFIG.companyCode,
         ...body
       };
       
-      // CRITICAL FIX: eCount requires SESSION_ID in BOTH URL and body for API requests
+      // CRITICAL FIX: eCount requires SESSION_ID + AUTH_KEY in BOTH URL and body for API requests
       if (requiresAuth && sessionId) {
         requestBody.SESSION_ID = sessionId;
+        requestBody.API_CERT_KEY = ECOUNT_CONFIG.authKey;  // Add auth key to every request
       }
       
       const response = await fetch(url, {
@@ -388,14 +391,13 @@ class EcountApiService {
             
             // Extract session ID from ECOUNT_SessionId cookie (more reliable)
             if (cookieValue.startsWith('ECOUNT_SessionId=')) {
-              const cookieSessionValue = cookieValue.split('=')[1];
+              // CRITICAL FIX: Cookie value may have multiple '=' signs
+              // Get everything after 'ECOUNT_SessionId='
+              const cookieSessionValue = cookieValue.substring('ECOUNT_SessionId='.length);
               if (cookieSessionValue) {
-                // Session ID is everything before the special separator (!)
-                const sessionMatch = cookieSessionValue.match(/^([^!]+)/);
-                if (sessionMatch) {
-                  sessionIdFromCookie = sessionMatch[1];
-                  console.log(`🍪 Extracted session from cookie: ${sessionIdFromCookie.substring(0, 12)}...`);
-                }
+                // Session ID is the full cookie value (may contain '=' characters)
+                sessionIdFromCookie = cookieSessionValue;
+                console.log(`🍪 Extracted session from cookie: ${sessionIdFromCookie.substring(0, 20)}...`);
               }
             }
           }
@@ -416,15 +418,16 @@ class EcountApiService {
       
       // FIX: Check for session_guid (new API) or SESSION_ID (old API)
       const sessionId = result.Data?.session_guid || result.Data?.Datas?.SESSION_ID;
+      console.log(`📝 Session ID from response body: ${sessionId ? sessionId.substring(0, 20) + '...' : 'NONE'}`);
       
       // FIX: Status can be either number 200 or string "200"
       if ((result.Status === "200" || result.Status === 200) && sessionId) {
         // Session expires in 30 minutes by default (can be configured in ERP)
         const expiresAt = new Date(Date.now() + 25 * 60 * 1000); // 25 min for safety
         
-        // Store session with cookies for subsequent requests
-        // CRITICAL: Use session ID from cookie if available (more reliable than response body)
-        const finalSessionId = sessionIdFromCookie || sessionId;
+        // CRITICAL FIX: Always use session ID from response body, not cookie
+        // The cookie session ID format appears to be different from what the API expects
+        const finalSessionId = sessionId;  // Use response body session ID
         
         this.session = {
           sessionId: finalSessionId,
@@ -437,9 +440,7 @@ class EcountApiService {
         if (cookieString) {
           console.log(`🍪 Stored ${cookieValues.length} cookies for session authentication`);
         }
-        if (finalSessionId !== sessionId) {
-          console.log(`🔄 Using session ID from cookie instead of response body`);
-        }
+        console.log(`🔑 Using session ID from response body (standard eCount format)`);
         return this.session.sessionId;
       }
 
