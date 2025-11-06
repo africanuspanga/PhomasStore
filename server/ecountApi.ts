@@ -1696,14 +1696,10 @@ class EcountApiService {
   }
 
   /**
-   * Stop background scheduler (for cleanup)
+   * DISABLED: Background scheduler removed to prevent rate limit violations
    */
   stopBackgroundScheduler(): void {
-    if (this.backgroundScheduler) {
-      clearInterval(this.backgroundScheduler);
-      this.backgroundScheduler = null;
-      console.log('⏹️ eCount background scheduler stopped');
-    }
+    console.log('ℹ️ Background scheduler already disabled (rate limit protection)');
   }
 
   /**
