@@ -120,6 +120,23 @@ The server is built with Express.js and uses an in-memory storage system for the
 
 # Recent Changes (October 2025)
 
+## Order Management System with Customer Attribution (October 23, 2025)
+- **Customer Order Tracking**: Complete order management system that tracks which customer placed which order
+  - Solves the problem that all eCount orders use single customer code (10839 "Online Store Sales")
+  - Customer information (name, email, phone, company, address) stored directly in each order
+  - Backend automatically extracts customer info from authenticated user's Supabase profile
+- **Customer Order History**: /orders page shows customers their complete order history
+  - Displays order number, date, items, total, and status
+  - Empty state for new customers
+  - Loading skeleton for better UX
+- **Admin Order Management**: New "Orders" tab in Admin Panel
+  - Shows ALL customer orders with full customer attribution
+  - Displays customer name, company, contact info, order details, and ERP sync status
+  - Shows both internal order number and eCount Doc Number for cross-reference
+  - ERP sync status badges (✓ Synced, ✗ Failed, ⏳ Pending)
+  - Defensive rendering handles edge cases (empty items, parse failures)
+- **Button Update**: Cart checkout button changed from "PAY NOW" to "ORDER NOW"
+
 ## Product Search Feature (October 23, 2025)
 - **Admin Panel Search**: Added functional search bar to Product Management section
   - Search by product name, code, reference number, or packaging

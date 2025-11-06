@@ -42,9 +42,9 @@ export const orders = pgTable("orders", {
   // Customer information (stored directly for admin visibility)
   customerName: text("customer_name").notNull(),
   customerEmail: text("customer_email").notNull(),
-  customerPhone: text("customer_phone"),
-  customerCompany: text("customer_company"),
-  customerAddress: text("customer_address"),
+  customerPhone: text("customer_phone").default(''),
+  customerCompany: text("customer_company").default(''),
+  customerAddress: text("customer_address").default(''),
   // eCount ERP Integration fields
   erpDocNumber: text("erp_doc_number"), // DOC_NO from eCount SaveSale response
   erpIoDate: text("erp_io_date"), // IO_DATE from eCount SaveSale (YYYYMMDD format)
@@ -115,8 +115,9 @@ export const insertOrderSchema = createInsertSchema(orders).omit({
   erpDocNumber: true,
   erpIoDate: true,
 }).extend({
-  customerName: z.string().min(1, "Customer name is required"),
-  customerEmail: z.string().email("Valid email is required"),
+  // Customer fields are optional from frontend - backend auto-fills from user profile
+  customerName: z.string().optional(),
+  customerEmail: z.string().optional(),
   customerPhone: z.string().optional(),
   customerCompany: z.string().optional(),
   customerAddress: z.string().optional(),

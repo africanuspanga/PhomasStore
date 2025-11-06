@@ -356,6 +356,11 @@ export class MemStorage implements IStorage {
       id,
       orderNumber,
       status: insertOrder.status || "processing",
+      customerName: insertOrder.customerName || 'Guest Customer',
+      customerEmail: insertOrder.customerEmail || 'guest@example.com',
+      customerPhone: insertOrder.customerPhone || '',
+      customerCompany: insertOrder.customerCompany || '',
+      customerAddress: insertOrder.customerAddress || '',
       createdAt: new Date(),
       // Initialize ERP fields with null values
       erpDocNumber: null,
@@ -508,6 +513,18 @@ export class DatabaseStorage implements IStorage {
 
   async getAllOrders(): Promise<Order[]> {
     return this.memStorage.getAllOrders();
+  }
+
+  async getFailedOrders(): Promise<Order[]> {
+    return this.memStorage.getFailedOrders();
+  }
+
+  async getPendingUsers(): Promise<User[]> {
+    return this.memStorage.getPendingUsers();
+  }
+
+  async approveUser(userId: string): Promise<User | undefined> {
+    return this.memStorage.approveUser(userId);
   }
 
   async updateOrderErpInfo(orderId: string, erpInfo: {
