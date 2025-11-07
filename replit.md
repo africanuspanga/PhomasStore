@@ -135,18 +135,23 @@ The server is built with Express.js and uses an in-memory storage system for the
 - **Background**: eCount locks API access after 30 consecutive errors/hour (documented limit). We hit this during authentication debugging on November 6-7, 2025. eCount support unlocked the API and requested proper error handling implementation.
 
 ## eCount API Selective Endpoint Locking (November 7, 2025)
-- **Current Status**: InventoryBalance and BasicProductsList endpoints remain SERVER-SIDE LOCKED despite eCount claiming "unlock"
+- **Current Status**: InventoryBalance endpoint remains SERVER-SIDE LOCKED despite UI showing "VERIFIED" status
   - **Working APIs**: Login (OAPILogin), SaveSaleOrder, Zone
-  - **Locked APIs**: InventoryBalance/GetListInventoryBalanceStatus, BasicProductsList
-  - **Error Pattern**: All locked endpoints return HTTP 500 "Please login" despite perfect authentication
-  - **Root Cause**: Selective endpoint locking on eCount's server - verification process not complete for inventory endpoints
+  - **Locked APIs**: InventoryBalance/GetListInventoryBalanceStatus
+  - **Error Pattern**: Returns HTTP 500 "Please login" despite perfect authentication
+  - **Root Cause**: Verification status ≠ production activation; endpoint disabled server-side
   - **Client Auth**: CONFIRMED WORKING - identical authentication succeeds for SaveSaleOrder, SESSION_ID and cookies are correct
 - **Excel Fallback System**: Production-ready workaround keeps business operational
   - All 466 products visible on website with real names, prices, packaging from Excel file
   - Auto-switches between Excel data and real-time eCount when API status changes
   - Products marked with `hasRealTimeData: false` and `availableQuantity: 0` when using Excel
   - Orders still work perfectly (SaveSaleOrder API functional)
-- **Next Steps**: User needs to escalate to eCount support with evidence that InventoryBalance endpoint requires manual unlock for company 902378
+- **Solution**: User must contact eCount support with:
+  1. Company ID: 902378, Warehouse: 00001
+  2. Production API key: 01bfa323...eb59
+  3. Request explicit production activation for InventoryBalance/InventoryBasic endpoints
+  4. Confirm warehouse permissions and API scope for auth key
+  5. Evidence: SaveSaleOrder works, but InventoryBalance returns "Please login" with identical auth
 
 # Recent Changes (October 2025)
 
