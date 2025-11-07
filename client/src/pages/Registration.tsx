@@ -34,6 +34,8 @@ export default function Registration() {
       name: "",
       phone: "",
       address: "",
+      brela_number: "",
+      tin_number: "",
       user_type: "company",
       terms: false,
     },
@@ -49,7 +51,7 @@ export default function Registration() {
     }
   };
 
-  const whatsappNumber = "255678389075";
+  const whatsappNumber = "178754718";
   const whatsappMessage = encodeURIComponent(`Hello Phomas Diagnostics, I just registered a new account with email: ${userEmail}. Please approve my account so I can start ordering medical supplies.`);
   const whatsappUrl = `https://wa.me/${whatsappNumber}?text=${whatsappMessage}`;
 
@@ -98,7 +100,7 @@ export default function Registration() {
               </Button>
 
               <p className="text-xs text-gray-500 text-center">
-                +255 678 389075
+                {whatsappNumber}
               </p>
             </div>
 
@@ -173,10 +175,11 @@ export default function Registration() {
                     <FormControl>
                       <select 
                         {...field}
+                        data-testid="select-user-type"
                         className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background"
                       >
                         <option value="company">Company (Pharmacy, Clinic, Hospital)</option>
-                        <option value="individual">Individual</option>
+                        <option value="licensed_trader">Licensed Trader</option>
                       </select>
                     </FormControl>
                     <FormMessage />
@@ -224,6 +227,52 @@ export default function Registration() {
                         onChange={(e) => field.onChange(e.target.value)}
                         onBlur={field.onBlur}
                         name="address"
+                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="brela_number"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Company Registration Number (Brela)</FormLabel>
+                    <FormControl>
+                      <input
+                        type="text"
+                        placeholder="178753734"
+                        data-testid="input-brela-number"
+                        value={field.value || ""}
+                        onChange={(e) => field.onChange(e.target.value)}
+                        onBlur={field.onBlur}
+                        name="brela_number"
+                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="tin_number"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>TIN Number (Tax Identification Number)</FormLabel>
+                    <FormControl>
+                      <input
+                        type="text"
+                        placeholder="123456789"
+                        data-testid="input-tin-number"
+                        value={field.value || ""}
+                        onChange={(e) => field.onChange(e.target.value)}
+                        onBlur={field.onBlur}
+                        name="tin_number"
                         className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                       />
                     </FormControl>

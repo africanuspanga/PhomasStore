@@ -119,6 +119,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         name: user.user_metadata?.name || user.email?.split('@')[0] || 'User',
         phone: user.user_metadata?.phone || '',
         address: user.user_metadata?.address || '',
+        brelaNumber: user.user_metadata?.brela_number || '',
+        tinNumber: user.user_metadata?.tin_number || '',
         userType: user.user_metadata?.user_type || 'company',
         createdAt: new Date(user.created_at)
       });
@@ -155,7 +157,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           await supabase.auth.signOut();
           
           // Show pending approval message with WhatsApp option
-          const whatsappNumber = "255678389075";
+          const whatsappNumber = "178754718";
           const whatsappMessage = encodeURIComponent(`Hello Phomas Diagnostics, I would like to request approval for my account: ${credentials.email}`);
           const whatsappUrl = `https://wa.me/${whatsappNumber}?text=${whatsappMessage}`;
           
@@ -168,7 +170,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                   onClick={() => window.open(whatsappUrl, '_blank')}
                   className="text-green-600 hover:underline font-medium"
                 >
-                  Contact us on WhatsApp (+255 678 389075)
+                  Contact us on WhatsApp ({whatsappNumber})
                 </button>
               </div>
             ) as any,
@@ -212,6 +214,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             name: userData.name,
             phone: userData.phone,
             address: userData.address,
+            brela_number: userData.brela_number,
+            tin_number: userData.tin_number,
             user_type: userData.user_type
           }
         }
@@ -236,6 +240,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               name: userData.name,
               phone: userData.phone,
               address: userData.address,
+              brela_number: userData.brela_number,
+              tin_number: userData.tin_number,
               user_type: userData.user_type,
             });
         } catch (profileError) {

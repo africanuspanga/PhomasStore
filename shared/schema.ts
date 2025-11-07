@@ -60,7 +60,9 @@ export const profiles = pgTable("profiles", {
   name: text("name").notNull(),
   phone: text("phone"),
   address: text("address"),
-  userType: text("user_type").notNull(), // 'company' or 'individual'
+  brelaNumber: text("brela_number").notNull(), // Company Registration Number (Brela)
+  tinNumber: text("tin_number").notNull(), // Tax Identification Number
+  userType: text("user_type").notNull(), // 'company' or 'licensed_trader'
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -92,7 +94,9 @@ export const supabaseSignUpSchema = z.object({
   name: z.string().min(1, "Company name is required"),
   phone: z.string().regex(/^(?:\+255|0)[67]\d{8}$/, "Please enter a valid Tanzania phone number (+255754231267 or 0754231267)"),
   address: z.string().min(1, "Address is required"),
-  user_type: z.enum(['company', 'individual'])
+  brela_number: z.string().min(1, "Company Registration Number (Brela) is required"),
+  tin_number: z.string().min(1, "TIN Number is required"),
+  user_type: z.enum(['company', 'licensed_trader'])
 });
 
 export const supabaseLoginSchema = z.object({
