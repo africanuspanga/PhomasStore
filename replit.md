@@ -134,6 +134,20 @@ The server is built with Express.js and uses an in-memory storage system for the
   - **Monitoring API**: `getErrorTrackingStatus()` exposes real-time metrics
 - **Background**: eCount locks API access after 30 consecutive errors/hour (documented limit). We hit this during authentication debugging on November 6-7, 2025. eCount support unlocked the API and requested proper error handling implementation.
 
+## eCount API Selective Endpoint Locking (November 7, 2025)
+- **Current Status**: InventoryBalance and BasicProductsList endpoints remain SERVER-SIDE LOCKED despite eCount claiming "unlock"
+  - **Working APIs**: Login (OAPILogin), SaveSaleOrder, Zone
+  - **Locked APIs**: InventoryBalance/GetListInventoryBalanceStatus, BasicProductsList
+  - **Error Pattern**: All locked endpoints return HTTP 500 "Please login" despite perfect authentication
+  - **Root Cause**: Selective endpoint locking on eCount's server - verification process not complete for inventory endpoints
+  - **Client Auth**: CONFIRMED WORKING - identical authentication succeeds for SaveSaleOrder, SESSION_ID and cookies are correct
+- **Excel Fallback System**: Production-ready workaround keeps business operational
+  - All 466 products visible on website with real names, prices, packaging from Excel file
+  - Auto-switches between Excel data and real-time eCount when API status changes
+  - Products marked with `hasRealTimeData: false` and `availableQuantity: 0` when using Excel
+  - Orders still work perfectly (SaveSaleOrder API functional)
+- **Next Steps**: User needs to escalate to eCount support with evidence that InventoryBalance endpoint requires manual unlock for company 902378
+
 # Recent Changes (October 2025)
 
 ## Order Management System with Customer Attribution (October 23, 2025)

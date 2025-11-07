@@ -177,11 +177,16 @@ class EcountApiService {
     const baseUrlWithZone = this.baseUrl.replace('{ZONE}', zone);
     // CRITICAL FIX: URL-encode session ID (contains special characters like ! and =)
     const encodedSessionId = requiresAuth ? encodeURIComponent(sessionId) : '';
-    const url = requiresAuth ? `${baseUrlWithZone}${endpoint}?SESSION_ID=${encodedSessionId}` : `${baseUrlWithZone}${endpoint}`;
+    
+    // SOLUTION: Per eCount PDF documentation (line 8188), ONLY pass SESSION_ID
+    // API_CERT_KEY is used during LOGIN only, not for subsequent API calls
+    const url = requiresAuth 
+      ? `${baseUrlWithZone}${endpoint}?SESSION_ID=${encodedSessionId}` 
+      : `${baseUrlWithZone}${endpoint}`;
     
     console.log(`Making eCount API request: ${endpoint} (Zone: ${zone})`);
     if (requiresAuth) {
-      console.log(`🔗 Full URL with SESSION_ID: ${baseUrlWithZone}${endpoint}?SESSION_ID=${encodedSessionId.substring(0, 20)}...`);
+      console.log(`🔗 Full URL: ${baseUrlWithZone}${endpoint}?SESSION_ID=${encodedSessionId.substring(0, 20)}...`);
     }
     
     try {

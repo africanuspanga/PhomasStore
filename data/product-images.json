@@ -62,5 +62,13 @@
     "priority": 0,
     "createdAt": "2025-10-23T13:12:31.726Z",
     "updatedAt": "2025-10-23T13:12:31.726Z"
+  },
+  {
+    "id": "2be143a8-fb23-498c-8b50-599bdd6c6850",
+    "productCode": "BM10CT",
+    "imageUrl": "https://res.cloudinary.com/dvrdcyymo/image/upload/v1762506476/phomas-products/rb9kjyxqyadigm3x0bpg.jpg",
+    "priority": 0,
+    "createdAt": "2025-11-07T09:07:57.542Z",
+    "updatedAt": "2025-11-07T09:07:57.542Z"
   }
 ]
