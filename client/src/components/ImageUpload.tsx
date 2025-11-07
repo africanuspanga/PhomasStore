@@ -38,21 +38,42 @@ export function ImageUpload({ onImageUploaded, currentImage, className }: ImageU
 
     setUploading(true);
     try {
-      // Get Cloudinary config from backend
-      const configResponse = await fetch('/api/cloudinary-config');
+      // Get Cloudinary config from backend with timeout
+      const configController = new AbortController();
+      const configTimeout = setTimeout(() => configController.abort(), 10000);
+      
+      const configResponse = await fetch('/api/cloudinary-config', {
+        signal: configController.signal
+      });
+      clearTimeout(configTimeout);
+      
+      if (!configResponse.ok) {
+        throw new Error(`Failed to get Cloudinary config: ${configResponse.status}`);
+      }
+      
       const config = await configResponse.json();
+      console.log('📸 Cloudinary config:', { cloudName: config.cloudName, uploadPreset: config.uploadPreset });
+      
+      if (!config.cloudName || !config.uploadPreset) {
+        throw new Error('Cloudinary configuration is incomplete');
+      }
       
       // Direct upload to Cloudinary - no server proxy!
       const formData = new FormData();
       formData.append('file', file);
       formData.append('upload_preset', config.uploadPreset);
-      // Note: folder is configured in the preset, don't override it here
       
-      // Direct upload to Cloudinary
+      // Direct upload to Cloudinary with timeout protection
+      const uploadController = new AbortController();
+      const uploadTimeout = setTimeout(() => uploadController.abort(), 60000); // 60 second timeout
+      
+      console.log('📤 Starting upload to Cloudinary...');
       const response = await fetch(`https://api.cloudinary.com/v1_1/${config.cloudName}/image/upload`, {
         method: 'POST',
         body: formData,
+        signal: uploadController.signal
       });
+      clearTimeout(uploadTimeout);
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
@@ -82,18 +103,28 @@ export function ImageUpload({ onImageUploaded, currentImage, className }: ImageU
         description: "Direct upload to Cloudinary completed",
       });
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error('Direct Cloudinary upload error:', {
-        error,
-        message: errorMessage,
-        name: error instanceof Error ? error.name : 'Unknown',
-        stack: error instanceof Error ? error.stack : undefined
-      });
-      toast({
-        title: "Upload failed",
-        description: errorMessage || "Failed to upload directly to Cloudinary. Please try again.",
-        variant: "destructive",
-      });
+      // Handle timeout/abort errors specifically
+      if (error instanceof Error && error.name === 'AbortError') {
+        console.error('Upload timeout - request took too long');
+        toast({
+          title: "Upload timeout",
+          description: "The upload took too long and was cancelled. Please try a smaller image or check your connection.",
+          variant: "destructive",
+        });
+      } else {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        console.error('Direct Cloudinary upload error:', {
+          error,
+          message: errorMessage,
+          name: error instanceof Error ? error.name : 'Unknown',
+          stack: error instanceof Error ? error.stack : undefined
+        });
+        toast({
+          title: "Upload failed",
+          description: errorMessage || "Failed to upload directly to Cloudinary. Please try again.",
+          variant: "destructive",
+        });
+      }
     } finally {
       setUploading(false);
     }
