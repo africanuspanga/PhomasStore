@@ -118,6 +118,22 @@ The server is built with Express.js and uses an in-memory storage system for the
 - **Responsive Design**: Full mobile and desktop support with Tailwind CSS
 - **Dark Mode Ready**: Theme infrastructure in place using shadcn/ui theming
 
+## Error Handling & API Lockout Prevention (November 7, 2025)
+- **Enterprise-Grade Error Tracking**: Implemented multi-layered protection to prevent eCount API lockouts
+  - **Consecutive Error Counter**: Tracks critical errors within 1-hour sliding window
+  - **Configurable Thresholds**: MAX_CONSECUTIVE_ERRORS=8 (default, env configurable)
+  - **Auto-Lock Mechanism**: Self-locks API for 45 minutes after hitting threshold (prevents eCount's 30-error lockout)
+  - **Error Categorization**: Only critical (5xx, 412, network) errors count toward lockout
+    - Auth errors (401/403): Trigger session refresh, don't count
+    - Validation errors (400): Don't count
+    - Rate limit errors (429, 302, 412): Already handled separately, don't count
+  - **Circuit Breaker**: Short-term protection (30s after 3 failures)
+  - **Exponential Backoff**: Per-endpoint delay escalation (1s to 60s max)
+  - **Graceful Degradation**: Returns cached data when API locked
+  - **Auto-Recovery**: Locks expire automatically, error window resets hourly
+  - **Monitoring API**: `getErrorTrackingStatus()` exposes real-time metrics
+- **Background**: eCount locks API access after 30 consecutive errors/hour (documented limit). We hit this during authentication debugging on November 6-7, 2025. eCount support unlocked the API and requested proper error handling implementation.
+
 # Recent Changes (October 2025)
 
 ## Order Management System with Customer Attribution (October 23, 2025)

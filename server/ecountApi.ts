@@ -66,6 +66,16 @@ class EcountApiService {
   private bulkSyncLastCall = 0;
   private readonly BULK_RATE_LIMIT = 10 * 60 * 1000; // 10 minutes in milliseconds
 
+  // CRITICAL: Consecutive error tracking to prevent eCount lockouts
+  // eCount locks API after 30 consecutive errors per hour (documented limit)
+  private consecutiveErrors = 0;
+  private errorWindowStart = Date.now();
+  private readonly MAX_CONSECUTIVE_ERRORS = parseInt(process.env.ECOUNT_MAX_ERRORS || '8'); // Default 8 (well below 30 limit)
+  private readonly ERROR_WINDOW_MS = 60 * 60 * 1000; // 1 hour window
+  private readonly LOCK_DURATION_MS = parseInt(process.env.ECOUNT_LOCK_DURATION_MIN || '45') * 60 * 1000; // Default 45 minutes
+  private apiLocked = false;
+  private lockReleaseTime = 0;
+  
   // Circuit breaker for handling 412 errors and lockouts
   private circuitBreakerState: 'CLOSED' | 'OPEN' | 'HALF_OPEN' = 'CLOSED';
   private failureCount = 0;
@@ -104,6 +114,28 @@ class EcountApiService {
    */
   private async ecountRequest(options: EcountApiRequestOptions): Promise<EcountApiResponse> {
     const { endpoint, body, requiresAuth = true } = options;
+    
+    // CRITICAL: Check if API is self-locked to prevent eCount lockout
+    if (this.apiLocked) {
+      const waitTime = Math.ceil((this.lockReleaseTime - Date.now()) / 1000);
+      if (waitTime > 0) {
+        console.warn(`🔒 API LOCKED: Too many consecutive errors (${this.consecutiveErrors}/${this.MAX_CONSECUTIVE_ERRORS}). Waiting ${waitTime}s to prevent eCount lockout.`);
+        throw new Error(`API temporarily locked to prevent eCount lockout. Please wait ${waitTime} seconds.`);
+      } else {
+        // Lock expired, reset and continue
+        console.log('🔓 API lock expired - resetting error counters');
+        this.apiLocked = false;
+        this.consecutiveErrors = 0;
+        this.errorWindowStart = Date.now();
+      }
+    }
+    
+    // Reset error window if 1 hour has passed
+    if (Date.now() - this.errorWindowStart > this.ERROR_WINDOW_MS) {
+      console.log('✅ Error window expired - resetting consecutive error counter');
+      this.consecutiveErrors = 0;
+      this.errorWindowStart = Date.now();
+    }
     
     // Check circuit breaker state
     if (this.circuitBreakerState === 'OPEN') {
@@ -194,7 +226,7 @@ class EcountApiService {
       // Handle 412 Precondition Failed specifically  
       if (response.status === 412) {
         console.log('⚠️ Got 412 Precondition Failed - triggering circuit breaker');
-        this.handleFailure(endpoint);
+        this.handleFailure(endpoint, response.status);
         // Don't throw immediately - let the caller handle gracefully with cache fallback
         throw new Error('eCount API returned 412 Precondition Failed - rate limited');
       }
@@ -206,7 +238,7 @@ class EcountApiService {
         
         // Handle non-JSON responses with backoff
         if (response.status >= 400) {
-          this.handleFailure(endpoint);
+          this.handleFailure(endpoint, response.status);
         }
         
         // If we get HTML redirect, likely auth issue - invalidate session and retry once
@@ -245,7 +277,7 @@ class EcountApiService {
       return result;
     } catch (error) {
       console.error(`eCount API request failed for ${endpoint}:`, error);
-      this.handleFailure(endpoint);
+      this.handleFailure(endpoint, undefined, error);
       throw error;
     }
   }
@@ -1733,7 +1765,41 @@ class EcountApiService {
   }
 
   /**
-   * Handle successful API call - reset circuit breaker and backoff
+   * Categorize error based on status and type
+   * Only CRITICAL and NETWORK errors count toward eCount lockout threshold
+   */
+  private categorizeError(status?: number, error?: any): 'critical' | 'auth' | 'validation' | 'rate_limit' | 'network' {
+    // Network/transport errors
+    if (!status || error?.code === 'ECONNREFUSED' || error?.code === 'ETIMEDOUT') {
+      return 'network';
+    }
+    
+    // Rate limit errors (already handled separately)
+    if (status === 412 || status === 429 || status === 302) {
+      return 'rate_limit';
+    }
+    
+    // Auth errors (trigger session refresh, don't count)
+    if (status === 401 || status === 403) {
+      return 'auth';
+    }
+    
+    // Validation errors (bad request, don't count)
+    if (status === 400) {
+      return 'validation';
+    }
+    
+    // Critical errors: 5xx server errors
+    if (status >= 500) {
+      return 'critical';
+    }
+    
+    // Default to critical for safety
+    return 'critical';
+  }
+  
+  /**
+   * Handle successful API call - reset ALL error counters
    */
   private handleSuccess(endpoint: string): void {
     // Reset circuit breaker
@@ -1745,12 +1811,19 @@ class EcountApiService {
     
     // Reset backoff for this endpoint
     this.backoffDelays.delete(endpoint);
+    
+    // CRITICAL: Reset consecutive error counter on ANY success
+    if (this.consecutiveErrors > 0) {
+      console.log(`✅ Success - resetting consecutive error counter (was: ${this.consecutiveErrors})`);
+      this.consecutiveErrors = 0;
+    }
   }
   
   /**
-   * Handle API failure - update circuit breaker and backoff
+   * Handle API failure - update circuit breaker, backoff, and consecutive error tracking
+   * Only counts CRITICAL and NETWORK errors toward lockout threshold
    */
-  private handleFailure(endpoint: string): void {
+  private handleFailure(endpoint: string, status?: number, error?: any): void {
     this.failureCount++;
     this.lastFailureTime = Date.now();
     
@@ -1759,7 +1832,24 @@ class EcountApiService {
     const newBackoff = Math.min(currentBackoff * 2, this.MAX_BACKOFF);
     this.backoffDelays.set(endpoint, newBackoff);
     
-    console.log(`⚠️ API failure #${this.failureCount} for ${endpoint}, next backoff: ${newBackoff}ms`);
+    // Categorize error to determine if it counts toward lockout
+    const category = this.categorizeError(status, error);
+    const countsTowardLockout = (category === 'critical' || category === 'network');
+    
+    if (countsTowardLockout) {
+      this.consecutiveErrors++;
+      console.warn(`⚠️ CRITICAL ERROR #${this.consecutiveErrors}/${this.MAX_CONSECUTIVE_ERRORS} for ${endpoint} (${category}), next backoff: ${newBackoff}ms`);
+      
+      // Check if we've hit the lockout threshold
+      if (this.consecutiveErrors >= this.MAX_CONSECUTIVE_ERRORS) {
+        this.apiLocked = true;
+        this.lockReleaseTime = Date.now() + this.LOCK_DURATION_MS;
+        const lockMinutes = Math.ceil(this.LOCK_DURATION_MS / 60000);
+        console.error(`🔒 API SELF-LOCKED: Hit ${this.consecutiveErrors} consecutive errors. Locked for ${lockMinutes} minutes to prevent eCount lockout.`);
+      }
+    } else {
+      console.log(`⚠️ API failure for ${endpoint} (${category} - doesn't count toward lockout), next backoff: ${newBackoff}ms`);
+    }
     
     // Trigger circuit breaker if threshold reached
     if (this.failureCount >= this.FAILURE_THRESHOLD && this.circuitBreakerState === 'CLOSED') {
@@ -1776,6 +1866,34 @@ class EcountApiService {
       state: this.circuitBreakerState,
       failures: this.failureCount,
       backoffEndpoints: Array.from(this.backoffDelays.keys())
+    };
+  }
+  
+  /**
+   * Get comprehensive error tracking status for monitoring
+   */
+  getErrorTrackingStatus(): {
+    consecutiveErrors: number;
+    maxConsecutiveErrors: number;
+    errorWindowStart: string;
+    apiLocked: boolean;
+    lockReleaseTime: string | null;
+    circuitBreakerState: string;
+    minutesUntilUnlock: number | null;
+  } {
+    const now = Date.now();
+    const minutesUntilUnlock = this.apiLocked 
+      ? Math.ceil((this.lockReleaseTime - now) / 60000)
+      : null;
+    
+    return {
+      consecutiveErrors: this.consecutiveErrors,
+      maxConsecutiveErrors: this.MAX_CONSECUTIVE_ERRORS,
+      errorWindowStart: new Date(this.errorWindowStart).toISOString(),
+      apiLocked: this.apiLocked,
+      lockReleaseTime: this.apiLocked ? new Date(this.lockReleaseTime).toISOString() : null,
+      circuitBreakerState: this.circuitBreakerState,
+      minutesUntilUnlock
     };
   }
 }
