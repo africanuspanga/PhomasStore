@@ -1121,6 +1121,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Test endpoint to check if Inventory Balance API works now that it's VERIFIED
+  app.get("/api/test/inventory-balance", requireAdminAuth, async (req, res) => {
+    try {
+      console.log('🧪 Testing VERIFIED Inventory Balance API...');
+      
+      // Force fresh login to get new session
+      await ecountApi.login();
+      
+      // Try calling the verified endpoint
+      const result = await ecountApi.getProductList();
+      
+      if (result && result.length > 0) {
+        res.json({
+          success: true,
+          message: `✅ Inventory Balance API WORKS! Got ${result.length} products`,
+          productCount: result.length,
+          sampleProducts: result.slice(0, 3),
+          status: 'VERIFIED and WORKING'
+        });
+      } else {
+        res.json({
+          success: false,
+          message: '❌ API returned empty - check logs for details',
+          status: 'VERIFIED but returning empty'
+        });
+      }
+    } catch (error) {
+      console.error('🧪 Test failed:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Test failed - see server logs',
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }
