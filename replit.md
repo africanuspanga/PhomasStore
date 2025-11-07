@@ -111,9 +111,11 @@ The server is built with Express.js and uses an in-memory storage system for the
 - **Password Visibility Toggle**: Login and registration forms include Eye/EyeOff icons for password viewing
 - **User Approval Workflow**: 
   - Registration success page with pending approval message
-  - WhatsApp quick-contact button for faster approval
+  - WhatsApp quick-contact button for faster approval (178754718)
   - Login blocked for unapproved users with helpful messaging
   - Admin panel tab for viewing and approving pending registrations
+  - Registration requires Company/Licensed Trader type (no individual option)
+  - Required fields: Company Registration Number (Brela) and TIN Number
 - **Low-Stock Indicators**: Visible only to admin users (hidden from customers)
 - **Responsive Design**: Full mobile and desktop support with Tailwind CSS
 - **Dark Mode Ready**: Theme infrastructure in place using shadcn/ui theming
