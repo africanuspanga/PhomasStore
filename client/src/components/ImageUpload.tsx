@@ -67,7 +67,13 @@ export function ImageUpload({ onImageUploaded, currentImage, className }: ImageU
       }
 
       const result = await response.json();
+      console.log('Cloudinary upload successful:', result);
       const imageUrl = result.secure_url;
+
+      if (!imageUrl) {
+        console.error('No secure_url in Cloudinary response:', result);
+        throw new Error('Cloudinary did not return an image URL');
+      }
 
       setPreviewUrl(imageUrl);
       onImageUploaded?.(imageUrl);
@@ -76,10 +82,16 @@ export function ImageUpload({ onImageUploaded, currentImage, className }: ImageU
         description: "Direct upload to Cloudinary completed",
       });
     } catch (error) {
-      console.error('Direct Cloudinary upload error:', error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error('Direct Cloudinary upload error:', {
+        error,
+        message: errorMessage,
+        name: error instanceof Error ? error.name : 'Unknown',
+        stack: error instanceof Error ? error.stack : undefined
+      });
       toast({
         title: "Upload failed",
-        description: "Failed to upload directly to Cloudinary. Please try again.",
+        description: errorMessage || "Failed to upload directly to Cloudinary. Please try again.",
         variant: "destructive",
       });
     } finally {
