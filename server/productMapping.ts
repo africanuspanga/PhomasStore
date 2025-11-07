@@ -288,6 +288,36 @@ export class ProductMapping {
   }
 
   /**
+   * Get all mapped products with full details (for Excel fallback)
+   */
+  static getAllMappedProducts(): Array<{
+    code: string;
+    name: string;
+    price: number;
+    uom: string;
+    category: string;
+    originalCode: string;
+  }> {
+    const products: Array<{
+      code: string;
+      name: string;
+      price: number;
+      uom: string;
+      category: string;
+      originalCode: string;
+    }> = [];
+    
+    this.productMap.forEach((value, key) => {
+      products.push({
+        code: key,
+        ...value
+      });
+    });
+    
+    return products;
+  }
+
+  /**
    * Get statistics about the mapping
    */
   static getStats() {

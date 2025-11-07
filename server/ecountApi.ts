@@ -1556,36 +1556,71 @@ class EcountApiService {
       console.log('📊 Getting live stock data only (avoiding broken master data endpoints)...');
       const productList = await this.getProductList(); // Just stock data
       
-      // Transform eCount data using REAL product names from USER'S EXCEL FILE + live stock
-      const products = productList.map((product: any, index: number) => {
-        const productCode = product.PROD_CD;
+      let products: any[] = [];
+      
+      // Check if we got data from eCount API
+      if (productList.length > 0) {
+        console.log(`✅ Got ${productList.length} products from eCount API - using live data`);
         
-        // Get REAL product data from user's Excel file
-        const excelProduct = ProductMapping.getProduct(productCode);
+        // Transform eCount data using REAL product names from USER'S EXCEL FILE + live stock
+        products = productList.map((product: any, index: number) => {
+          const productCode = product.PROD_CD;
+          
+          // Get REAL product data from user's Excel file
+          const excelProduct = ProductMapping.getProduct(productCode);
+          
+          // Log first product to show the transformation
+          if (index === 0) {
+            console.log(`📋 eCount product fields:`, Object.keys(product));
+            console.log(`📋 Excel mapping for ${productCode}:`, excelProduct);
+          }
+          
+          return {
+            id: productCode,
+            name: excelProduct?.name || this.generateProductName(productCode), // USER'S REAL NAMES!
+            packaging: excelProduct?.uom || 'Standard', // Real UOM from Excel
+            referenceNumber: productCode,
+            price: excelProduct?.price?.toString() || '25000', // USER'S REAL PRICES!
+            imageUrl: null, // Images handled by separate /api/images system
+            category: excelProduct?.category || this.getCategoryFromCode(productCode), // Smart categories
+            availableQuantity: parseInt(product.BAL_QTY || '0'), // LIVE stock from eCount
+            isLowStock: parseInt(product.BAL_QTY || '0') < 10,
+            isExpiringSoon: false,
+            hasRealTimeData: true,
+            lastUpdated: new Date().toISOString(),
+            description: excelProduct?.name || '', // Use product name as description
+            specification: excelProduct?.uom || ''
+          };
+        });
+      } else {
+        // FALLBACK: eCount API failed, generate products from Excel file
+        console.log('⚠️ eCount API returned no data - using Excel file as fallback');
+        console.log('📦 Generating products from Excel data for image upload workflow...');
         
-        // Log first product to show the transformation
-        if (index === 0) {
-          console.log(`📋 eCount product fields:`, Object.keys(product));
-          console.log(`📋 Excel mapping for ${productCode}:`, excelProduct);
-        }
+        const allExcelProducts = ProductMapping.getAllMappedProducts();
+        console.log(`📋 Found ${allExcelProducts.length} products in Excel file`);
         
-        return {
-          id: productCode,
-          name: excelProduct?.name || this.generateProductName(productCode), // USER'S REAL NAMES!
-          packaging: excelProduct?.uom || 'Standard', // Real UOM from Excel
-          referenceNumber: productCode,
-          price: excelProduct?.price?.toString() || '25000', // USER'S REAL PRICES!
-          imageUrl: null, // Images handled by separate /api/images system
-          category: excelProduct?.category || this.getCategoryFromCode(productCode), // Smart categories
-          availableQuantity: parseInt(product.BAL_QTY || '0'), // LIVE stock from eCount
-          isLowStock: parseInt(product.BAL_QTY || '0') < 10,
-          isExpiringSoon: false,
-          hasRealTimeData: true,
-          lastUpdated: new Date().toISOString(),
-          description: excelProduct?.name || '', // Use product name as description
-          specification: excelProduct?.uom || ''
-        };
-      });
+        products = allExcelProducts.map((excelProduct: any, index: number) => {
+          return {
+            id: excelProduct.code,
+            name: excelProduct.name,
+            packaging: excelProduct.uom,
+            referenceNumber: excelProduct.code,
+            price: excelProduct.price?.toString() || '0',
+            imageUrl: null, // Images handled by separate /api/images system
+            category: excelProduct.category || this.getCategoryFromCode(excelProduct.code),
+            availableQuantity: 0, // No real-time data available
+            isLowStock: false, // Hide stock indicators when using fallback
+            isExpiringSoon: false,
+            hasRealTimeData: false, // Flag to indicate this is fallback data
+            lastUpdated: new Date().toISOString(),
+            description: excelProduct.name,
+            specification: excelProduct.uom
+          };
+        });
+        
+        console.log(`✅ Generated ${products.length} products from Excel fallback`);
+      }
       
       // Count how many products have real vs generated names  
       const realNamesCount = products.filter(p => !p.name.includes('Medical Product') && !p.name.includes('Medical Supply')).length;
@@ -1597,9 +1632,9 @@ class EcountApiService {
           data: products,
           timestamp: Date.now()
         });
-        console.log(`✅ Pure eCount integration: ${products.length} products loaded from ERP and cached`);
+        console.log(`✅ Cached ${products.length} products (realtime: ${productList.length > 0})`);
       } else {
-        console.log(`⚠️ No products returned from eCount, keeping existing cache to prevent data loss`);
+        console.log(`⚠️ No products available from any source, keeping existing cache to prevent data loss`);
       }
       
       return products;
