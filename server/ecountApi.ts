@@ -1452,6 +1452,47 @@ class EcountApiService {
   }
 
   /**
+   * TEST: Try GetBasicProductsList as alternative to broken GetListInventoryBalanceStatus
+   */
+  async testGetBasicProductsList(): Promise<any> {
+    console.log('🧪 Testing GetBasicProductsList endpoint as alternative...');
+    
+    try {
+      const result = await this.ecountRequest({
+        endpoint: '/OAPI/V2/InventoryBasic/GetBasicProductsList',
+        body: {
+          Page: '1',
+          PageSize: '100' // Start with small batch to test
+        }
+      });
+
+      console.log('📊 GetBasicProductsList response status:', result.Status);
+      console.log('📊 GetBasicProductsList data structure:', {
+        hasData: !!result.Data,
+        hasDatas: !!result.Data?.Datas,
+        hasResult: !!result.Data?.Result,
+        datasLength: result.Data?.Datas?.length,
+        resultLength: result.Data?.Result?.length
+      });
+
+      if (result.Status === "200") {
+        const products = result.Data?.Datas || result.Data?.Result || [];
+        console.log(`✅ GetBasicProductsList SUCCESS! Got ${products.length} products`);
+        if (products.length > 0) {
+          console.log('📦 Sample product:', JSON.stringify(products[0], null, 2));
+        }
+        return { success: true, count: products.length, sample: products[0] };
+      } else {
+        console.error('❌ GetBasicProductsList failed:', result.Error);
+        return { success: false, error: result.Error };
+      }
+    } catch (error) {
+      console.error('❌ GetBasicProductsList error:', error);
+      return { success: false, error: String(error) };
+    }
+  }
+
+  /**
    * Clear inventory cache (useful for admin operations)
    */
   clearInventoryCache(): void {

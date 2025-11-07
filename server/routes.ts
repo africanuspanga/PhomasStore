@@ -858,6 +858,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // TEST: Try alternative endpoint GetBasicProductsList
+  app.post("/api/admin/test-basic-products", requireAdminAuth, async (req, res) => {
+    try {
+      console.log('🧪 Admin testing GetBasicProductsList endpoint...');
+      const result = await ecountApi.testGetBasicProductsList();
+      
+      res.json({
+        success: result.success,
+        message: result.success ? 'GetBasicProductsList works!' : 'GetBasicProductsList failed',
+        data: result
+      });
+    } catch (error) {
+      console.error('Test endpoint failed:', error);
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
   app.post("/api/admin/clear-cache", requireAdminAuth, enforceBulkRateLimit('clear-cache'), async (req, res) => {
     try {
       console.log('Admin clearing inventory cache');
