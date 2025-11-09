@@ -63,9 +63,9 @@ export function ImageUpload({ onImageUploaded, currentImage, className }: ImageU
       formData.append('file', file);
       formData.append('upload_preset', config.uploadPreset);
       
-      // Direct upload to Cloudinary with timeout protection
+      // Direct upload to Cloudinary with extended timeout
       const uploadController = new AbortController();
-      const uploadTimeout = setTimeout(() => uploadController.abort(), 60000); // 60 second timeout
+      const uploadTimeout = setTimeout(() => uploadController.abort(), 180000); // 3 minute timeout (was 60 seconds)
       
       console.log('📤 Starting upload to Cloudinary...');
       const response = await fetch(`https://api.cloudinary.com/v1_1/${config.cloudName}/image/upload`, {
