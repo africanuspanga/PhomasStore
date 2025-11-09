@@ -38,47 +38,29 @@ export function ImageUpload({ onImageUploaded, currentImage, className }: ImageU
 
     setUploading(true);
     try {
-      // Get Cloudinary config from backend - NO TIMEOUT
-      const configResponse = await fetch('/api/cloudinary-config');
-      
-      if (!configResponse.ok) {
-        throw new Error(`Failed to get Cloudinary config: ${configResponse.status}`);
-      }
-      
-      const config = await configResponse.json();
-      console.log('📸 Cloudinary config:', { cloudName: config.cloudName, uploadPreset: config.uploadPreset });
-      
-      if (!config.cloudName || !config.uploadPreset) {
-        throw new Error('Cloudinary configuration is incomplete');
-      }
-      
-      // Direct upload to Cloudinary - no server proxy!
+      // Upload via backend (avoids CORS issues!)
       const formData = new FormData();
-      formData.append('file', file);
-      formData.append('upload_preset', config.uploadPreset);
+      formData.append('image', file);
       
-      // Direct upload to Cloudinary - NO TIMEOUT (let it take as long as needed)
-      console.log('📤 Starting upload to Cloudinary... This may take a few minutes on slow connections.');
-      const response = await fetch(`https://api.cloudinary.com/v1_1/${config.cloudName}/image/upload`, {
+      console.log('📤 Uploading image via backend...');
+      const response = await fetch('/api/admin/upload-image', {
         method: 'POST',
         body: formData
       });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        console.error('Cloudinary upload error:', {
+        console.error('Upload error:', {
           status: response.status,
           statusText: response.statusText,
-          errorData,
-          uploadPreset: config.uploadPreset,
-          cloudName: config.cloudName
+          errorData
         });
-        throw new Error(`Upload failed: ${response.status} - ${errorData.error?.message || response.statusText}`);
+        throw new Error(`Upload failed: ${errorData.message || response.statusText}`);
       }
 
       const result = await response.json();
-      console.log('Cloudinary upload successful:', result);
-      const imageUrl = result.secure_url;
+      console.log('Upload successful:', result);
+      const imageUrl = result.imageUrl;
 
       if (!imageUrl) {
         console.error('No secure_url in Cloudinary response:', result);
