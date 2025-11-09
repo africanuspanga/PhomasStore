@@ -38,14 +38,8 @@ export function ImageUpload({ onImageUploaded, currentImage, className }: ImageU
 
     setUploading(true);
     try {
-      // Get Cloudinary config from backend with timeout
-      const configController = new AbortController();
-      const configTimeout = setTimeout(() => configController.abort(), 10000);
-      
-      const configResponse = await fetch('/api/cloudinary-config', {
-        signal: configController.signal
-      });
-      clearTimeout(configTimeout);
+      // Get Cloudinary config from backend - NO TIMEOUT
+      const configResponse = await fetch('/api/cloudinary-config');
       
       if (!configResponse.ok) {
         throw new Error(`Failed to get Cloudinary config: ${configResponse.status}`);
