@@ -536,15 +536,9 @@ export class DatabaseStorage implements IStorage {
     return this.memStorage.updateOrderErpInfo(orderId, erpInfo);
   }
 
-  // PERSISTENT PRODUCT IMAGE METHODS - HYBRID APPROACH
+  // PERSISTENT PRODUCT IMAGE METHODS - DATABASE-FIRST (PRODUCTION FIX)
   async getProductImage(productCode: string): Promise<string | null> {
-    // Always try the persistent file storage first (most reliable)
-    const fileResult = await this.memStorage.getProductImage(productCode);
-    if (fileResult) {
-      return fileResult;
-    }
-
-    // Try Supabase as backup if file storage has no data
+    // PRODUCTION FIX: Read from Supabase FIRST (persistent across restarts)
     if (this.supabase) {
       try {
         const { data, error } = await this.supabase
@@ -553,26 +547,28 @@ export class DatabaseStorage implements IStorage {
           .eq('product_code', productCode)
           .single();
 
-        if (error && error.code !== 'PGRST116') { // PGRST116 = not found
-          // Supabase error, use file storage
-          return null;
+        if (!error && data?.image_url) {
+          // Cache in memory for faster subsequent reads
+          this.memStorage.setProductImage(productCode, data.image_url, 0).catch(() => {
+            // Ignore cache write failures
+          });
+          return data.image_url;
         }
-
-        return data?.image_url || null;
+        
+        if (error && error.code !== 'PGRST116') { // PGRST116 = not found
+          console.error(`❌ Supabase read error for ${productCode}:`, error.message);
+        }
       } catch (error) {
-        // Supabase failed, file storage already returned null
-        return null;
+        console.error(`❌ Supabase exception for ${productCode}:`, error);
       }
     }
 
-    return null;
+    // Fallback to file cache (will be empty after restart)
+    return this.memStorage.getProductImage(productCode);
   }
 
   async setProductImage(productCode: string, imageUrl: string, priority: number = 0): Promise<void> {
-    // Always save to file storage (most reliable)
-    await this.memStorage.setProductImage(productCode, imageUrl, priority);
-    
-    // Try to save to Supabase as backup, but don't fail if it doesn't work
+    // PRODUCTION FIX: Save to Supabase FIRST (persistent storage)
     if (this.supabase) {
       try {
         await this.supabase
@@ -585,38 +581,74 @@ export class DatabaseStorage implements IStorage {
           }, {
             onConflict: 'product_code'
           });
-        console.log(`🔄 Also saved to Supabase backup: ${productCode}`);
+        console.log(`💾 Saved image to database: ${productCode}`);
       } catch (error) {
-        // Ignore Supabase errors, file storage is the primary method
-        console.log(`⚠️ Supabase backup failed for ${productCode}, but file storage saved`);
+        console.error(`❌ Failed to save image to database for ${productCode}:`, error);
+        throw new Error(`Failed to persist image: ${error}`);
       }
+    } else {
+      console.error('❌ Supabase not configured - images will be lost on restart!');
+      throw new Error('Database not configured for image storage');
     }
+    
+    // Cache in memory for faster reads (non-blocking)
+    this.memStorage.setProductImage(productCode, imageUrl, priority).catch((error) => {
+      console.log(`⚠️ File cache failed for ${productCode}:`, error.message);
+    });
     
     console.log(`🖼️ Saved image for product ${productCode}: ${imageUrl}`);
   }
 
   async getProductImages(productCodes: string[]): Promise<Record<string, string>> {
-    // Use file storage for batch requests (faster and more reliable)
+    // PRODUCTION FIX: Batch read from Supabase (persistent)
+    if (this.supabase && productCodes.length > 0) {
+      try {
+        const { data, error } = await this.supabase
+          .from('product_images')
+          .select('product_code, image_url')
+          .in('product_code', productCodes);
+
+        if (!error && data) {
+          const result: Record<string, string> = {};
+          for (const row of data) {
+            result[row.product_code] = row.image_url;
+            // Warm cache in background (non-blocking)
+            this.memStorage.setProductImage(row.product_code, row.image_url, 0).catch(() => {});
+          }
+          return result;
+        }
+        
+        if (error) {
+          console.error('❌ Supabase batch read error:', error.message);
+        }
+      } catch (error) {
+        console.error('❌ Supabase batch exception:', error);
+      }
+    }
+
+    // Fallback to file cache
     return this.memStorage.getProductImages(productCodes);
   }
 
   async deleteProductImage(productCode: string): Promise<void> {
-    // Delete from file storage
-    await this.memStorage.deleteProductImage(productCode);
-    
-    // Try to delete from Supabase backup
+    // PRODUCTION FIX: Delete from Supabase FIRST (persistent)
     if (this.supabase) {
       try {
         await this.supabase
           .from('product_images')
           .delete()
           .eq('product_code', productCode);
-        console.log(`🔄 Also deleted from Supabase backup: ${productCode}`);
+        console.log(`🗑️ Deleted image from database: ${productCode}`);
       } catch (error) {
-        // Ignore Supabase errors
-        console.log(`⚠️ Supabase backup delete failed for ${productCode}, but file storage deleted`);
+        console.error(`❌ Failed to delete image from database for ${productCode}:`, error);
+        throw new Error(`Failed to delete image: ${error}`);
       }
     }
+    
+    // Also delete from file cache (non-blocking)
+    this.memStorage.deleteProductImage(productCode).catch((error) => {
+      console.log(`⚠️ File cache delete failed for ${productCode}:`, error.message);
+    });
     
     console.log(`🗑️ Deleted image for product ${productCode}`);
   }
