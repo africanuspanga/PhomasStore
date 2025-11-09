@@ -106,6 +106,10 @@ The server is built with Express.js and uses an in-memory storage system for the
   - Frontend uploads directly to Cloudinary without server proxy
   - Automatic image optimization and transformation
   - Storage: phomas-products folder with 800x600 limit, auto quality/format
+  - **Image URL Persistence**: Cloudinary URLs stored in Supabase database (production fix - November 2025)
+    - Database-first approach: URLs saved to `product_images` table for permanent persistence
+    - File system cache: Optional cache layer for faster reads (ephemeral, rebuilds from DB)
+    - Survives server restarts in production environments (Replit/Render)
 
 ## UI Enhancements
 - **Password Visibility Toggle**: Login and registration forms include Eye/EyeOff icons for password viewing
