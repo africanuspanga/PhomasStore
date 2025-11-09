@@ -63,17 +63,12 @@ export function ImageUpload({ onImageUploaded, currentImage, className }: ImageU
       formData.append('file', file);
       formData.append('upload_preset', config.uploadPreset);
       
-      // Direct upload to Cloudinary with extended timeout
-      const uploadController = new AbortController();
-      const uploadTimeout = setTimeout(() => uploadController.abort(), 180000); // 3 minute timeout (was 60 seconds)
-      
-      console.log('📤 Starting upload to Cloudinary...');
+      // Direct upload to Cloudinary - NO TIMEOUT (let it take as long as needed)
+      console.log('📤 Starting upload to Cloudinary... This may take a few minutes on slow connections.');
       const response = await fetch(`https://api.cloudinary.com/v1_1/${config.cloudName}/image/upload`, {
         method: 'POST',
-        body: formData,
-        signal: uploadController.signal
+        body: formData
       });
-      clearTimeout(uploadTimeout);
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
@@ -103,28 +98,18 @@ export function ImageUpload({ onImageUploaded, currentImage, className }: ImageU
         description: "Direct upload to Cloudinary completed",
       });
     } catch (error) {
-      // Handle timeout/abort errors specifically
-      if (error instanceof Error && error.name === 'AbortError') {
-        console.error('Upload timeout - request took too long');
-        toast({
-          title: "Upload timeout",
-          description: "The upload took too long and was cancelled. Please try a smaller image or check your connection.",
-          variant: "destructive",
-        });
-      } else {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        console.error('Direct Cloudinary upload error:', {
-          error,
-          message: errorMessage,
-          name: error instanceof Error ? error.name : 'Unknown',
-          stack: error instanceof Error ? error.stack : undefined
-        });
-        toast({
-          title: "Upload failed",
-          description: errorMessage || "Failed to upload directly to Cloudinary. Please try again.",
-          variant: "destructive",
-        });
-      }
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error('Direct Cloudinary upload error:', {
+        error,
+        message: errorMessage,
+        name: error instanceof Error ? error.name : 'Unknown',
+        stack: error instanceof Error ? error.stack : undefined
+      });
+      toast({
+        title: "Upload failed",
+        description: errorMessage || "Failed to upload directly to Cloudinary. Please try again.",
+        variant: "destructive",
+      });
     } finally {
       setUploading(false);
     }
