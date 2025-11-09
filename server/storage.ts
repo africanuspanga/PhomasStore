@@ -538,28 +538,27 @@ export class DatabaseStorage implements IStorage {
 
   // PERSISTENT PRODUCT IMAGE METHODS - DATABASE-FIRST (PRODUCTION FIX)
   async getProductImage(productCode: string): Promise<string | null> {
-    // PRODUCTION FIX: Read from Supabase FIRST (persistent across restarts)
+    // PRODUCTION FIX: Use raw SQL to bypass schema cache
     if (this.supabase) {
       try {
-        const { data, error } = await this.supabase
-          .from('product_images')
-          .select('image_url')
-          .eq('product_code', productCode)
-          .single();
+        const { data, error } = await this.supabase.rpc('get_product_image', {
+          p_product_code: productCode
+        });
 
-        if (!error && data?.image_url) {
+        if (!error && data) {
+          const imageUrl = data as string;
           // Cache in memory for faster subsequent reads
-          this.memStorage.setProductImage(productCode, data.image_url, 0).catch(() => {
+          this.memStorage.setProductImage(productCode, imageUrl, 0).catch(() => {
             // Ignore cache write failures
           });
-          return data.image_url;
+          return imageUrl;
         }
         
         if (error && error.code !== 'PGRST116') { // PGRST116 = not found
-          console.error(`❌ Supabase read error for ${productCode}:`, error.message);
+          console.error(`❌ Database read error for ${productCode}:`, error.message);
         }
       } catch (error) {
-        console.error(`❌ Supabase exception for ${productCode}:`, error);
+        console.error(`❌ Database exception for ${productCode}:`, error);
       }
     }
 
@@ -568,19 +567,14 @@ export class DatabaseStorage implements IStorage {
   }
 
   async setProductImage(productCode: string, imageUrl: string, priority: number = 0): Promise<void> {
-    // PRODUCTION FIX: Save to Supabase FIRST (persistent storage)
+    // PRODUCTION FIX: Use raw SQL to bypass schema cache
     if (this.supabase) {
       try {
-        await this.supabase
-          .from('product_images')
-          .upsert({
-            product_code: productCode,
-            image_url: imageUrl,
-            priority: priority,
-            updated_at: new Date().toISOString()
-          }, {
-            onConflict: 'product_code'
-          });
+        await this.supabase.rpc('set_product_image', {
+          p_product_code: productCode,
+          p_image_url: imageUrl,
+          p_priority: priority
+        });
         console.log(`💾 Saved image to database: ${productCode}`);
       } catch (error) {
         console.error(`❌ Failed to save image to database for ${productCode}:`, error);
@@ -600,15 +594,14 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getProductImages(productCodes: string[]): Promise<Record<string, string>> {
-    // PRODUCTION FIX: Batch read from Supabase (persistent)
+    // PRODUCTION FIX: Use raw SQL to bypass schema cache
     if (this.supabase && productCodes.length > 0) {
       try {
-        const { data, error } = await this.supabase
-          .from('product_images')
-          .select('product_code, image_url')
-          .in('product_code', productCodes);
+        const { data, error } = await this.supabase.rpc('get_product_images_batch', {
+          p_product_codes: productCodes
+        });
 
-        if (!error && data) {
+        if (!error && data && Array.isArray(data)) {
           const result: Record<string, string> = {};
           for (const row of data) {
             result[row.product_code] = row.image_url;
@@ -619,10 +612,10 @@ export class DatabaseStorage implements IStorage {
         }
         
         if (error) {
-          console.error('❌ Supabase batch read error:', error.message);
+          console.error('❌ Database batch read error:', error.message);
         }
       } catch (error) {
-        console.error('❌ Supabase batch exception:', error);
+        console.error('❌ Database batch exception:', error);
       }
     }
 
@@ -631,13 +624,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteProductImage(productCode: string): Promise<void> {
-    // PRODUCTION FIX: Delete from Supabase FIRST (persistent)
+    // PRODUCTION FIX: Use raw SQL to bypass schema cache
     if (this.supabase) {
       try {
-        await this.supabase
-          .from('product_images')
-          .delete()
-          .eq('product_code', productCode);
+        await this.supabase.rpc('delete_product_image', {
+          p_product_code: productCode
+        });
         console.log(`🗑️ Deleted image from database: ${productCode}`);
       } catch (error) {
         console.error(`❌ Failed to delete image from database for ${productCode}:`, error);
