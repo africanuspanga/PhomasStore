@@ -1,0 +1,70 @@
+Subject: Re: InventoryBalance Verified but Not Working with Production Key
+
+Dear eCount Support Team,
+
+Thank you for verifying the InventoryBalance API. I can see from my API Authentication Status page that both APIs show "Verification" status:
+
+✅ Sales API - New Sales Order - VERIFICATION COMPLETE
+✅ (Inv.)Reports API - Inventory Balance - VERIFICATION COMPLETE
+
+HOWEVER - THE PROBLEM:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+While the verification status shows "Verification", the InventoryBalance API still returns "Please login" error when we use our PRODUCTION Authentication Key.
+
+VERIFICATION vs PRODUCTION:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+I understand that:
+- ✅ Verification was completed using the TEST Authentication Key
+- ❌ Production use requires activation with our PRODUCTION Authentication Key
+
+Our verification page note states:
+"For additional API development, please use it after Verification with the Test Authentication Key."
+
+CURRENT SITUATION:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Production Authentication Key: 01bfa323...[ends]...eb59 (Valid until October 2026)
+
+Testing Results:
+✅ SaveSaleOrder with production key → SUCCESS (orders #20251021-3, #20251021-4 saved)
+❌ InventoryBalance with production key → HTTP 500 "Please login"
+❌ InventoryBasic with production key → HTTP 500 "Please login"
+
+REQUEST:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Could you please ACTIVATE the following APIs for our PRODUCTION Authentication Key?
+
+1. InventoryBalance/GetListInventoryBalanceStatus
+2. InventoryBalance/ViewInventoryBalanceStatus  
+3. InventoryBasic/GetBasicProductsList
+4. InventoryBasic/ViewBasicProduct
+
+These APIs show "Verification" status, which I believe means they passed the test phase. 
+Now we need them activated for production use with our production authentication key.
+
+BUSINESS NEED:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+We are PHOMAS DIAGNOSTICS, a medical supply company in Tanzania. Our e-commerce website needs real-time inventory data to show product availability to customers. Currently, we can only submit orders (via SaveSaleOrder), but cannot display stock levels.
+
+CONFIRMATION NEEDED:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Please confirm:
+1. Is there a separate activation step required to move from "Verification" to "Production"?
+2. Do you need any additional information from us to activate these endpoints?
+3. How long does production activation typically take after verification is complete?
+
+ACCOUNT DETAILS:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Company Code: 902378
+User ID: TIHOMBWE
+Warehouse: 00001
+Production API Key: 01bfa323...[ends]...eb59
+
+We appreciate your help in activating these inventory endpoints for production use!
+
+Best regards,
+[Your Name]
+PHOMAS DIAGNOSTICS, Tanzania
+Email: [Your Email]
+Phone: [Your Phone]
+
+P.S. I have attached a screenshot showing both APIs with "Verification" status.
