@@ -667,7 +667,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Transform Supabase users to match expected format
       const safeUsers = users.map(user => {
-        // Get user metadata (name, phone, address, user_type from registration)
+        // Get user metadata (name, phone, address, user_type, brela_number, tin_number from registration)
         const metadata = user.user_metadata || {};
         
         return {
@@ -679,6 +679,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           userType: metadata.user_type || 'individual',
           phone: metadata.phone || '',
           address: metadata.address || '',
+          brelaNumber: metadata.brela_number || '',
+          tinNumber: metadata.tin_number || '',
           emailConfirmed: user.email_confirmed_at ? true : false,
           lastSignIn: user.last_sign_in_at ? new Date(user.last_sign_in_at) : null
         };
@@ -725,6 +727,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           phone: metadata.phone || '',
           address: metadata.address || '',
           userType: metadata.user_type || 'individual',
+          brelaNumber: metadata.brela_number || '',
+          tinNumber: metadata.tin_number || '',
           createdAt: user.created_at ? new Date(user.created_at) : new Date(),
         };
       });
