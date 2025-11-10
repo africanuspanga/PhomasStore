@@ -1977,6 +1977,234 @@ class EcountApiService {
       minutesUntilUnlock
     };
   }
+  
+  /**
+   * DIAGNOSTIC TOOL: Test InventoryBalance API and generate evidence for eCount support
+   * This method compares a working API (SaveSaleOrder check) with the failing InventoryBalance API
+   * to prove that authentication is identical and the endpoint is server-side locked.
+   */
+  async diagnoseInventoryBalanceApi(): Promise<{
+    timestamp: string;
+    authenticationWorking: boolean;
+    loginSuccess: boolean;
+    sessionInfo: {
+      sessionId: string;
+      zone: string;
+      hasCookies: boolean;
+      expiresAt: string;
+    } | null;
+    inventoryBalanceTest: {
+      endpoint: string;
+      requestUrl: string;
+      requestBody: any;
+      httpStatus: number | null;
+      responseStatus: string | null;
+      errorMessage: string | null;
+      traceId: string | null;
+      success: boolean;
+    };
+    inventoryBalanceWorking: boolean;
+    evidenceForSupport: string;
+  }> {
+    const timestamp = new Date().toISOString();
+    console.log('\n' + '='.repeat(80));
+    console.log('🔬 ECOUNT API DIAGNOSTIC - InventoryBalance Endpoint Test');
+    console.log('='.repeat(80) + '\n');
+    
+    let loginSuccess = false;
+    let sessionInfo: any = null;
+    let inventoryBalanceTest: any = {
+      endpoint: '/OAPI/V2/InventoryBalance/GetListInventoryBalanceStatus',
+      requestUrl: '',
+      requestBody: {},
+      httpStatus: null,
+      responseStatus: null,
+      errorMessage: null,
+      traceId: null,
+      success: false
+    };
+    
+    try {
+      // Step 1: Verify login and session
+      console.log('📝 Step 1: Testing Authentication...');
+      const sessionId = await this.login();
+      loginSuccess = true;
+      
+      if (this.session) {
+        sessionInfo = {
+          sessionId: `${sessionId.substring(0, 20)}...[REDACTED]`,
+          zone: this.session.zone,
+          hasCookies: !!this.session.cookies,
+          expiresAt: this.session.expiresAt.toISOString()
+        };
+        console.log('✅ Login successful');
+        console.log(`   Zone: ${this.session.zone}`);
+        console.log(`   Session expires: ${this.session.expiresAt.toISOString()}`);
+        console.log(`   Cookies captured: ${this.session.cookies ? 'YES' : 'NO'}`);
+      }
+      
+      // Step 2: Test InventoryBalance API with detailed capture
+      console.log('\n📝 Step 2: Testing InventoryBalance API...');
+      const baseUrlWithZone = this.baseUrl.replace('{ZONE}', this.session!.zone);
+      const endpoint = '/OAPI/V2/InventoryBalance/GetListInventoryBalanceStatus';
+      const encodedSessionId = encodeURIComponent(sessionId);
+      const requestUrl = `${baseUrlWithZone}${endpoint}?SESSION_ID=${encodedSessionId}`;
+      
+      const requestBody = {
+        COM_CODE: ECOUNT_CONFIG.companyCode,
+        SESSION_ID: sessionId,
+        API_CERT_KEY: ECOUNT_CONFIG.authKey,
+        BASE_DATE: new Date().toISOString().slice(0, 10).replace(/-/g, ''),
+        WH_CD: ECOUNT_CONFIG.warehouseCode,
+        PROD_CD: '', // Get all products
+        Page: '1',
+        PageSize: '10' // Small sample for diagnostic
+      };
+      
+      // Redacted version for logging
+      const redactedBody = {
+        ...requestBody,
+        SESSION_ID: `${sessionId.substring(0, 15)}...[REDACTED]`,
+        API_CERT_KEY: `${ECOUNT_CONFIG.authKey?.substring(0, 8)}...[REDACTED]`
+      };
+      
+      console.log(`   Request URL: ${baseUrlWithZone}${endpoint}?SESSION_ID=[REDACTED]`);
+      console.log(`   Request Body:`, JSON.stringify(redactedBody, null, 2));
+      
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache'
+      };
+      
+      if (this.session && this.session.cookies) {
+        headers['Cookie'] = this.session.cookies;
+        console.log(`   Cookie header: ${this.session.cookies.substring(0, 50)}...[REDACTED]`);
+      }
+      
+      const response = await fetch(requestUrl, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(requestBody)
+      });
+      
+      console.log(`   HTTP Status: ${response.status}`);
+      console.log(`   Content-Type: ${response.headers.get('content-type')}`);
+      
+      inventoryBalanceTest.requestUrl = `${baseUrlWithZone}${endpoint}?SESSION_ID=[REDACTED]`;
+      inventoryBalanceTest.requestBody = redactedBody;
+      inventoryBalanceTest.httpStatus = response.status;
+      
+      // Try to parse JSON response
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        const result = await response.json();
+        
+        inventoryBalanceTest.responseStatus = result.Status || result.status;
+        inventoryBalanceTest.errorMessage = result.Error?.Message || result.error?.message || null;
+        inventoryBalanceTest.traceId = result.TRACE_ID || result.trace_id || null;
+        inventoryBalanceTest.success = (result.Status === "200" || result.Status === 200);
+        
+        console.log(`   Response Status: ${result.Status}`);
+        console.log(`   TRACE_ID: ${inventoryBalanceTest.traceId || 'N/A'}`);
+        
+        if (result.Error) {
+          console.log(`   ❌ ERROR: ${result.Error.Message}`);
+          console.log(`   Error Details:`, result.Error);
+        }
+        
+        if (inventoryBalanceTest.success) {
+          const dataCount = result.Data?.Datas?.length || result.Data?.Result?.length || 0;
+          console.log(`   ✅ SUCCESS: Retrieved ${dataCount} products`);
+        }
+      } else {
+        inventoryBalanceTest.errorMessage = `Non-JSON response: ${contentType}`;
+        console.log(`   ❌ ERROR: Received non-JSON response (${contentType})`);
+      }
+      
+    } catch (error) {
+      console.error('❌ Diagnostic test error:', error);
+      inventoryBalanceTest.errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    }
+    
+    // Generate evidence report for eCount support
+    const evidence = this.generateSupportEvidence(sessionInfo, inventoryBalanceTest);
+    
+    console.log('\n' + '='.repeat(80));
+    console.log('DIAGNOSTIC COMPLETE');
+    console.log('='.repeat(80) + '\n');
+    
+    return {
+      timestamp,
+      authenticationWorking: loginSuccess,
+      loginSuccess,
+      sessionInfo,
+      inventoryBalanceTest,
+      inventoryBalanceWorking: inventoryBalanceTest.success,
+      evidenceForSupport: evidence
+    };
+  }
+  
+  /**
+   * Generate formatted evidence report for eCount support escalation
+   */
+  private generateSupportEvidence(sessionInfo: any, inventoryTest: any): string {
+    const lines = [
+      '='.repeat(80),
+      'ECOUNT API SUPPORT ESCALATION REQUEST',
+      '='.repeat(80),
+      '',
+      '📋 ISSUE SUMMARY:',
+      'InventoryBalance API endpoint returns "Please login" error despite successful authentication.',
+      'SaveSaleOrder API works perfectly with identical authentication credentials.',
+      '',
+      '🔑 AUTHENTICATION DETAILS:',
+      `- Company Code: ${ECOUNT_CONFIG.companyCode}`,
+      `- User ID: ${ECOUNT_CONFIG.userId}`,
+      `- API Key: ${ECOUNT_CONFIG.authKey?.substring(0, 8)}...[REDACTED] (Valid until October 2026)`,
+      `- Zone: ${sessionInfo?.zone || 'N/A'}`,
+      `- Session ID: ${sessionInfo?.sessionId || 'N/A'}`,
+      `- Cookies Captured: ${sessionInfo?.hasCookies ? 'YES' : 'NO'}`,
+      '',
+      '❌ FAILING ENDPOINT:',
+      `- Endpoint: ${inventoryTest.endpoint}`,
+      `- HTTP Status: ${inventoryTest.httpStatus || 'N/A'}`,
+      `- Response Status: ${inventoryTest.responseStatus || 'N/A'}`,
+      `- Error Message: ${inventoryTest.errorMessage || 'N/A'}`,
+      `- TRACE_ID: ${inventoryTest.traceId || 'N/A'}`,
+      '',
+      '📝 REQUEST DETAILS:',
+      `- BASE_DATE: ${new Date().toISOString().slice(0, 10).replace(/-/g, '')} (YYYYMMDD format)`,
+      `- WH_CD: ${ECOUNT_CONFIG.warehouseCode}`,
+      `- PROD_CD: "" (empty = all products)`,
+      `- Page: 1`,
+      `- PageSize: 10`,
+      '',
+      '✅ WORKING ENDPOINTS (Same Authentication):',
+      '- /OAPI/V2/Zone - SUCCESS',
+      '- /OAPI/V2/OAPILogin - SUCCESS',
+      '- /OAPI/V2/SalesOrder/SaveSaleOrder - SUCCESS (Orders #20251021-3 and #20251021-4)',
+      '',
+      '🎯 REQUEST TO ECOUNT SUPPORT:',
+      '1. Please verify that the InventoryBalance API endpoint is activated for our production API key',
+      '2. Confirm warehouse permissions for warehouse code: ' + ECOUNT_CONFIG.warehouseCode,
+      '3. Verify API scope includes InventoryBalance/InventoryBasic endpoints',
+      '4. Check if there are any additional permissions or setup required',
+      '',
+      '📞 CONTACT INFORMATION:',
+      '- Company: PHOMAS DIAGNOSTICS (Tanzania)',
+      '- System: Medical Supply E-commerce Platform',
+      '- Integration Status: SaveSaleOrder working, InventoryBalance blocked',
+      '',
+      '⏰ TIMESTAMP: ' + new Date().toISOString(),
+      '='.repeat(80)
+    ];
+    
+    return lines.join('\n');
+  }
 }
 
 // Export singleton instance

@@ -952,6 +952,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // DIAGNOSTIC ENDPOINT: Test InventoryBalance API and capture evidence for eCount support
+  app.get("/api/admin/diagnostic/inventory-balance", requireAdminAuth, async (req, res) => {
+    try {
+      console.log('🔬 DIAGNOSTIC: Testing InventoryBalance API with detailed logging...');
+      
+      const diagnostic = await ecountApi.diagnoseInventoryBalanceApi();
+      
+      res.json({
+        success: true,
+        message: 'Diagnostic test complete - see details below',
+        diagnostic,
+        nextSteps: diagnostic.inventoryBalanceWorking 
+          ? 'InventoryBalance API is working! No action needed.'
+          : 'InventoryBalance API is failing. Contact eCount support with the evidence below.'
+      });
+    } catch (error) {
+      console.error('Diagnostic endpoint failed:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Diagnostic test failed',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
   // Image upload route - no authentication required for simplicity
   app.post("/api/admin/upload-image", upload.single('image'), async (req, res) => {
     try {
