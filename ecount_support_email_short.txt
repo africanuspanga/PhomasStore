@@ -1,0 +1,37 @@
+Subject: InventoryBalance API Access Request - Company 902378 (PHOMAS DIAGNOSTICS)
+
+Dear eCount Support Team,
+
+We are experiencing an issue with the InventoryBalance API endpoint and need your assistance.
+
+PROBLEM:
+The InventoryBalance API (/OAPI/V2/InventoryBalance/GetListInventoryBalanceStatus) returns HTTP 500 "Please login" error, even though our authentication is working correctly.
+
+PROOF AUTHENTICATION IS WORKING:
+✅ SaveSaleOrder API works perfectly (orders #20251021-3 and #20251021-4 successfully submitted)
+✅ Login API works (we receive valid session ID and cookies)
+✅ Zone API works
+
+❌ InventoryBalance API fails with same credentials
+
+ACCOUNT DETAILS:
+- Company Code: 902378
+- User ID: TIHOMBWE  
+- API Key: 01bfa323...[ends]...eb59 (valid until October 2026)
+- Warehouse: 00001
+- Zone: IA
+
+REQUEST:
+Could you please:
+1. Verify InventoryBalance endpoint is activated for our production API key
+2. Confirm warehouse 00001 has inventory query permissions
+3. Check our API scope includes InventoryBalance/InventoryBasic endpoints
+
+We suspect the endpoint may need to be enabled on your side, as our authentication works for other endpoints.
+
+Thank you for your help!
+
+Best regards,
+[Your Name]
+PHOMAS DIAGNOSTICS, Tanzania
+Email: [Your Email] | Phone: [Your Phone]

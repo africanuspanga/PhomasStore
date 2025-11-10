@@ -1,0 +1,77 @@
+Subject: Request for InventoryBalance API Endpoint Activation - Company ID 902378
+
+Dear eCount Support Team,
+
+I am writing to request assistance with activating the InventoryBalance API endpoint for our production environment. We are PHOMAS DIAGNOSTICS, a medical supply company in Tanzania, and we have successfully integrated several eCount APIs into our e-commerce platform. However, we are experiencing an issue with the inventory endpoints.
+
+ISSUE SUMMARY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+The InventoryBalance API endpoint returns "Please login" error (HTTP 500) despite successful authentication. This is puzzling because our SaveSaleOrder API works perfectly with identical authentication credentials.
+
+ACCOUNT INFORMATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+- Company Code: 902378
+- User ID: TIHOMBWE
+- Production API Key: 01bfa323...[ends with]...eb59 (Valid until October 2026)
+- Warehouse Code: 00001
+- Integration Zone: IA
+
+TECHNICAL DETAILS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Our authentication flow is working correctly:
+✅ Zone API (/OAPI/V2/Zone) - SUCCESS
+✅ Login API (/OAPI/V2/OAPILogin) - SUCCESS  
+✅ SaveSaleOrder API (/OAPI/V2/SalesOrder/SaveSaleOrder) - SUCCESS
+   • We have successfully submitted production orders (#20251021-3 and #20251021-4)
+   • These orders are visible in your system
+
+❌ InventoryBalance API (/OAPI/V2/InventoryBalance/GetListInventoryBalanceStatus) - FAILS
+   • HTTP Status: 500
+   • Error Message: "Please login."
+   • We are using the EXACT SAME authentication (session ID and cookies) that works for SaveSaleOrder
+
+AUTHENTICATION VERIFICATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+We have verified that our implementation follows eCount API documentation:
+• Session ID is included in both URL query parameters and request body
+• Cookies from login response are captured and replayed in subsequent requests
+• Request format matches documentation (BASE_DATE in YYYYMMDD format, etc.)
+• All working endpoints use identical authentication mechanism
+
+BUSINESS IMPACT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+We currently use an Excel file as a fallback to display product information on our website, but this prevents us from showing real-time inventory levels to our customers. This is critical for our medical supply business where stock availability is essential.
+
+REQUEST TO ECOUNT SUPPORT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Could you please help us with the following:
+
+1. Verify that the InventoryBalance API endpoint is activated for our production API key
+2. Confirm that our warehouse code (00001) has the necessary permissions for inventory queries
+3. Check that our API scope includes InventoryBalance and InventoryBasic endpoints
+4. If there are additional setup steps or permissions required, please guide us through the process
+
+HYPOTHESIS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Since SaveSaleOrder works with the same credentials, we believe this may be a server-side endpoint activation issue rather than an authentication problem. The endpoint may not be enabled for our production API key even though our verification status shows as "VERIFIED" in the eCount interface.
+
+ADDITIONAL INFORMATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+If it would be helpful, we can provide:
+• Full request/response logs with redacted credentials
+• Session ID and cookie details from our diagnostic tests
+• Screenshots of our API verification status in eCount
+
+We appreciate your assistance in resolving this issue. Real-time inventory integration is a key feature for our medical supply platform, and we're eager to complete this integration.
+
+Please let me know if you need any additional information to investigate this issue.
+
+Best regards,
+
+[Your Name]
+PHOMAS DIAGNOSTICS
+Tanzania
+
+Email: [Your Email]
+Phone: [Your Phone Number]
+Company ID: 902378
