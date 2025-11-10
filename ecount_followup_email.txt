@@ -1,0 +1,44 @@
+Subject: Re: InventoryBalance API Access Request - Clarification on "Request URL"
+
+Dear eCount Support Team,
+
+Thank you for your quick response!
+
+You mentioned using the "Request URL" for actual data transmission after verification is complete. I want to confirm we're using the correct URL.
+
+CURRENT CONFIGURATION:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+We are currently using:
+- Base URL: https://oapi{ZONE}.ecount.com (production URL, not sboapi)
+- Zone: IA (detected via Zone API)
+- Full InventoryBalance URL: https://oapiIA.ecount.com/OAPI/V2/InventoryBalance/GetListInventoryBalanceStatus
+- Authentication Key: 01bfa323...[ends]...eb59 (production key, not verification key)
+
+WORKING ENDPOINTS WITH SAME URL PATTERN:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✅ https://oapiIA.ecount.com/OAPI/V2/OAPILogin - SUCCESS
+✅ https://oapiIA.ecount.com/OAPI/V2/SalesOrder/SaveSaleOrder - SUCCESS
+
+CLARIFICATION NEEDED:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Could you please clarify what you mean by "Request URL"?
+
+1. Should InventoryBalance use a DIFFERENT base URL than https://oapi{ZONE}.ecount.com?
+   (For example: a different domain or path pattern?)
+
+2. Or are you confirming that https://oapiIA.ecount.com is correct, and the issue is something else?
+
+3. Is there a specific endpoint documentation or URL format we should reference for InventoryBalance after verification?
+
+VERIFICATION STATUS:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Our eCount interface shows "VERIFIED" status. We have completed verification and are ready for production data transmission.
+
+We want to ensure we're using the exact URL pattern you expect for InventoryBalance in production mode. Any specific URL or endpoint documentation you can share would be very helpful!
+
+Thank you for your continued support.
+
+Best regards,
+[Your Name]
+PHOMAS DIAGNOSTICS, Tanzania
+Company ID: 902378

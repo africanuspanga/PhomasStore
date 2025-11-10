@@ -1,0 +1,73 @@
+Subject: Re: InventoryBalance API Access - Confirmed Using Correct Production URL
+
+Dear eCount Support Team,
+
+Thank you for your response. I want to confirm that we are already using the correct production "Request URL" as documented in eCount API documentation.
+
+✅ CONFIRMED: WE ARE USING THE DOCUMENTED PRODUCTION URL
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Our current implementation matches your official documentation exactly:
+
+From eCount Documentation (Line 18):
+  Inventory Balance: https://oapi{ZONE}.ecount.com/OAPI/V2/InventoryBalance/GetListInventoryBalanceStatus?SESSION_ID={SESSION_ID}
+
+Our Actual Request:
+  URL: https://oapiIA.ecount.com/OAPI/V2/InventoryBalance/GetListInventoryBalanceStatus?SESSION_ID={SESSION_ID}
+  Zone: IA (from Zone API)
+  Auth Key: 01bfa323...[ends]...eb59 (production key, not verification key)
+
+✅ PROOF: OTHER ENDPOINTS WORK WITH SAME URL PATTERN
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+These endpoints work successfully with identical URL structure:
+
+✅ https://oapiIA.ecount.com/OAPI/V2/OAPILogin?SESSION_ID={SESSION_ID}
+   → Result: Login successful, receive session ID and cookies
+
+✅ https://oapiIA.ecount.com/OAPI/V2/SaleOrder/SaveSaleOrder?SESSION_ID={SESSION_ID}
+   → Result: Orders saved successfully (Orders #20251021-3 and #20251021-4)
+
+❌ https://oapiIA.ecount.com/OAPI/V2/InventoryBalance/GetListInventoryBalanceStatus?SESSION_ID={SESSION_ID}
+   → Result: HTTP 500 "Please login" error
+
+AUTHENTICATION DETAILS (All Correct)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✅ Using production base URL: https://oapi{ZONE}.ecount.com (NOT sboapi)
+✅ Using production auth key: 01bfa323...eb59 (1-year validity key)
+✅ Session ID in URL query parameter: SESSION_ID={SESSION_ID}
+✅ Session ID in request body: SESSION_ID field included
+✅ API_CERT_KEY in request body: Included
+✅ Cookies from login: Captured and replayed
+✅ Verification status: VERIFIED (completed)
+
+REQUEST FOR INVESTIGATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Since we are using the exact URL from your documentation and our authentication works for SaveSaleOrder, could you please:
+
+1. Check if the InventoryBalance endpoint is ACTIVATED on your server for our production API key?
+2. Verify that our API key has permissions for inventory endpoints (not just sales endpoints)?
+3. Confirm that warehouse code 00001 has the necessary permissions for inventory queries?
+
+HYPOTHESIS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+The "Please login" error appears to be a permission/activation issue on the server side, not a URL or authentication problem, because:
+
+- Same authentication credentials work for SaveSaleOrder ✅
+- Same URL pattern used successfully for other endpoints ✅
+- We're using the production URL and production auth key ✅
+- The only difference is the specific endpoint: InventoryBalance ❌
+
+ACCOUNT INFORMATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Company Code: 902378
+User ID: TIHOMBWE
+Warehouse: 00001
+API Key: 01bfa323...[ends]...eb59
+
+Could you please check your server-side configuration for our account and confirm that InventoryBalance endpoints are enabled?
+
+Thank you for your help!
+
+Best regards,
+[Your Name]
+PHOMAS DIAGNOSTICS, Tanzania
+Email: [Your Email] | Phone: [Your Phone]
