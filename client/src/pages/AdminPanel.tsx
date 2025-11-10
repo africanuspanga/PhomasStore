@@ -325,12 +325,29 @@ export default function AdminPanel() {
                 <div className="space-y-3">
                   {users.map((userItem: User) => (
                     <div key={userItem.id} className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
-                      <div>
+                      <div className="flex-1">
                         <h4 className="font-medium text-gray-800">{userItem.companyName}</h4>
                         <p className="text-sm text-gray-600">{userItem.email}</p>
-                        <Badge className={`text-xs mt-1 ${getRoleColor(userItem.role)}`}>
-                          {userItem.role.charAt(0).toUpperCase() + userItem.role.slice(1)}
-                        </Badge>
+                        <div className="flex items-center gap-2 mt-1">
+                          <Badge className={`text-xs ${getRoleColor(userItem.role)}`}>
+                            {userItem.role.charAt(0).toUpperCase() + userItem.role.slice(1)}
+                          </Badge>
+                          {userItem.userType && (
+                            <Badge className="text-xs bg-gray-100 text-gray-700">
+                              {userItem.userType === 'company' ? 'Company' : userItem.userType === 'licensed_trader' ? 'Licensed Trader' : 'Individual'}
+                            </Badge>
+                          )}
+                        </div>
+                        {(userItem.brelaNumber || userItem.tinNumber) && (
+                          <div className="mt-2 text-xs text-gray-600 space-y-0.5">
+                            {userItem.brelaNumber && (
+                              <p><strong>Brela #:</strong> {userItem.brelaNumber}</p>
+                            )}
+                            {userItem.tinNumber && (
+                              <p><strong>TIN #:</strong> {userItem.tinNumber}</p>
+                            )}
+                          </div>
+                        )}
                       </div>
                       <div className="flex items-center space-x-2">
                         <Button variant="ghost" size="sm" className="text-phomas-blue hover:text-phomas-green">
