@@ -1418,14 +1418,15 @@ class EcountApiService {
   }
 
   /**
-   * Get single item inventory for high-priority products (rate limit: 1 per second)
+   * Get single item inventory using VERIFIED endpoint ViewInventoryBalanceStatus
+   * This is the eCount-verified endpoint that should work with production key
    */
   async getSingleItemInventory(itemCode: string): Promise<number> {
-    console.log(`🔍 Getting single item inventory for: ${itemCode} (Rate limit: 1 per second)`);
+    console.log(`🔍 Getting single item inventory for: ${itemCode} using VERIFIED endpoint`);
     
     try {
       const result = await this.ecountRequest({
-        endpoint: '/OAPI/V2/InventoryBalance/GetInventoryBalanceStatus',
+        endpoint: '/OAPI/V2/InventoryBalance/ViewInventoryBalanceStatus',
         body: {
           BASE_DATE: new Date().toISOString().slice(0, 10).replace(/-/g, ''), // YYYYMMDD
           WH_CD: ECOUNT_CONFIG.warehouseCode,

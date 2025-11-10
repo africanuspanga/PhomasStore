@@ -882,6 +882,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // TEST: VERIFIED endpoint ViewInventoryBalanceStatus (single item)
+  app.post("/api/admin/test-verified-inventory", requireAdminAuth, async (req, res) => {
+    try {
+      const { itemCode } = req.body;
+      
+      if (!itemCode) {
+        return res.status(400).json({
+          success: false,
+          error: 'itemCode is required'
+        });
+      }
+
+      console.log(`🧪 Admin testing VERIFIED ViewInventoryBalanceStatus endpoint for item: ${itemCode}`);
+      const quantity = await ecountApi.getSingleItemInventory(itemCode);
+      
+      res.json({
+        success: true,
+        message: `VERIFIED endpoint works! Item ${itemCode} has ${quantity} units`,
+        data: {
+          itemCode,
+          quantity,
+          endpoint: 'ViewInventoryBalanceStatus (eCount verified ✅)'
+        }
+      });
+    } catch (error) {
+      console.error('Verified inventory test failed:', error);
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        message: 'VERIFIED endpoint test failed'
+      });
+    }
+  });
+
   app.post("/api/admin/clear-cache", requireAdminAuth, enforceBulkRateLimit('clear-cache'), async (req, res) => {
     try {
       console.log('Admin clearing inventory cache');
