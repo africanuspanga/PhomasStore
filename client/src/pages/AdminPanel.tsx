@@ -14,6 +14,17 @@ import type { User, Order, OrderItem } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
+// Extended User type for admin panel (includes Supabase metadata fields)
+interface AdminPanelUser extends Omit<User, 'password'> {
+  userType?: string;
+  phone?: string;
+  address?: string;
+  brelaNumber?: string;
+  tinNumber?: string;
+  emailConfirmed?: boolean;
+  lastSignIn?: Date | null;
+}
+
 // Orders Management Component - shows all orders with customer attribution
 function OrdersManagement() {
   const { data: orders = [], isLoading } = useQuery<Order[]>({
@@ -201,12 +212,12 @@ export default function AdminPanel() {
     return null;
   }
 
-  const { data: users = [], isLoading: usersLoading } = useQuery({
+  const { data: users = [], isLoading: usersLoading } = useQuery<AdminPanelUser[]>({
     queryKey: ["/api/admin/users"],
     queryFn: () => ecountService.getAllUsers(),
   });
 
-  const { data: pendingUsers = [], isLoading: pendingLoading } = useQuery<any[]>({
+  const { data: pendingUsers = [], isLoading: pendingLoading } = useQuery<AdminPanelUser[]>({
     queryKey: ["/api/admin/pending-users"],
     queryFn: async () => {
       const res = await apiRequest("GET", "/api/admin/pending-users");
@@ -323,7 +334,7 @@ export default function AdminPanel() {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {users.map((userItem: User) => (
+                  {users.map((userItem: AdminPanelUser) => (
                     <div key={userItem.id} className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
                       <div className="flex-1">
                         <h4 className="font-medium text-gray-800">{userItem.companyName}</h4>
@@ -500,7 +511,7 @@ export default function AdminPanel() {
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    {pendingUsers.map((pendingUser: any) => {
+                    {pendingUsers.map((pendingUser: AdminPanelUser) => {
                       const whatsappNumber = pendingUser.phone?.replace(/[^0-9]/g, '') || '';
                       const whatsappUrl = whatsappNumber ? `https://wa.me/${whatsappNumber}` : null;
 
@@ -517,7 +528,7 @@ export default function AdminPanel() {
                                   {pendingUser.companyName}
                                 </h4>
                                 <Badge className="text-xs bg-amber-100 text-amber-800">
-                                  {pendingUser.userType === 'company' ? 'Company' : 'Individual'}
+                                  {pendingUser.userType === 'company' ? 'Company' : pendingUser.userType === 'licensed_trader' ? 'Licensed Trader' : 'Individual'}
                                 </Badge>
                               </div>
                               <div className="space-y-1 text-sm text-gray-600">
@@ -540,6 +551,12 @@ export default function AdminPanel() {
                                 )}
                                 {pendingUser.address && (
                                   <p><strong>Address:</strong> {pendingUser.address}</p>
+                                )}
+                                {pendingUser.brelaNumber && (
+                                  <p><strong>Brela Registration #:</strong> {pendingUser.brelaNumber}</p>
+                                )}
+                                {pendingUser.tinNumber && (
+                                  <p><strong>TIN #:</strong> {pendingUser.tinNumber}</p>
                                 )}
                                 <p className="text-xs text-gray-500">
                                   <strong>Registered:</strong> {format(new Date(pendingUser.createdAt), 'MMM d, yyyy h:mm a')}
