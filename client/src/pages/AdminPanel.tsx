@@ -558,9 +558,11 @@ export default function AdminPanel() {
                                 {pendingUser.tinNumber && (
                                   <p><strong>TIN #:</strong> {pendingUser.tinNumber}</p>
                                 )}
-                                <p className="text-xs text-gray-500">
-                                  <strong>Registered:</strong> {format(new Date(pendingUser.createdAt), 'MMM d, yyyy h:mm a')}
-                                </p>
+                                {pendingUser.createdAt && (
+                                  <p className="text-xs text-gray-500">
+                                    <strong>Registered:</strong> {format(new Date(pendingUser.createdAt), 'MMM d, yyyy h:mm a')}
+                                  </p>
+                                )}
                               </div>
                             </div>
                             <div className="ml-4">
