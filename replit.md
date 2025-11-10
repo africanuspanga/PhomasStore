@@ -140,24 +140,43 @@ The server is built with Express.js and uses an in-memory storage system for the
   - **Monitoring API**: `getErrorTrackingStatus()` exposes real-time metrics
 - **Background**: eCount locks API access after 30 consecutive errors/hour (documented limit). We hit this during authentication debugging on November 6-7, 2025. eCount support unlocked the API and requested proper error handling implementation.
 
-## eCount API Selective Endpoint Locking (November 7, 2025)
+## eCount API Selective Endpoint Locking (November 7-10, 2025)
 - **Current Status**: InventoryBalance endpoint remains SERVER-SIDE LOCKED despite UI showing "VERIFIED" status
   - **Working APIs**: Login (OAPILogin), SaveSaleOrder, Zone
   - **Locked APIs**: InventoryBalance/GetListInventoryBalanceStatus
   - **Error Pattern**: Returns HTTP 500 "Please login" despite perfect authentication
   - **Root Cause**: Verification status ≠ production activation; endpoint disabled server-side
   - **Client Auth**: CONFIRMED WORKING - identical authentication succeeds for SaveSaleOrder, SESSION_ID and cookies are correct
+
+- **Diagnostic Endpoint** (November 10, 2025): `/api/admin/diagnostic/inventory-balance`
+  - Admin-only diagnostic tool that generates evidence for eCount support escalation
+  - Tests authentication flow (login → session ID → cookies)
+  - Attempts InventoryBalance API call with full request/response logging
+  - Captures: HTTP status, response status, error messages, session details
+  - Generates formatted evidence report with all technical details
+  - **Note**: eCount does not return TRACE_ID in the error response
+  - Access: Login to admin panel, then call `GET /api/admin/diagnostic/inventory-balance`
+  - Returns structured JSON with `evidenceForSupport` field containing formatted escalation text
+
 - **Excel Fallback System**: Production-ready workaround keeps business operational
   - All 466 products visible on website with real names, prices, packaging from Excel file
   - Auto-switches between Excel data and real-time eCount when API status changes
   - Products marked with `hasRealTimeData: false` and `availableQuantity: 0` when using Excel
   - Orders still work perfectly (SaveSaleOrder API functional)
-- **Solution**: User must contact eCount support with:
-  1. Company ID: 902378, Warehouse: 00001
-  2. Production API key: 01bfa323...eb59
-  3. Request explicit production activation for InventoryBalance/InventoryBasic endpoints
-  4. Confirm warehouse permissions and API scope for auth key
-  5. Evidence: SaveSaleOrder works, but InventoryBalance returns "Please login" with identical auth
+
+- **Next Steps - Contact eCount Support**:
+  1. Run the diagnostic endpoint: `/api/admin/diagnostic/inventory-balance`
+  2. Copy the `evidenceForSupport` field from the JSON response
+  3. Contact eCount support with this evidence, requesting:
+     - Production activation for InventoryBalance/InventoryBasic endpoints
+     - Confirmation of warehouse permissions for warehouse code: 00001
+     - Verification that API scope includes inventory endpoints
+  4. **Key Evidence Points**:
+     - Company ID: 902378, User: TIHOMBWE, Warehouse: 00001
+     - Production API key: 01bfa323...eb59 (valid until October 2026)
+     - SaveSaleOrder works perfectly with identical authentication
+     - InventoryBalance returns "Please login" with same session/cookies
+  5. Monitor logs after eCount unlocks the endpoint to confirm transition from 500 to 200 status
 
 # Recent Changes (October 2025)
 
