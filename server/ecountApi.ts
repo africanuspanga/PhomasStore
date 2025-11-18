@@ -194,14 +194,10 @@ class EcountApiService {
     }
     
     try {
-      // Production-ready headers with cookie support
+      // CRITICAL FIX: Use MINIMAL headers - extra headers cause eCount to reject with "Please login"
+      // Direct fetch() test works with ONLY Content-Type, so match that exactly
       const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'Accept-Language': 'en-US,en;q=0.9',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Cache-Control': 'no-cache',
-        'Pragma': 'no-cache'
+        'Content-Type': 'application/json'
       };
       
       // CRITICAL FIX: InventoryBalance API REQUIRES cookies + session ID (both!)
