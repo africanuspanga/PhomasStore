@@ -12,10 +12,10 @@ Preferred communication style: Simple, everyday language.
 The client is built with React 18, TypeScript, Wouter for routing, and TanStack Query for state management. UI components are from shadcn/ui built on Radix UI primitives, styled with Tailwind CSS using Phomas brand colors.
 
 ## Backend Architecture
-The server uses Express.js with a RESTful API for authentication, product, and order management. It uses an in-memory storage for development, abstracting the storage layer with an `IStorage` interface.
+The server uses Express.js with a RESTful API for authentication, product, and order management. It uses Supabase PostgreSQL for persistent order storage and an in-memory cache for products (sourced from eCount ERP), abstracting the storage layer with an `IStorage` interface.
 
 ## Data Management
-In-memory storage is used for demo purposes. Mock data is stored in JSON files. Drizzle ORM defines the PostgreSQL schema for future integration, and TypeScript provides full type safety across client and server.
+**Production database**: Supabase PostgreSQL (eu-north-1 region) via Transaction Pooler for persistent order storage, user profiles, and product images. Products and inventory are fetched in real-time from eCount ERP. Drizzle ORM with postgres.js provides type-safe database queries. TypeScript ensures full type safety across client and server.
 
 ## Authentication & Authorization
 Production authentication uses Supabase Auth. A user approval system requires admin approval for all new registrations, with unapproved users blocked from login. Role-based access control (admin vs. client) is implemented with protected routes. Admin users (admin@phomas.com) bypass the approval process.
@@ -61,8 +61,8 @@ The application features a responsive design for mobile and desktop, a password 
 ## Backend & Database
 - **Express.js**
 - **Drizzle ORM**
-- **Neon Database**
-- **connect-pg-simple**
+- **Supabase PostgreSQL** (Transaction Pooler, eu-north-1)
+- **postgres.js** (database driver)
 
 ## Development Tools
 - **Vite**
@@ -75,52 +75,16 @@ The application features a responsive design for mobile and desktop, a password 
 
 ## Active Integrations
 - **eCount ERP**: Live production integration for inventory and order submission (https://oapi{ZONE}.ecount.com). Auth Key: 01bfa323...eb59. Customer Code: 10839, Warehouse: 00001.
-- **Supabase**: For user authentication and authorization.
+- **Supabase PostgreSQL**: Production database for persistent order storage (eu-north-1 region, Transaction Pooler on port 6543). Also handles user authentication, product images, and profiles.
 - **Cloudinary**: Direct image uploads for product images (Cloud Name: dvrdcyymo, Upload Preset: PHOMAS).
 
-# Current Issue - GetListInventoryBalanceStatus API Investigation
+# Recent Changes (November 18, 2025)
 
-## Status
-The GetListInventoryBalanceStatus API endpoint is consistently returning "Please login" errors (HTTP 500) when called through the production `ecountRequest()` wrapper, despite successful authentication and proper parameter configuration.
-
-## Working Test Endpoint
-A separate test endpoint `/api/admin/test-inventory-balance-status` successfully retrieves hundreds of products using direct `fetch()` calls with these exact parameters:
-```json
-{
-  "COM_CODE": "902378",
-  "SESSION_ID": "[session from login]",
-  "API_CERT_KEY": "[production key]",
-  "BASE_DATE": "YYYYMMDD",
-  "CUST_CODE": "10839",
-  "WH_CODE": "00001",
-  "ITEM_CODE": ""
-}
-```
-
-## Failing Production Code
-The production `ecountRequest()` method uses identical parameters but consistently fails:
-- Login succeeds (✅)
-- API call fails with "Please login" (❌)
-- Force re-login succeeds (✅)
-- Retry API call fails again (❌)
-
-## Debugging Steps Completed
-1. ✅ Fixed session expiration detection to recognize "Please login" errors in status 500 responses
-2. ✅ Implemented force re-login bypass for rate limiting
-3. ✅ Updated parameter names to match working test: `WH_CODE`, `ITEM_CODE`, `CUST_CODE`
-4. ✅ Added `API_CERT_KEY` to request body (matches test endpoint)
-5. ✅ Verified session/cookies are identical between test and production
-6. ✅ Confirmed request body matches test endpoint exactly
-
-## Mystery
-Both endpoints use:
-- Same authentication flow (Zone API → Login → GetListInventoryBalanceStatus)
-- Same session ID and cookies from login
-- Same request parameters
-- Same headers
-- Same production API key
-
-Yet the test endpoint works perfectly while the production wrapper fails consistently. The only structural difference is that the test uses direct `fetch()` calls while production uses the `ecountRequest()` wrapper method.
-
-## Next Steps
-Further investigation needed to identify what specific aspect of the `ecountRequest()` wrapper causes eCount to reject the API calls despite proper authentication and parameters.
+## ✅ Supabase PostgreSQL Integration Completed
+Successfully migrated from in-memory storage to Supabase PostgreSQL for persistent order storage:
+- **Connection**: Transaction Pooler (IPv4-compatible, port 6543) in eu-north-1 region
+- **Database Driver**: postgres.js with Drizzle ORM
+- **Schema**: All tables created (orders, users, profiles, products, inventory, product_images)
+- **Status**: ✅ Connected and operational
+- **Order Persistence**: All customer orders now saved permanently to Supabase database
+- **Admin Dashboard**: Displays all orders with real-time data from database

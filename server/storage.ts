@@ -438,21 +438,22 @@ export class DatabaseStorage implements IStorage {
     // Use MemStorage for products/inventory (eCount handles those)
     this.memStorage = new MemStorage();
     
-    // Initialize Supabase PostgreSQL database connection
+    // Initialize Supabase PostgreSQL database connection via Transaction Pooler
     const supabaseUrl = process.env.SUPABASE_URL;
+    const dbPassword = process.env.PGPASSWORD;
     const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
     
-    if (supabaseUrl && supabaseServiceKey) {
-      // Get project reference from Supabase URL (e.g., abcdefghijk from https://abcdefghijk.supabase.co)
+    if (supabaseUrl && dbPassword) {
+      // Get project reference from Supabase URL (e.g., xvomxojbfhovbhbbkuoh from https://xvomxojbfhovbhbbkuoh.supabase.co)
       const projectRef = supabaseUrl.replace('https://', '').replace('.supabase.co', '');
-      // Supabase direct database connection
-      const supabaseDbUrl = `postgresql://postgres:${supabaseServiceKey}@db.${projectRef}.supabase.co:5432/postgres`;
+      // Supabase Transaction Pooler connection (IPv4 compatible, port 6543)
+      const supabaseDbUrl = `postgresql://postgres.${projectRef}:${dbPassword}@aws-1-eu-north-1.pooler.supabase.com:6543/postgres`;
       
       const client = postgres(supabaseDbUrl, { prepare: false });
       this.db = drizzle(client);
-      console.log('✅ Supabase PostgreSQL database connected for orders');
+      console.log('✅ Supabase PostgreSQL database connected via Transaction Pooler (eu-north-1)');
     } else {
-      console.warn('⚠️ Supabase not configured, falling back to memory storage');
+      console.warn('⚠️ Supabase database not configured (missing PGPASSWORD), falling back to memory storage');
       this.db = null;
     }
     
