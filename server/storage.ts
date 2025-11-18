@@ -1,9 +1,11 @@
-import { type User, type InsertUser, type Product, type InsertProduct, type Inventory, type InsertInventory, type Order, type InsertOrder, type ProductWithInventory, type OrderItem, type ProductImage, type InsertProductImage, productImages } from "@shared/schema";
+import { type User, type InsertUser, type Product, type InsertProduct, type Inventory, type InsertInventory, type Order, type InsertOrder, type ProductWithInventory, type OrderItem, type ProductImage, type InsertProductImage, productImages, orders as ordersTable, users as usersTable } from "@shared/schema";
 import { randomUUID } from "crypto";
 import * as fs from "fs";
 import * as path from "path";
 import { createClient } from '@supabase/supabase-js';
-import { eq } from 'drizzle-orm';
+import { eq, desc } from 'drizzle-orm';
+import { drizzle } from 'drizzle-orm/neon-serverless';
+import { Pool } from '@neondatabase/serverless';
 
 export interface IStorage {
   // User management
@@ -426,14 +428,26 @@ export class MemStorage implements IStorage {
   }
 }
 
-// Database Storage using Supabase for persistent product images
+// Database Storage using PostgreSQL for persistent data
 export class DatabaseStorage implements IStorage {
   private memStorage: MemStorage;
   private supabase: any;
+  private db: any; // Drizzle database instance
 
   constructor() {
-    // Use MemStorage for everything except product images
+    // Use MemStorage for products/inventory (eCount handles those)
     this.memStorage = new MemStorage();
+    
+    // Initialize PostgreSQL database connection
+    const databaseUrl = process.env.DATABASE_URL;
+    if (databaseUrl) {
+      const pool = new Pool({ connectionString: databaseUrl });
+      this.db = drizzle(pool);
+      console.log('✅ PostgreSQL database connected for orders');
+    } else {
+      console.warn('⚠️ DATABASE_URL not set, falling back to memory storage');
+      this.db = null;
+    }
     
     // Initialize Supabase client for product images
     const supabaseUrl = process.env.SUPABASE_URL;
@@ -500,22 +514,87 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createOrder(order: InsertOrder): Promise<Order> {
+    // Use database if available, otherwise fallback to memory
+    if (this.db) {
+      try {
+        const [createdOrder] = await this.db.insert(ordersTable).values({
+          ...order,
+          id: randomUUID(),
+          orderNumber: `PH-${Date.now()}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`,
+          createdAt: new Date(),
+        }).returning();
+        console.log(`✅ Order ${createdOrder.orderNumber} saved to database`);
+        return createdOrder;
+      } catch (error) {
+        console.error('❌ Database error creating order:', error);
+        throw error;
+      }
+    }
     return this.memStorage.createOrder(order);
   }
 
   async getOrderById(id: string): Promise<Order | undefined> {
+    if (this.db) {
+      try {
+        const [order] = await this.db.select().from(ordersTable).where(eq(ordersTable.id, id));
+        return order;
+      } catch (error) {
+        console.error('❌ Database error getting order:', error);
+        return undefined;
+      }
+    }
     return this.memStorage.getOrderById(id);
   }
 
   async getOrdersByUserId(userId: string): Promise<Order[]> {
+    if (this.db) {
+      try {
+        const userOrders = await this.db
+          .select()
+          .from(ordersTable)
+          .where(eq(ordersTable.userId, userId))
+          .orderBy(desc(ordersTable.createdAt));
+        console.log(`📦 Retrieved ${userOrders.length} orders for user ${userId} from database`);
+        return userOrders;
+      } catch (error) {
+        console.error('❌ Database error getting orders:', error);
+        return [];
+      }
+    }
     return this.memStorage.getOrdersByUserId(userId);
   }
 
   async getAllOrders(): Promise<Order[]> {
+    if (this.db) {
+      try {
+        const allOrders = await this.db
+          .select()
+          .from(ordersTable)
+          .orderBy(desc(ordersTable.createdAt));
+        console.log(`📦 Admin retrieved ${allOrders.length} total orders from database`);
+        return allOrders;
+      } catch (error) {
+        console.error('❌ Database error getting all orders:', error);
+        return [];
+      }
+    }
     return this.memStorage.getAllOrders();
   }
 
   async getFailedOrders(): Promise<Order[]> {
+    if (this.db) {
+      try {
+        const failedOrders = await this.db
+          .select()
+          .from(ordersTable)
+          .where(eq(ordersTable.erpSyncStatus, 'failed'))
+          .orderBy(desc(ordersTable.createdAt));
+        return failedOrders;
+      } catch (error) {
+        console.error('❌ Database error getting failed orders:', error);
+        return [];
+      }
+    }
     return this.memStorage.getFailedOrders();
   }
 
@@ -533,6 +612,30 @@ export class DatabaseStorage implements IStorage {
     erpSyncStatus?: string;
     erpSyncError?: string | null;
   }): Promise<Order> {
+    if (this.db) {
+      try {
+        const [updatedOrder] = await this.db
+          .update(ordersTable)
+          .set({
+            erpDocNumber: erpInfo.erpDocNumber,
+            erpIoDate: erpInfo.erpIoDate,
+            erpSyncStatus: erpInfo.erpSyncStatus,
+            erpSyncError: erpInfo.erpSyncError,
+          })
+          .where(eq(ordersTable.id, orderId))
+          .returning();
+        
+        if (!updatedOrder) {
+          throw new Error(`Order with ID ${orderId} not found`);
+        }
+        
+        console.log(`✅ Updated ERP info for order ${updatedOrder.orderNumber}`);
+        return updatedOrder;
+      } catch (error) {
+        console.error('❌ Database error updating order ERP info:', error);
+        throw error;
+      }
+    }
     return this.memStorage.updateOrderErpInfo(orderId, erpInfo);
   }
 
