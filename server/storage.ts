@@ -4,8 +4,8 @@ import * as fs from "fs";
 import * as path from "path";
 import { createClient } from '@supabase/supabase-js';
 import { eq, desc } from 'drizzle-orm';
-import { drizzle } from 'drizzle-orm/neon-serverless';
-import { Pool } from '@neondatabase/serverless';
+import { drizzle } from 'drizzle-orm/neon-http';
+import { neon } from '@neondatabase/serverless';
 
 export interface IStorage {
   // User management
@@ -438,12 +438,12 @@ export class DatabaseStorage implements IStorage {
     // Use MemStorage for products/inventory (eCount handles those)
     this.memStorage = new MemStorage();
     
-    // Initialize PostgreSQL database connection
+    // Initialize PostgreSQL database connection (HTTP-based, no WebSocket needed)
     const databaseUrl = process.env.DATABASE_URL;
     if (databaseUrl) {
-      const pool = new Pool({ connectionString: databaseUrl });
-      this.db = drizzle(pool);
-      console.log('✅ PostgreSQL database connected for orders');
+      const sql = neon(databaseUrl);
+      this.db = drizzle(sql);
+      console.log('✅ PostgreSQL database connected for orders (HTTP mode)');
     } else {
       console.warn('⚠️ DATABASE_URL not set, falling back to memory storage');
       this.db = null;
