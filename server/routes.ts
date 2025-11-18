@@ -882,7 +882,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // TEST: VERIFIED endpoint ViewInventoryBalanceStatus (single item)
+  // TEST: VERIFIED endpoint GetListInventoryBalanceStatus (eCount CS confirmed)
   app.post("/api/admin/test-verified-inventory", requireAdminAuth, async (req, res) => {
     try {
       const { itemCode } = req.body;
@@ -894,7 +894,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      console.log(`🧪 Admin testing VERIFIED ViewInventoryBalanceStatus endpoint for item: ${itemCode}`);
+      console.log(`🧪 Admin testing VERIFIED GetListInventoryBalanceStatus endpoint for item: ${itemCode}`);
       const quantity = await ecountApi.getSingleItemInventory(itemCode);
       
       res.json({
@@ -903,7 +903,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         data: {
           itemCode,
           quantity,
-          endpoint: 'ViewInventoryBalanceStatus (eCount verified ✅)'
+          endpoint: 'GetListInventoryBalanceStatus (eCount CS confirmed ✅)'
         }
       });
     } catch (error) {
