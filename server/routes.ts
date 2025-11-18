@@ -89,6 +89,117 @@ const upload = multer({
   }
 });
 
+// Helper function to test inventory with different API keys and URLs
+async function testInventoryWithKey(params: {
+  apiKey: string;
+  baseUrl: string;
+  itemCode: string;
+  label: string;
+}): Promise<any> {
+  const { apiKey, baseUrl, itemCode, label } = params;
+  
+  console.log(`\n🧪 Testing: ${label}`);
+  console.log(`   API Key: ${apiKey.substring(0, 8)}...${apiKey.substring(apiKey.length - 4)}`);
+  console.log(`   Base URL: ${baseUrl}`);
+  
+  try {
+    // Step 1: Get Zone (use production zone endpoint which works regardless)
+    const zoneResponse = await fetch(`https://oapiIA.ecount.com/OAPI/V2/Zone?AUTH_KEY=${apiKey}&COM_CODE=902378`);
+    const zoneData = await zoneResponse.json();
+    
+    if (zoneData.Status !== "200" || !zoneData.Data?.Zone) {
+      return {
+        success: false,
+        step: 'zone',
+        error: `Zone API failed: ${zoneData.Error?.Message || 'Unknown error'}`
+      };
+    }
+    
+    const zone = zoneData.Data.Zone;
+    console.log(`   ✅ Zone: ${zone}`);
+    
+    // Step 2: Login
+    const loginUrl = baseUrl.replace('{ZONE}', zone) + '/OAPI/V2/OAPILogin';
+    const loginResponse = await fetch(loginUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        COM_CODE: '902378',
+        USER_ID: 'TIHOMBWE',
+        AUTH_KEY: apiKey
+      })
+    });
+    
+    const loginData = await loginResponse.json();
+    
+    if (loginData.Status !== "200" || !loginData.Data?.SESSION_ID) {
+      return {
+        success: false,
+        step: 'login',
+        error: `Login failed: ${loginData.Error?.Message || 'Unknown error'}`
+      };
+    }
+    
+    const sessionId = loginData.Data.SESSION_ID;
+    console.log(`   ✅ Login successful`);
+    
+    // Extract cookies
+    const setCookieHeader = loginResponse.headers.get('set-cookie');
+    const cookies = setCookieHeader || '';
+    
+    // Step 3: Test InventoryBalance
+    const inventoryUrl = baseUrl.replace('{ZONE}', zone) + `/OAPI/V2/InventoryBalance/GetListInventoryBalanceStatus?SESSION_ID=${encodeURIComponent(sessionId)}`;
+    const inventoryResponse = await fetch(inventoryUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Cookie': cookies
+      },
+      body: JSON.stringify({
+        COM_CODE: '902378',
+        SESSION_ID: sessionId,
+        API_CERT_KEY: apiKey,
+        BASE_DATE: new Date().toISOString().slice(0, 10).replace(/-/g, ''),
+        WH_CD: '00001',
+        PROD_CD: itemCode,
+        Page: '1',
+        PageSize: '10'
+      })
+    });
+    
+    const inventoryData = await inventoryResponse.json();
+    
+    if (inventoryData.Status === "200") {
+      console.log(`   ✅ InventoryBalance SUCCESS!`);
+      const quantity = inventoryData.Data?.Datas?.[0]?.BAL_QTY || 0;
+      return {
+        success: true,
+        step: 'inventory',
+        quantity,
+        message: `SUCCESS: Item ${itemCode} has ${quantity} units`,
+        httpStatus: inventoryResponse.status,
+        responseStatus: inventoryData.Status
+      };
+    } else {
+      console.log(`   ❌ InventoryBalance FAILED: ${inventoryData.Error?.Message}`);
+      return {
+        success: false,
+        step: 'inventory',
+        error: inventoryData.Error?.Message || 'Unknown error',
+        httpStatus: inventoryResponse.status,
+        responseStatus: inventoryData.Status
+      };
+    }
+  } catch (error) {
+    console.error(`   ❌ ${label} error:`, error);
+    return {
+      success: false,
+      step: 'exception',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    };
+  }
+}
+
 // Authentication middleware - simple pass-through for client requests
 const requireAuth = async (req: Request, res: Response, next: NextFunction) => {
   // The app uses localStorage-based client-side authentication
@@ -938,6 +1049,65 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // TEST KEY DIAGNOSTIC: Compare production vs test key with test URL
+  app.post("/api/admin/test-with-test-key", requireAdminAuth, async (req, res) => {
+    try {
+      const { itemCode } = req.body;
+      console.log('🧪 TESTING WITH TEST KEY: Comparing production key vs test key...');
+      console.log(`   Test URL: https://sboapi{ZONE}.ecount.com`);
+      console.log(`   Prod URL: https://oapi{ZONE}.ecount.com`);
+      
+      const testKey = process.env.ECOUNT_TEST_API_KEY;
+      if (!testKey) {
+        return res.status(400).json({
+          success: false,
+          error: 'ECOUNT_TEST_API_KEY not found in environment'
+        });
+      }
+
+      console.log(`   Test Key: ${testKey.substring(0, 8)}...${testKey.substring(testKey.length - 4)}`);
+      
+      // Test with TEST key and TEST URL
+      const testResult = await testInventoryWithKey({
+        apiKey: testKey,
+        baseUrl: 'https://sboapi{ZONE}.ecount.com',
+        itemCode: itemCode || '91100B',
+        label: 'TEST KEY + TEST URL'
+      });
+
+      // Test with PRODUCTION key and PRODUCTION URL
+      const prodKey = process.env.ECOUNT_AUTH_KEY!;
+      const prodResult = await testInventoryWithKey({
+        apiKey: prodKey,
+        baseUrl: 'https://oapi{ZONE}.ecount.com',
+        itemCode: itemCode || '91100B',
+        label: 'PRODUCTION KEY + PRODUCTION URL'
+      });
+
+      res.json({
+        success: true,
+        message: 'Comparison test complete',
+        testKeyResult: testResult,
+        productionKeyResult: prodResult,
+        summary: {
+          testKeyWorks: testResult.success,
+          prodKeyWorks: prodResult.success,
+          recommendation: testResult.success && !prodResult.success 
+            ? 'TEST key works! Production key needs activation.'
+            : !testResult.success && !prodResult.success
+            ? 'Both keys fail - endpoint may not be activated for any key.'
+            : 'Check individual results for details.'
+        }
+      });
+    } catch (error) {
+      console.error('Test key diagnostic failed:', error);
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
   app.post("/api/admin/clear-cache", requireAdminAuth, enforceBulkRateLimit('clear-cache'), async (req, res) => {
     try {
       console.log('Admin clearing inventory cache');
@@ -1003,6 +1173,163 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({
         success: false,
         message: 'Customer verification failed',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
+  // TEST GetListInventoryBalanceStatus API endpoint
+  app.post("/api/admin/test-inventory-balance-status", requireAdminAuth, async (req, res) => {
+    try {
+      const { itemCode } = req.body;
+      console.log(`\n🧪 TESTING GetListInventoryBalanceStatus API`);
+      console.log(`   Item Code: ${itemCode || '91100B'}`);
+      
+      const testKey = process.env.ECOUNT_TEST_API_KEY;
+      const prodKey = process.env.ECOUNT_AUTH_KEY!;
+      
+      // Helper function to test GetListInventoryBalanceStatus
+      async function testGetListAPI(apiKey: string, label: string) {
+        console.log(`\n📊 Testing ${label}...`);
+        try {
+          // Step 1: Get Zone (using POST as required by eCount API)
+          const zoneResponse = await fetch(`https://oapi.ecount.com/OAPI/V2/Zone`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json'
+            },
+            body: JSON.stringify({
+              COM_CODE: "902378",
+              AUTH_KEY: apiKey
+            })
+          });
+          const zoneData = await zoneResponse.json();
+          
+          console.log(`   🌐 Zone Response:`, JSON.stringify(zoneData, null, 2));
+          
+          if (!zoneData.Data?.Zone && !zoneData.Data?.ZONE) {
+            return {
+              success: false,
+              step: 'zone',
+              error: `Zone API failed: ${JSON.stringify(zoneData)}`,
+              zoneData
+            };
+          }
+          
+          const zone = zoneData.Data.Zone || zoneData.Data.ZONE;
+          console.log(`   ✅ Zone: ${zone}`);
+          
+          // Step 2: Login to get SESSION_ID
+          const baseUrl = label.includes('TEST') 
+            ? `https://sboapi${zone}.ecount.com`
+            : `https://oapi${zone}.ecount.com`;
+          
+          const loginUrl = `${baseUrl}/OAPI/V2/OAPILogin`;
+          const loginResponse = await fetch(loginUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              AUTH_KEY: apiKey,
+              COM_CODE: "902378",
+              USER_ID: "admin",
+              CUST_CODE: "10839"
+            })
+          });
+          
+          const loginResult = await loginResponse.json();
+          console.log(`   🔐 Login Response:`, JSON.stringify(loginResult, null, 2));
+          
+          if (!loginResult.Data?.SESSION_ID) {
+            return {
+              success: false,
+              step: 'login',
+              error: `Login failed: ${loginResult.Error?.Message || 'No session ID'}`,
+              loginResponse: loginResult
+            };
+          }
+          
+          const sessionId = loginResult.Data.SESSION_ID;
+          console.log(`   ✅ Session ID: ${sessionId.substring(0, 15)}...`);
+          
+          // Step 3: Test GetListInventoryBalanceStatus with SESSION_ID
+          const apiUrl = `${baseUrl}/OAPI/V2/InventoryBalance/GetListInventoryBalanceStatus`;
+          
+          const requestBody = {
+            SESSION_ID: sessionId,
+            CUST_CODE: "10839",
+            WH_CODE: process.env.ECOUNT_WAREHOUSE_CODE || "00001",
+            ITEM_CODE: itemCode || "91100B"
+          };
+          
+          console.log(`   📍 URL: ${apiUrl}`);
+          console.log(`   📦 Request:`, JSON.stringify(requestBody, null, 2));
+          
+          const response = await fetch(apiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(requestBody)
+          });
+          
+          const result = await response.json();
+          console.log(`   📥 Response:`, JSON.stringify(result, null, 2));
+          
+          if (result.Status === "200" && result.Data) {
+            const quantity = result.Data[0]?.available_qty || result.Data[0]?.qty || 0;
+            console.log(`   ✅ SUCCESS! Quantity: ${quantity}`);
+            return {
+              success: true,
+              step: 'complete',
+              quantity,
+              fullResponse: result,
+              message: `GetListInventoryBalanceStatus works with ${label}!`
+            };
+          } else {
+            console.log(`   ❌ API returned error: ${result.Message || 'Unknown'}`);
+            return {
+              success: false,
+              step: 'api_call',
+              error: result.Message || 'API returned non-200 status',
+              fullResponse: result
+            };
+          }
+        } catch (error) {
+          console.log(`   ❌ Exception:`, error);
+          return {
+            success: false,
+            step: 'exception',
+            error: error instanceof Error ? error.message : String(error)
+          };
+        }
+      }
+      
+      // Test with both keys
+      const results: any = {
+        productionKey: await testGetListAPI(prodKey, 'PRODUCTION KEY')
+      };
+      
+      if (testKey) {
+        results.testKey = await testGetListAPI(testKey, 'TEST KEY');
+      }
+      
+      res.json({
+        success: true,
+        message: 'GetListInventoryBalanceStatus API test complete',
+        results,
+        summary: {
+          productionKeyWorks: results.productionKey.success,
+          testKeyWorks: results.testKey?.success || false,
+          recommendation: results.productionKey.success 
+            ? '✅ GetListInventoryBalanceStatus works with production key! You can use this for live inventory.'
+            : results.testKey?.success
+            ? '⚠️ Test key works but production key fails. Production key needs activation.'
+            : '❌ Both keys fail. Contact eCount support.'
+        }
+      });
+    } catch (error) {
+      console.error('GetListInventoryBalanceStatus test failed:', error);
+      res.status(500).json({
+        success: false,
         error: error instanceof Error ? error.message : 'Unknown error'
       });
     }
