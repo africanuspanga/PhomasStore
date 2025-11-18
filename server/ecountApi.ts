@@ -432,39 +432,6 @@ class EcountApiService {
         throw new Error('Login rate limited (412) - please wait before retry');
       }
       
-      // FIX: Properly parse Set-Cookie headers and extract session from cookie
-      const setCookieHeader = response.headers.get('set-cookie') || '';
-      
-      // Parse cookies and extract session ID from ECOUNT_SessionId cookie
-      const cookieValues: string[] = [];
-      let sessionIdFromCookie = ''; // Will be extracted from cookie if available
-      
-      if (setCookieHeader) {
-        const cookieParts = setCookieHeader.split(',').map(c => c.trim());
-        
-        for (const cookiePart of cookieParts) {
-          const cookieValue = cookiePart.split(';')[0].trim();
-          if (cookieValue) {
-            cookieValues.push(cookieValue);
-            
-            // Extract session ID from ECOUNT_SessionId cookie (more reliable)
-            if (cookieValue.startsWith('ECOUNT_SessionId=')) {
-              // CRITICAL FIX: Cookie value may have multiple '=' signs
-              // Get everything after 'ECOUNT_SessionId='
-              const cookieSessionValue = cookieValue.substring('ECOUNT_SessionId='.length);
-              if (cookieSessionValue) {
-                // Session ID is the full cookie value (may contain '=' characters)
-                sessionIdFromCookie = cookieSessionValue;
-                console.log(`🍪 Extracted session from cookie: ${sessionIdFromCookie.substring(0, 20)}...`);
-              }
-            }
-          }
-        }
-      }
-      
-      const cookieString = cookieValues.join('; ');
-      console.log(`🍪 Captured ${cookieValues.length} cookies from login`);
-      
       // Check content type before parsing JSON
       const contentType = response.headers.get('content-type');
       if (!contentType || !contentType.includes('application/json')) {
@@ -474,31 +441,38 @@ class EcountApiService {
       
       const result = await response.json();
       
-      // FIX: Check for session_guid (new API) or SESSION_ID (old API)
-      const sessionId = result.Data?.session_guid || result.Data?.Datas?.SESSION_ID;
-      console.log(`📝 Session ID from response body: ${sessionId ? sessionId.substring(0, 20) + '...' : 'NONE'}`);
+      // CRITICAL FIX: Use response body values (matches working test endpoint)
+      const sessionId = result.Data?.Datas?.SESSION_ID;  // SESSION_ID from response body
+      const sessionGuid = result.Data?.Datas?.session_guid;  // session_guid for cookies
+      const setCookie = result.Data?.Datas?.SET_COOKIE;  // SET_COOKIE value for cookies
+      
+      console.log(`📝 Session ID: ${sessionId ? sessionId.substring(0, 20) + '...' : 'NONE'}`);
+      console.log(`📝 Session GUID: ${sessionGuid ? sessionGuid.substring(0, 20) + '...' : 'NONE'}`);
+      console.log(`📝 SET_COOKIE: ${setCookie ? setCookie.substring(0, 20) + '...' : 'NONE'}`);
       
       // FIX: Status can be either number 200 or string "200"
       if ((result.Status === "200" || result.Status === 200) && sessionId) {
         // Session expires in 30 minutes by default (can be configured in ERP)
         const expiresAt = new Date(Date.now() + 25 * 60 * 1000); // 25 min for safety
         
-        // CRITICAL FIX: Always use session ID from response body, not cookie
-        // The cookie session ID format appears to be different from what the API expects
-        const finalSessionId = sessionId;  // Use response body session ID
+        // CRITICAL FIX: Build cookies EXACTLY like the working test endpoint
+        // Cookie format: ECOUNT_SessionId={sessionGuid}={setCookie}; SVID=Login-L{zone}05_4bc5c
+        const cookieString = setCookie && sessionGuid 
+          ? `ECOUNT_SessionId=${sessionGuid}=${setCookie}; SVID=Login-L${zone}05_4bc5c`
+          : '';
         
         this.session = {
-          sessionId: finalSessionId,
+          sessionId: sessionId,  // Use SESSION_ID from response body
           expiresAt,
           zone,
-          cookies: cookieString // Store parsed cookies for auth
+          cookies: cookieString // Store constructed cookies
         };
 
         console.log(`✅ eCount login successful! (Zone: ${zone}, Session: ${this.session.sessionId.substring(0, 8)}...)`);
         if (cookieString) {
-          console.log(`🍪 Stored ${cookieValues.length} cookies for session authentication`);
+          console.log(`🍪 Constructed cookies using response body values (matches test endpoint)`);
+          console.log(`🍪 Cookie format: ECOUNT_SessionId=${sessionGuid?.substring(0, 15)}...=${setCookie?.substring(0, 15)}...; SVID=Login-L${zone}05_4bc5c`);
         }
-        console.log(`🔑 Using session ID from response body (standard eCount format)`);
         return this.session.sessionId;
       }
 
