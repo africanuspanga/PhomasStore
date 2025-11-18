@@ -446,8 +446,10 @@ export class DatabaseStorage implements IStorage {
     if (supabaseUrl && dbPassword) {
       // Get project reference from Supabase URL (e.g., xvomxojbfhovbhbbkuoh from https://xvomxojbfhovbhbbkuoh.supabase.co)
       const projectRef = supabaseUrl.replace('https://', '').replace('.supabase.co', '');
+      // URL-encode password to handle special characters (@, #, etc.)
+      const encodedPassword = encodeURIComponent(dbPassword);
       // Supabase Transaction Pooler connection (IPv4 compatible, port 6543)
-      const supabaseDbUrl = `postgresql://postgres.${projectRef}:${dbPassword}@aws-1-eu-north-1.pooler.supabase.com:6543/postgres`;
+      const supabaseDbUrl = `postgresql://postgres.${projectRef}:${encodedPassword}@aws-1-eu-north-1.pooler.supabase.com:6543/postgres`;
       
       const client = postgres(supabaseDbUrl, { prepare: false });
       this.db = drizzle(client);

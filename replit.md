@@ -83,8 +83,11 @@ The application features a responsive design for mobile and desktop, a password 
 ## ✅ Supabase PostgreSQL Integration Completed
 Successfully migrated from in-memory storage to Supabase PostgreSQL for persistent order storage:
 - **Connection**: Transaction Pooler (IPv4-compatible, port 6543) in eu-north-1 region
+- **Connection String**: `postgresql://postgres.xvomxojbfhovbhbbkuoh:[encoded-password]@aws-1-eu-north-1.pooler.supabase.com:6543/postgres`
 - **Database Driver**: postgres.js with Drizzle ORM
+- **Password Encoding**: Special characters (@, #) URL-encoded for proper authentication
 - **Schema**: All tables created (orders, users, profiles, products, inventory, product_images)
 - **Status**: ✅ Connected and operational
-- **Order Persistence**: All customer orders now saved permanently to Supabase database
+- **Order Persistence**: All new customer orders saved permanently to Supabase database
 - **Admin Dashboard**: Displays all orders with real-time data from database
+- **Fix Applied**: Added `encodeURIComponent()` to handle special characters in database password
