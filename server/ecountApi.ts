@@ -92,6 +92,7 @@ class EcountApiService {
   private loginInProgress = false;
   private loginPromise: Promise<string> | null = null;
   private lastLoginAttempt = 0;
+  private lastSuccessfulLogin = 0; // Track successful logins separately for rate limiting
   private readonly MIN_LOGIN_INTERVAL = 30000; // 30 seconds minimum between login attempts (increased)
 
   constructor() {
@@ -111,9 +112,12 @@ class EcountApiService {
 
   /**
    * Centralized eCount API request helper with cookie auth, circuit breaker, and exponential backoff
+   * @param options - Request options
+   * @param retryCount - Internal retry counter to prevent infinite loops
    */
-  private async ecountRequest(options: EcountApiRequestOptions): Promise<EcountApiResponse> {
+  private async ecountRequest(options: EcountApiRequestOptions, retryCount = 0): Promise<EcountApiResponse> {
     const { endpoint, body, requiresAuth = true } = options;
+    const MAX_RETRIES = 1; // Only retry once for session expiration
     
     // CRITICAL: Check if API is self-locked to prevent eCount lockout
     if (this.apiLocked) {
@@ -208,17 +212,23 @@ class EcountApiService {
         console.log(`⚠️ No cookies available for this request`);
       }
       
-      // Build request body - include SESSION_ID AND AUTH_KEY for authenticated requests
+      // Build request body - include SESSION_ID and API_CERT_KEY for authenticated requests
       const requestBody: any = {
         COM_CODE: ECOUNT_CONFIG.companyCode,
         ...body
       };
       
-      // CRITICAL FIX: eCount requires SESSION_ID + AUTH_KEY in BOTH URL and body for API requests
+      // CRITICAL FIX: Include both SESSION_ID and API_CERT_KEY (matches working test endpoint)
       if (requiresAuth && sessionId) {
         requestBody.SESSION_ID = sessionId;
-        requestBody.API_CERT_KEY = ECOUNT_CONFIG.authKey;  // Add auth key to every request
+        requestBody.API_CERT_KEY = ECOUNT_CONFIG.authKey;  // Required per working test endpoint!
       }
+      
+      // DEBUG: Log full request body (except sensitive data)
+      const debugBody = { ...requestBody };
+      if (debugBody.API_CERT_KEY) debugBody.API_CERT_KEY = `${debugBody.API_CERT_KEY.substring(0, 8)}...`;
+      if (debugBody.SESSION_ID) debugBody.SESSION_ID = `${debugBody.SESSION_ID.substring(0, 15)}...`;
+      console.log(`📦 Request Body:`, JSON.stringify(debugBody, null, 2));
       
       const response = await fetch(url, {
         method: 'POST',
@@ -269,12 +279,19 @@ class EcountApiService {
           response: result
         });
         
-        // Handle specific error statuses
-        if (result.Status === "401" || result.Status === "403") {
-          if (requiresAuth && this.session) {
-            console.log('🔄 Auth failed - invalidating session and retrying...');
+        // CRITICAL FIX: Detect "Please login" errors (often come back as 500)
+        const errorMessage = result.Error?.Message || result.Errors?.[0]?.Message || '';
+        const isLoginError = errorMessage.toLowerCase().includes('please login') || 
+                           errorMessage.toLowerCase().includes('login');
+        
+        // Handle authentication failures - includes 401, 403, and "Please login" errors
+        if (result.Status === "401" || result.Status === "403" || isLoginError) {
+          if (requiresAuth && this.session && retryCount < MAX_RETRIES) {
+            console.log('🔄 Session expired - forcing immediate re-login and retry...');
             this.session = null;
-            return this.ecountRequest(options);
+            // Force re-login (bypass rate limiting) and then retry
+            await this.login(true); // force=true bypasses rate limiting
+            return this.ecountRequest(options, retryCount + 1);
           }
         }
       }
@@ -327,8 +344,9 @@ class EcountApiService {
 
   /**
    * Login with cookie capture and production headers - CORRECTED ENDPOINT
+   * @param force - If true, bypasses rate limiting (used for session expiration retries)
    */
-  private async login(): Promise<string> {
+  private async login(force = false): Promise<string> {
     try {
       // Check if we have a valid session
       if (this.session && this.session.expiresAt > new Date()) {
@@ -341,12 +359,16 @@ class EcountApiService {
         return await this.loginPromise;
       }
       
-      // Rate limit login attempts - minimum 5 seconds between attempts
-      const timeSinceLastLogin = Date.now() - this.lastLoginAttempt;
-      if (timeSinceLastLogin < this.MIN_LOGIN_INTERVAL) {
-        const waitTime = this.MIN_LOGIN_INTERVAL - timeSinceLastLogin;
-        console.log(`⏳ Login rate limit: waiting ${waitTime}ms before next attempt`);
-        await new Promise(resolve => setTimeout(resolve, waitTime));
+      // Rate limit login attempts - UNLESS forced (session expiration retry)
+      if (!force) {
+        const timeSinceLastLogin = Date.now() - this.lastSuccessfulLogin;
+        if (timeSinceLastLogin < this.MIN_LOGIN_INTERVAL) {
+          const waitTime = this.MIN_LOGIN_INTERVAL - timeSinceLastLogin;
+          console.log(`⏳ Login rate limit: waiting ${waitTime}ms before next attempt`);
+          await new Promise(resolve => setTimeout(resolve, waitTime));
+        }
+      } else {
+        console.log('🔄 Force re-login due to session expiration (bypassing rate limit)');
       }
       
       // Mark login as in progress and store the promise
@@ -355,6 +377,9 @@ class EcountApiService {
       
       this.loginPromise = this.performLogin();
       const result = await this.loginPromise;
+      
+      // Track successful login for rate limiting
+      this.lastSuccessfulLogin = Date.now();
       
       return result;
     } catch (error) {
@@ -511,15 +536,14 @@ class EcountApiService {
       console.log('🔍 Using InventoryBalance endpoint for products (respecting 20-min rate limit)');
       this.inventoryLastCall = Date.now(); // Mark this call
       
-      // Use the inventory endpoint that was working with proper parameters AND warehouse code
+      // Use the inventory endpoint with CORRECT parameter names (verified working in test)
       const result = await this.ecountRequest({
         endpoint: '/OAPI/V2/InventoryBalance/GetListInventoryBalanceStatus',
         body: {
           BASE_DATE: new Date().toISOString().slice(0, 10).replace(/-/g, ''),
-          WH_CD: ECOUNT_CONFIG.warehouseCode,  // Include warehouse code for proper filtering
-          PROD_CD: '',       // Empty = get all products
-          Page: '1',
-          PageSize: '1000'
+          CUST_CODE: "10839",  // Customer code (required per working test)
+          WH_CODE: ECOUNT_CONFIG.warehouseCode,  // WH_CODE not WH_CD!
+          ITEM_CODE: '',       // ITEM_CODE not PROD_CD! Empty = get all products
         }
       });
 
@@ -1264,16 +1288,15 @@ class EcountApiService {
       const mappingStats = ProductMapping.getStats();
       console.log(`📋 Excel mapping loaded: ${mappingStats.totalMapped} REAL product names available`);
       
-      // Get ONLY live stock data from eCount (no broken endpoints!)
+      // Get ONLY live stock data from eCount with CORRECT parameters (verified working)
       console.log('📊 Fetching ONLY live stock data (avoiding broken master data endpoints)...');
       const inventoryResult = await this.ecountRequest({
         endpoint: '/OAPI/V2/InventoryBalance/GetListInventoryBalanceStatus',
         body: {
           BASE_DATE: new Date().toISOString().slice(0, 10).replace(/-/g, ''),
-          WH_CD: ECOUNT_CONFIG.warehouseCode,
-          PROD_CD: '',
-          Page: '1',
-          PageSize: '1000'
+          CUST_CODE: "10839",  // Customer code (required per working test)
+          WH_CODE: ECOUNT_CONFIG.warehouseCode,  // WH_CODE not WH_CD!
+          ITEM_CODE: '',       // ITEM_CODE not PROD_CD! Empty = get all products
         }
       });
 
@@ -1344,16 +1367,14 @@ class EcountApiService {
     console.log('🔄 Starting bulk inventory sync (Rate limit: 1 per 10 minutes)...');
     
     try {
-      // Use proper eCount request format for bulk inventory sync
+      // Use proper eCount request format with CORRECT parameter names (verified working)
       const result = await this.ecountRequest({
         endpoint: '/OAPI/V2/InventoryBalance/GetListInventoryBalanceStatus',
         body: {
           BASE_DATE: new Date().toISOString().slice(0, 10).replace(/-/g, ''), // YYYYMMDD
-          WH_CD: ECOUNT_CONFIG.warehouseCode,
-          PROD_CD: "", // Get all products
-          // Pagination parameters as strings
-          Page: "1",
-          PageSize: "1000"
+          CUST_CODE: "10839",  // Customer code (required per working test)
+          WH_CODE: ECOUNT_CONFIG.warehouseCode,  // WH_CODE not WH_CD!
+          ITEM_CODE: "",       // ITEM_CODE not PROD_CD! Empty = get all products
         }
       });
 
