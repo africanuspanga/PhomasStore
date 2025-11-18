@@ -4,8 +4,8 @@ import * as fs from "fs";
 import * as path from "path";
 import { createClient } from '@supabase/supabase-js';
 import { eq, desc } from 'drizzle-orm';
-import { drizzle } from 'drizzle-orm/neon-http';
-import { neon } from '@neondatabase/serverless';
+import { drizzle } from 'drizzle-orm/postgres-js';
+import postgres from 'postgres';
 
 export interface IStorage {
   // User management
@@ -438,20 +438,23 @@ export class DatabaseStorage implements IStorage {
     // Use MemStorage for products/inventory (eCount handles those)
     this.memStorage = new MemStorage();
     
-    // Initialize PostgreSQL database connection (HTTP-based, no WebSocket needed)
-    const databaseUrl = process.env.DATABASE_URL;
-    if (databaseUrl) {
-      const sql = neon(databaseUrl);
-      this.db = drizzle(sql);
-      console.log('✅ PostgreSQL database connected for orders (HTTP mode)');
-    } else {
-      console.warn('⚠️ DATABASE_URL not set, falling back to memory storage');
-      this.db = null;
-    }
-    
-    // Initialize Supabase client for product images
+    // Initialize Supabase PostgreSQL database connection
     const supabaseUrl = process.env.SUPABASE_URL;
     const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
+    
+    if (supabaseUrl && supabaseServiceKey) {
+      // Get project reference from Supabase URL (e.g., abcdefghijk from https://abcdefghijk.supabase.co)
+      const projectRef = supabaseUrl.replace('https://', '').replace('.supabase.co', '');
+      // Supabase direct database connection
+      const supabaseDbUrl = `postgresql://postgres:${supabaseServiceKey}@db.${projectRef}.supabase.co:5432/postgres`;
+      
+      const client = postgres(supabaseDbUrl, { prepare: false });
+      this.db = drizzle(client);
+      console.log('✅ Supabase PostgreSQL database connected for orders');
+    } else {
+      console.warn('⚠️ Supabase not configured, falling back to memory storage');
+      this.db = null;
+    }
     
     if (!supabaseUrl || !supabaseServiceKey) {
       console.warn('⚠️ Supabase not configured, falling back to memory storage for images');
