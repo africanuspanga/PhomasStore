@@ -1230,26 +1230,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              AUTH_KEY: apiKey,
               COM_CODE: "902378",
               USER_ID: "admin",
-              CUST_CODE: "10839"
+              API_CERT_KEY: apiKey,  // Correct parameter name!
+              LAN_TYPE: "en-US",     // Language setting
+              ZONE: zone             // Zone from Zone API
             })
           });
           
           const loginResult = await loginResponse.json();
           console.log(`   🔐 Login Response:`, JSON.stringify(loginResult, null, 2));
           
-          if (!loginResult.Data?.SESSION_ID) {
+          // Check for login success - SESSION_ID is at Data.Datas.SESSION_ID per documentation
+          const sessionId = loginResult.Data?.Datas?.SESSION_ID || loginResult.Data?.SESSION_ID;
+          
+          if (!sessionId) {
             return {
               success: false,
               step: 'login',
-              error: `Login failed: ${loginResult.Error?.Message || 'No session ID'}`,
+              error: `Login failed: ${loginResult.Error?.Message || loginResult.Data?.Message || 'No session ID'}`,
               loginResponse: loginResult
             };
           }
-          
-          const sessionId = loginResult.Data.SESSION_ID;
           console.log(`   ✅ Session ID: ${sessionId.substring(0, 15)}...`);
           
           // Step 3: Test GetListInventoryBalanceStatus with SESSION_ID
