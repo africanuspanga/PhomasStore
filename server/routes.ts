@@ -916,6 +916,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // DIAGNOSTIC: Detailed technical evidence for eCount CS investigation
+  app.get("/api/admin/diagnostic/inventory-balance", requireAdminAuth, async (req, res) => {
+    try {
+      console.log('🔍 DIAGNOSTIC: Generating technical evidence for eCount CS...');
+      const diagnostic = await ecountApi.diagnoseInventoryBalanceApi();
+      
+      res.json({
+        success: true,
+        message: 'Diagnostic complete - Send evidenceForSupport to eCount CS',
+        diagnostic,
+        evidenceForSupport: diagnostic.evidenceForSupport
+      });
+    } catch (error) {
+      console.error('Diagnostic failed:', error);
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        message: 'Diagnostic generation failed'
+      });
+    }
+  });
+
   app.post("/api/admin/clear-cache", requireAdminAuth, enforceBulkRateLimit('clear-cache'), async (req, res) => {
     try {
       console.log('Admin clearing inventory cache');
