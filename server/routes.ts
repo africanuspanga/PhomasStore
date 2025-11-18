@@ -1231,7 +1231,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               COM_CODE: "902378",
-              USER_ID: "admin",
+              USER_ID: "TIHOMBWE",   // Correct User ID who issued the API key
               API_CERT_KEY: apiKey,  // Correct parameter name!
               LAN_TYPE: "en-US",     // Language setting
               ZONE: zone             // Zone from Zone API
@@ -1243,6 +1243,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           
           // Check for login success - SESSION_ID is at Data.Datas.SESSION_ID per documentation
           const sessionId = loginResult.Data?.Datas?.SESSION_ID || loginResult.Data?.SESSION_ID;
+          const setCookie = loginResult.Data?.Datas?.SET_COOKIE;
+          const sessionGuid = loginResult.Data?.Datas?.session_guid || loginResult.Data?.session_guid;
           
           if (!sessionId) {
             return {
@@ -1254,22 +1256,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
           console.log(`   ✅ Session ID: ${sessionId.substring(0, 15)}...`);
           
-          // Step 3: Test GetListInventoryBalanceStatus with SESSION_ID
-          const apiUrl = `${baseUrl}/OAPI/V2/InventoryBalance/GetListInventoryBalanceStatus`;
+          // Step 3: Test GetListInventoryBalanceStatus with proper authentication
+          // IMPORTANT: Use SESSION_ID in URL query string AND cookies (matches ecountRequest pattern)
+          const apiUrl = `${baseUrl}/OAPI/V2/InventoryBalance/GetListInventoryBalanceStatus?SESSION_ID=${encodeURIComponent(sessionId)}`;
           
           const requestBody = {
+            COM_CODE: "902378",
             SESSION_ID: sessionId,
+            API_CERT_KEY: apiKey,  // CRITICAL: Add API key to body (matches ecountRequest)
+            BASE_DATE: new Date().toISOString().slice(0, 10).replace(/-/g, ''),  // REQUIRED: Format as YYYYMMDD
             CUST_CODE: "10839",
             WH_CODE: process.env.ECOUNT_WAREHOUSE_CODE || "00001",
             ITEM_CODE: itemCode || "91100B"
           };
           
+          // Build cookies header (matches ecountRequest pattern)
+          const cookies = setCookie && sessionGuid 
+            ? `ECOUNT_SessionId=${sessionGuid}=${setCookie}; SVID=Login-L${zone}05_4bc5c`
+            : '';
+          
           console.log(`   📍 URL: ${apiUrl}`);
           console.log(`   📦 Request:`, JSON.stringify(requestBody, null, 2));
+          console.log(`   🍪 Cookies: ${cookies.substring(0, 50)}...`);
+          
+          const headers: any = { 'Content-Type': 'application/json' };
+          if (cookies) {
+            headers['Cookie'] = cookies;
+          }
           
           const response = await fetch(apiUrl, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers,
             body: JSON.stringify(requestBody)
           });
           
