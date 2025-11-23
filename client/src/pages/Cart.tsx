@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,6 +9,7 @@ import { ShoppingCart, ArrowLeft, Plus, Minus, Trash2, Send } from "lucide-react
 import { Link, useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/lib/supabase";
 import type { OrderItem } from "@shared/schema";
 
 export default function Cart() {
@@ -19,6 +20,18 @@ export default function Cart() {
   const queryClient = useQueryClient();
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [orderNumber, setOrderNumber] = useState("");
+  const [userEmail, setUserEmail] = useState<string>('');
+
+  // Get user email from Supabase session
+  useEffect(() => {
+    const getEmail = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user?.email) {
+        setUserEmail(session.user.email);
+      }
+    };
+    getEmail();
+  }, []);
 
   const sendToEcountMutation = useMutation({
     mutationFn: async () => {
@@ -40,6 +53,10 @@ export default function Cart() {
         tax: tax.toFixed(2),
         total: total.toFixed(2),
         status: "processing",
+        customerName: user?.name || 'Guest Customer',
+        customerEmail: userEmail || 'guest@example.com',
+        customerPhone: user?.phone || '',
+        customerCompany: user?.name || '',
       });
     },
     onSuccess: (data) => {

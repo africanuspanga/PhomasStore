@@ -596,16 +596,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Order routes - now with CORRECTED eCount sales integration
   app.post("/api/orders", requireAuth, enforceSaveRateLimit, async (req, res) => {
     try {
-      const userProfile = (req as any).userProfile;
-      
-      // Add customer information from user profile to order data
+      // Use customer data from request body (sent from frontend with actual user info)
       const orderDataWithCustomer = {
         ...req.body,
-        customerName: userProfile?.name || 'Guest Customer',
-        customerEmail: userProfile?.email || req.body.customerEmail || 'guest@example.com',
-        customerPhone: userProfile?.phone || req.body.customerPhone,
-        customerCompany: userProfile?.name || req.body.customerCompany,
-        customerAddress: userProfile?.address || req.body.customerAddress,
+        // Prioritize data from frontend request body, fall back to middleware defaults
+        customerName: req.body.customerName || (req as any).userEmail?.split('@')[0] || 'Guest Customer',
+        customerEmail: req.body.customerEmail || (req as any).userEmail || 'guest@example.com',
+        customerPhone: req.body.customerPhone || '',
+        customerCompany: req.body.customerCompany || (req as any).userEmail?.split('@')[0] || 'Guest',
+        customerAddress: req.body.customerAddress || '',
       };
       
       const orderData = insertOrderSchema.parse(orderDataWithCustomer);
