@@ -57,6 +57,7 @@ class EcountApiService {
   private baseUrl: string;
   private inventoryCache = new Map<string, { data: any, timestamp: number }>();
   private readonly CACHE_DURATION = 60 * 60 * 1000; // 1 hour in milliseconds
+  private lastProductList: any[] = []; // Cache last fetched product list
   
   // CRITICAL: eCount rate limits (from API documentation)
   // Inventory Balance: 1 call per 20 minutes
@@ -499,8 +500,8 @@ class EcountApiService {
       if (this.inventoryLastCall > 0 && timeRemaining > 0) {
         const minutesRemaining = Math.ceil(timeRemaining / 60000);
         console.log(`⏱️  Rate limit: Must wait ${minutesRemaining} more minutes before calling Inventory API`);
-        console.log(`📦 Using cached product data instead`);
-        return []; // Return empty to use cache
+        console.log(`📦 Returning cached product list (${this.lastProductList.length} products)`);
+        return this.lastProductList; // Return cached product list instead of empty
       }
       
       console.log('🔍 Using InventoryBalance endpoint for products (respecting 20-min rate limit)');
@@ -526,6 +527,7 @@ class EcountApiService {
       if (result.Status === "200" && products.length > 0) {
         console.log('✅ Successfully retrieved products from InventoryBalance!');
         console.log(`🎉 REAL eCount data: ${products.length} products found!`);
+        this.lastProductList = products; // Cache for rate limit scenarios
         return products;
       } else {
         console.error('❌ InventoryBalance API failed or returned empty:', result.Status, result.Error?.Message);
@@ -537,8 +539,8 @@ class EcountApiService {
           hasResult: !!result.Data?.Result,
           resultLength: result.Data?.Result?.length
         });
-        // Return empty array but don't overwrite cache - let cache safety handle this
-        return [];
+        // Return cached product list if available, otherwise empty
+        return this.lastProductList;
       }
     } catch (error) {
       console.error('❌ eCount getProductList error:', error);
@@ -1562,6 +1564,7 @@ class EcountApiService {
         // Transform eCount data using REAL product names from USER'S EXCEL FILE + live stock
         products = productList.map((product: any, index: number) => {
           const productCode = product.PROD_CD;
+          const quantity = parseInt(product.BAL_QTY || '0');
           
           // Get REAL product data from user's Excel file
           const excelProduct = ProductMapping.getProduct(productCode);
@@ -1580,8 +1583,8 @@ class EcountApiService {
             price: excelProduct?.price?.toString() || '25000', // USER'S REAL PRICES!
             imageUrl: null, // Images handled by separate /api/images system
             category: excelProduct?.category || this.getCategoryFromCode(productCode), // Smart categories
-            availableQuantity: parseInt(product.BAL_QTY || '0'), // LIVE stock from eCount
-            isLowStock: parseInt(product.BAL_QTY || '0') < 10,
+            availableQuantity: quantity, // LIVE stock from eCount (real-time, no database caching)
+            isLowStock: quantity < 10,
             isExpiringSoon: false,
             hasRealTimeData: true,
             lastUpdated: new Date().toISOString(),
@@ -1606,7 +1609,7 @@ class EcountApiService {
             price: excelProduct.price?.toString() || '0',
             imageUrl: null, // Images handled by separate /api/images system
             category: excelProduct.category || this.getCategoryFromCode(excelProduct.code),
-            availableQuantity: 0, // No real-time data available
+            availableQuantity: 999, // Show as in-stock when real-time data unavailable (not 0 to avoid "out of stock" display)
             isLowStock: false, // Hide stock indicators when using fallback
             isExpiringSoon: false,
             hasRealTimeData: false, // Flag to indicate this is fallback data

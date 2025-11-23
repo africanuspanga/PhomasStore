@@ -26,6 +26,7 @@ export interface IStorage {
   getInventoryByProductId(productId: string): Promise<Inventory | undefined>;
   getAllInventory(): Promise<Inventory[]>;
   updateInventory(productId: string, quantity: number): Promise<void>;
+  setInventoryFromEcount(productId: string, quantity: number): Promise<void>;
 
   // Product image management (NEW - completely separate from eCount)
   getProductImage(productCode: string): Promise<string | null>;
@@ -257,6 +258,22 @@ export class MemStorage implements IStorage {
     const current = this.inventory.get(productId);
     if (current) {
       current.availableQuantity = Math.max(0, current.availableQuantity - quantity);
+    }
+  }
+
+  async setInventoryFromEcount(productId: string, quantity: number): Promise<void> {
+    const current = this.inventory.get(productId);
+    if (current) {
+      current.availableQuantity = quantity;
+    } else {
+      // Create new inventory record if it doesn't exist
+      const inventoryId = randomUUID();
+      this.inventory.set(productId, {
+        id: inventoryId,
+        productId,
+        availableQuantity: quantity,
+        expirationDate: undefined
+      });
     }
   }
 
@@ -517,6 +534,36 @@ export class DatabaseStorage implements IStorage {
 
   async updateInventory(productId: string, quantity: number): Promise<void> {
     return this.memStorage.updateInventory(productId, quantity);
+  }
+
+  async setInventoryFromEcount(productId: string, quantity: number): Promise<void> {
+    // Try to update in database first
+    if (this.db) {
+      try {
+        // Check if inventory record exists
+        const inventoryTable = require('../shared/schema').inventory;
+        const existing = await this.db.select().from(inventoryTable).where(eq(inventoryTable.product_id, productId)).limit(1);
+        
+        if (existing.length > 0) {
+          // Update existing record
+          await this.db.update(inventoryTable).set({ available_quantity: quantity }).where(eq(inventoryTable.product_id, productId));
+        } else {
+          // Insert new record
+          await this.db.insert(inventoryTable).values({
+            id: randomUUID(),
+            product_id: productId,
+            available_quantity: quantity
+          });
+        }
+        console.log(`✅ Updated eCount inventory: ${productId} = ${quantity} units`);
+      } catch (error) {
+        console.error('❌ Database error updating inventory:', error);
+        // Fall back to memory storage
+        await this.memStorage.setInventoryFromEcount(productId, quantity);
+      }
+    } else {
+      return this.memStorage.setInventoryFromEcount(productId, quantity);
+    }
   }
 
   async createOrder(order: InsertOrder): Promise<Order> {
