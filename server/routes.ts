@@ -1391,7 +1391,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
             resource_type: "image",
             folder: "phomas-products", // Organize images in a folder
             transformation: [
-              { width: 800, height: 600, crop: "limit" }, // Optimize size
               { quality: "auto" }, // Auto quality
               { format: "auto" } // Auto format (WebP when supported)
             ]
