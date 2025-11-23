@@ -76,6 +76,19 @@ export const productImages = pgTable("product_images", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// Product Mapping Cache - persistent storage of Excel product names for production deployments
+export const productMappings = pgTable("product_mappings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  normalizedCode: text("normalized_code").notNull().unique(), // Normalized product code
+  originalCode: text("original_code").notNull(), // Original code from Excel
+  name: text("name").notNull(), // Product name
+  price: decimal("price", { precision: 10, scale: 2 }).notNull(), // Product price
+  uom: text("uom").notNull(), // Unit of measure
+  category: text("category"), // Product category
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 export const insertUserSchema = createInsertSchema(users).pick({
   email: true,
   password: true,

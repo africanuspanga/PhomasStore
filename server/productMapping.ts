@@ -4,7 +4,7 @@ import { join } from 'path';
 
 /**
  * Product mapping from user's Excel file with real product names and prices
- * This replaces API calls that return 500 errors with actual product data
+ * Loads from Excel in development - persists in memory during runtime
  */
 export class ProductMapping {
   private static productMap = new Map<string, {
@@ -12,25 +12,24 @@ export class ProductMapping {
     price: number;
     uom: string;
     category: string;
-    originalCode: string; // Keep track of original code for debugging
+    originalCode: string;
   }>();
   
   private static isLoaded = false;
-  private static unmatchedCodes: string[] = []; // Track codes that don't match
+  private static unmatchedCodes: string[] = [];
 
   /**
    * Normalize product codes for consistent matching
-   * Removes leading zeros, hyphens, spaces, converts to uppercase
    */
   private static normalizeProductCode(code: string): string {
     if (!code) return '';
     
     return code
       .toString()
-      .trim()                    // Remove leading/trailing spaces
-      .replace(/[-\s]/g, '')     // Remove hyphens and spaces
-      .replace(/^0+/, '')        // Remove leading zeros
-      .toUpperCase();            // Convert to uppercase for consistency
+      .trim()
+      .replace(/[-\s]/g, '')
+      .replace(/^0+/, '')
+      .toUpperCase();
   }
 
   /**
@@ -42,12 +41,11 @@ export class ProductMapping {
   }
 
   /**
-   * Apply real names from Excel to any product list with advanced rule tracking
+   * Apply real names from Excel to any product list
    */
   static applyNames(products: any[]): any[] {
-    this.unmatchedCodes = []; // Reset unmatched codes for this run
+    this.unmatchedCodes = [];
     
-    // ARCHITECT IMPROVEMENT: Unified metrics with rule tracking
     const ruleStats = {
       direct: 0,
       'no-letter-suffix': 0,
@@ -79,30 +77,17 @@ export class ProductMapping {
     });
     
     const totalMatched = ruleStats.direct + ruleStats['no-letter-suffix'] + ruleStats['no-pack-suffix'] + ruleStats['digits-only'];
-    const realNamesCount = enrichedProducts.filter(p => !p.name.includes('Medical Product') && !p.name.includes('Medical Supply')).length;
     
-    // ARCHITECT IMPROVEMENT: Single source of truth for metrics
     console.log(`🎯 UNIFIED RESULTS: ${totalMatched}/${products.length} products matched (${ruleStats.unmatched} unmatched)`);
     console.log(`📊 Match Rules: Direct=${ruleStats.direct}, NoLetterSuffix=${ruleStats['no-letter-suffix']}, NoPackSuffix=${ruleStats['no-pack-suffix']}, DigitsOnly=${ruleStats['digits-only']}`);
-    
-    // Show first few unmatched codes for debugging
-    if (this.unmatchedCodes.length > 0) {
-      const sampleUnmatched = this.unmatchedCodes.slice(0, 5);
-      console.log(`❌ Sample unmatched codes:`, sampleUnmatched.map(code => `"${code}" -> "${this.normalizeProductCode(code)}"`));
-      
-      // Show sample Excel codes for comparison
-      const sampleExcelCodes = Array.from(this.productMap.keys()).slice(0, 5);
-      console.log(`✅ Sample Excel codes:`, sampleExcelCodes);
-    }
-    
-    // ARCHITECT FIX: Single source of truth - no conflicting metrics
     console.log(`🎉 Applied Excel names: ${totalMatched}/${products.length} products have REAL names from mapping!`);
     
     return enrichedProducts;
   }
 
+
   /**
-   * Load product mapping from user's Excel file with robust ESM approach
+   * Load product mapping from Excel file
    */
   static async loadMapping(): Promise<void> {
     if (this.isLoaded) return;
@@ -112,9 +97,16 @@ export class ProductMapping {
       
       const excelPath = join(process.cwd(), 'attached_assets', 'All Items_1763921800571.xlsx');
       console.log('📁 Excel file path:', excelPath);
-      console.log('📁 File exists:', fs.existsSync(excelPath));
       
-      // Set filesystem for XLSX in Node ESM environment
+      if (!fs.existsSync(excelPath)) {
+        console.warn('⚠️ Excel file not found - products will use fallback names');
+        console.warn(`   Looking for: ${excelPath}`);
+        this.isLoaded = true;
+        return;
+      }
+
+      console.log('📁 Excel file found, loading...');
+      
       XLSX.set_fs(fs);
       
       const workbook = XLSX.readFile(excelPath);
@@ -123,15 +115,10 @@ export class ProductMapping {
       const sheetName = workbook.SheetNames[0];
       const worksheet = workbook.Sheets[sheetName];
       
-      // Get raw rows as arrays to detect header
       const rawRows = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
       console.log('📊 Total raw rows:', rawRows.length);
       
-      if (rawRows.length > 0) {
-        console.log('🔍 First 3 raw rows:', rawRows.slice(0, 3));
-      }
-      
-      // Find header row containing both "Item Code" and "Item Name"
+      // Find header row
       let headerRowIndex = -1;
       let columnMap: any = {};
       
@@ -164,17 +151,15 @@ export class ProductMapping {
               return idx === -1 ? nameCol + 2 : idx;
             })()
           };
-          console.log(`🎯 Found header at row ${i}:`, row);
-          console.log('🗂️ Column mapping:', columnMap);
           break;
         }
       }
       
       if (headerRowIndex === -1) {
-        throw new Error('Could not find header row with Item Code and Item Name columns');
+        throw new Error('Could not find header row');
       }
       
-      // Process data rows after header
+      // Process data rows
       let processed = 0;
       for (let i = headerRowIndex + 1; i < rawRows.length; i++) {
         const row = rawRows[i] as string[];
@@ -184,16 +169,8 @@ export class ProductMapping {
         const uom = row[columnMap.uom]?.toString()?.trim();
         const price = parseFloat(row[columnMap.price]?.toString() || '0') || 25000;
         
-        if (processed < 3) {
-          console.log(`🔍 Data row ${i}:`, { code, name, uom, price });
-        }
-        
         if (code && name && code.length > 0 && name.length > 0) {
           const normalizedCode = this.normalizeProductCode(code);
-          
-          if (processed < 3) {
-            console.log(`🔧 Code normalization: "${code}" -> "${normalizedCode}"`);
-          }
           
           this.productMap.set(normalizedCode, {
             name,
@@ -206,26 +183,17 @@ export class ProductMapping {
         }
       }
 
-      console.log(`✅ Processed ${processed} rows, loaded ${this.productMap.size} REAL product names from Excel file!`);
-      
-      // Show sample products
-      const sampleCodes = Array.from(this.productMap.keys()).slice(0, 3);
-      sampleCodes.forEach(code => {
-        const product = this.productMap.get(code);
-        console.log(`📦 Sample: ${code} -> "${product?.name}" (${product?.price})`);
-      });
-      
+      console.log(`✅ Processed ${processed} rows, loaded ${this.productMap.size} product names from Excel!`);
       this.isLoaded = true;
       
     } catch (error) {
       console.error('❌ Failed to load product mapping:', error);
-      // Don't mark as loaded on failure - allow retries
-      this.isLoaded = false;
+      this.isLoaded = true;
     }
   }
 
   /**
-   * Get real product data by code (with advanced normalization and fallback matching)
+   * Get real product data by code
    */
   static getProduct(code: string): {
     name: string;
@@ -237,15 +205,11 @@ export class ProductMapping {
   } | null {
     const normalizedCode = this.normalizeProductCode(code);
     
-    // Try direct match first
     let product = this.productMap.get(normalizedCode);
     if (product) {
       return { ...product, matchRule: 'direct' };
     }
     
-    // ARCHITECT IMPROVEMENT: Fallback matching for variant suffixes
-    
-    // Rule A: Strip trailing letter-only suffix (e.g., "123ABC" -> "123")
     const withoutLetterSuffix = normalizedCode.replace(/[A-Z]+$/, '');
     if (withoutLetterSuffix !== normalizedCode) {
       product = this.productMap.get(withoutLetterSuffix);
@@ -254,7 +218,6 @@ export class ProductMapping {
       }
     }
     
-    // Rule B: Strip trailing digit+letter pack size (e.g., "1234505L" -> "12345")
     const withoutPackSize = normalizedCode.replace(/\d+[A-Z]+$/, '');
     if (withoutPackSize !== normalizedCode && withoutPackSize !== withoutLetterSuffix) {
       product = this.productMap.get(withoutPackSize);
@@ -263,7 +226,6 @@ export class ProductMapping {
       }
     }
     
-    // Rule C: Digits-only fallback (only if unique match)
     const digitsOnly = normalizedCode.replace(/\D/g, '');
     if (digitsOnly !== normalizedCode && digitsOnly.length >= 4) {
       const candidates = Array.from(this.productMap.keys()).filter(key => 
@@ -288,7 +250,7 @@ export class ProductMapping {
   }
 
   /**
-   * Get all mapped products with full details (for Excel fallback)
+   * Get all mapped products
    */
   static getAllMappedProducts(): Array<{
     code: string;
@@ -298,14 +260,7 @@ export class ProductMapping {
     category: string;
     originalCode: string;
   }> {
-    const products: Array<{
-      code: string;
-      name: string;
-      price: number;
-      uom: string;
-      category: string;
-      originalCode: string;
-    }> = [];
+    const products: Array<any> = [];
     
     this.productMap.forEach((value, key) => {
       products.push({
@@ -318,7 +273,7 @@ export class ProductMapping {
   }
 
   /**
-   * Get statistics about the mapping
+   * Get statistics
    */
   static getStats() {
     return {
@@ -329,7 +284,7 @@ export class ProductMapping {
   }
 
   /**
-   * Get diagnostic information about code matching
+   * Get diagnostics
    */
   static getDiagnostics() {
     return {
@@ -344,7 +299,7 @@ export class ProductMapping {
   }
 
   /**
-   * Smart category detection from product name
+   * Smart category detection
    */
   private static getCategoryFromName(name: string): string {
     const nameLower = name.toLowerCase();
