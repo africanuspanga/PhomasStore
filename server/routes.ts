@@ -40,7 +40,6 @@ const ensureUploadPreset = async () => {
         folder: 'phomas-products',
         allowed_formats: ['jpg', 'png', 'gif', 'webp'],
         transformation: [
-          { width: 800, height: 600, crop: 'limit' },
           { quality: 'auto' },
           { format: 'auto' }
         ]
