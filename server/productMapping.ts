@@ -110,7 +110,7 @@ export class ProductMapping {
     try {
       console.log('📋 Loading REAL product names from user Excel file...');
       
-      const excelPath = join(process.cwd(), 'attached_assets', 'Phomas Store_1757981102948.xlsx');
+      const excelPath = join(process.cwd(), 'attached_assets', 'All Items_1763921800571.xlsx');
       console.log('📁 Excel file path:', excelPath);
       console.log('📁 File exists:', fs.existsSync(excelPath));
       
