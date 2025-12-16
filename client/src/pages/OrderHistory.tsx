@@ -1,15 +1,18 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { useAuth } from "@/contexts/AuthContext";
 import { ecountService } from "@/services/ecountService";
-import { History, Package, Truck, Clock } from "lucide-react";
+import { History, Package, Truck, Clock, X } from "lucide-react";
 import { format } from "date-fns";
 import type { Order, OrderItem } from "@shared/schema";
 
 export default function OrderHistory() {
   const { user } = useAuth();
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
 
   const { data: orders = [], isLoading, error } = useQuery({
     queryKey: ["/api/orders/user", user?.id],
@@ -161,7 +164,12 @@ export default function OrderHistory() {
                           </Badge>
                         </td>
                         <td className="py-4 px-4">
-                          <Button variant="link" className="text-phomas-blue hover:underline text-sm p-0">
+                          <Button 
+                            variant="link" 
+                            className="text-phomas-blue hover:underline text-sm p-0"
+                            onClick={() => setSelectedOrder(order)}
+                            data-testid={`button-view-order-${order.id}`}
+                          >
                             {order.status === "shipped" ? "Track Order" : "View Details"}
                           </Button>
                         </td>
@@ -174,6 +182,110 @@ export default function OrderHistory() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Order Details Dialog */}
+      <Dialog open={!!selectedOrder} onOpenChange={(open) => !open && setSelectedOrder(null)}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold text-phomas-green">
+              Order Details - {selectedOrder?.orderNumber}
+            </DialogTitle>
+            <DialogDescription>
+              Placed on {selectedOrder?.createdAt ? format(new Date(selectedOrder.createdAt), 'MMMM d, yyyy \'at\' h:mm a') : 'N/A'}
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedOrder && (
+            <div className="space-y-6 mt-4">
+              {/* Order Status */}
+              <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                <div>
+                  <p className="text-sm text-gray-500">Order Status</p>
+                  <Badge className={`mt-1 ${getStatusColor(selectedOrder.status)}`}>
+                    {getStatusIcon(selectedOrder.status)}
+                    <span className="ml-1 capitalize">{selectedOrder.status}</span>
+                  </Badge>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm text-gray-500">Total Amount</p>
+                  <p className="text-xl font-bold text-phomas-green">
+                    TZS {Math.round(parseFloat(selectedOrder.total)).toLocaleString()}
+                  </p>
+                </div>
+              </div>
+
+              {/* Order Items */}
+              <div>
+                <h4 className="font-semibold text-gray-800 mb-3">Order Items</h4>
+                <div className="space-y-3">
+                  {(JSON.parse(selectedOrder.items) as OrderItem[]).map((item, index) => (
+                    <div key={index} className="flex justify-between items-center p-3 border border-gray-200 rounded-lg">
+                      <div>
+                        <p className="font-medium text-gray-800">{item.name}</p>
+                        <p className="text-sm text-gray-500">Ref: {item.referenceNumber}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm text-gray-600">{item.quantity}x @ TZS {parseFloat(item.price).toLocaleString()}</p>
+                        <p className="font-semibold text-phomas-green">
+                          TZS {Math.round(item.quantity * parseFloat(item.price)).toLocaleString()}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Order Summary */}
+              <div className="border-t pt-4">
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Subtotal</span>
+                    <span>TZS {Math.round(parseFloat(selectedOrder.subtotal)).toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Tax (18% VAT)</span>
+                    <span>TZS {Math.round(parseFloat(selectedOrder.tax)).toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between font-bold text-lg border-t pt-2">
+                    <span>Total</span>
+                    <span className="text-phomas-green">TZS {Math.round(parseFloat(selectedOrder.total)).toLocaleString()}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* ERP Sync Status */}
+              {selectedOrder.erpSyncStatus && (
+                <div className="p-3 bg-gray-50 rounded-lg text-sm">
+                  <p className="text-gray-600">
+                    <span className="font-medium">ERP Sync:</span>{' '}
+                    {selectedOrder.erpSyncStatus === 'synced' ? (
+                      <span className="text-green-600">Synced to eCount</span>
+                    ) : selectedOrder.erpSyncStatus === 'failed' ? (
+                      <span className="text-red-600">Sync failed - will retry</span>
+                    ) : (
+                      <span className="text-amber-600">Pending sync</span>
+                    )}
+                  </p>
+                  {selectedOrder.erpDocNumber && (
+                    <p className="text-gray-500 mt-1">ERP Document: {selectedOrder.erpDocNumber}</p>
+                  )}
+                </div>
+              )}
+
+              {/* Close Button */}
+              <div className="flex justify-end pt-2">
+                <Button 
+                  onClick={() => setSelectedOrder(null)}
+                  className="bg-phomas-green hover:bg-phomas-green/90"
+                  data-testid="button-close-order-details"
+                >
+                  Close
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

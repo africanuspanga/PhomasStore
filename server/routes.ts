@@ -595,6 +595,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Order routes - now with CORRECTED eCount sales integration
   app.post("/api/orders", requireAuth, enforceSaveRateLimit, async (req, res) => {
     try {
+      // Construct user profile from request body or middleware defaults for eCount API
+      const userProfile = {
+        email: req.body.customerEmail || (req as any).userEmail || 'guest@phomas.com',
+        name: req.body.customerName || (req as any).userId || 'Guest Customer'
+      };
+      
       // Use customer data from request body (sent from frontend with actual user info)
       const orderDataWithCustomer = {
         ...req.body,
@@ -666,7 +672,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/ecount/sales", requireAuth, enforceSaveRateLimit, async (req, res) => {
     try {
       const { orderId } = req.body;
-      const userProfile = (req as any).userProfile;
       
       if (!orderId) {
         return res.status(400).json({ message: "Order ID is required" });
@@ -677,6 +682,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!order) {
         return res.status(404).json({ message: "Order not found" });
       }
+      
+      // Construct user profile from order data for eCount API
+      const userProfile = {
+        email: order.customerEmail || 'guest@phomas.com',
+        name: order.customerName || 'Guest Customer'
+      };
       
       // Check if already synced
       if (order.erpSyncStatus === 'synced') {
