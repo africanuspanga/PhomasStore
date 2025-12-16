@@ -67,5 +67,24 @@ app.use((req, res, next) => {
     reusePort: true,
   }, () => {
     log(`serving on port ${port}`);
+    
+    // Keep-alive self-ping every 3 minutes to prevent sleeping
+    // This is completely isolated and only calls the read-only health endpoint
+    const KEEP_ALIVE_INTERVAL = 3 * 60 * 1000; // 3 minutes in milliseconds
+    
+    setInterval(async () => {
+      try {
+        const response = await fetch(`http://localhost:${port}/api/health`);
+        if (response.ok) {
+          const data = await response.json();
+          log(`💓 Keep-alive ping successful - uptime: ${Math.floor(data.uptime)}s`);
+        }
+      } catch (error) {
+        // Silent fail - don't disrupt the app if ping fails
+        log(`⚠️ Keep-alive ping failed (non-critical)`);
+      }
+    }, KEEP_ALIVE_INTERVAL);
+    
+    log(`💓 Keep-alive enabled: pinging every 3 minutes`);
   });
 })();

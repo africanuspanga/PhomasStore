@@ -42,6 +42,7 @@ The application features a responsive design for mobile and desktop, a password 
 - **API Lockout Prevention**: Robust error handling to prevent eCount API bans.
 - **Excel Fallback**: Ensures product display even if real-time inventory API is down.
 - **Cloudinary Integration**: Direct image uploads and optimization.
+- **Keep-Alive System**: Self-ping every 3 minutes via `/api/health` endpoint to prevent app sleeping.
 
 # External Dependencies
 
