@@ -5,12 +5,12 @@ import { Input } from "@/components/ui/input";
 import { useCart } from "@/contexts/CartContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { ecountService } from "@/services/ecountService";
-import { ShoppingCart, ArrowLeft, Plus, Minus, Trash2, Send } from "lucide-react";
+import { ShoppingCart, ArrowLeft, Plus, Minus, Trash2, Send, AlertTriangle } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
-import type { OrderItem } from "@shared/schema";
+import type { OrderItem, ProductWithInventory } from "@shared/schema";
 
 export default function Cart() {
   const { items, updateQuantity, removeItem, clearCart, subtotal, tax, total } = useCart();
@@ -21,6 +21,40 @@ export default function Cart() {
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [orderNumber, setOrderNumber] = useState("");
   const [userEmail, setUserEmail] = useState<string>('');
+
+  // Fetch products to check stock limits
+  const { data: products = [] } = useQuery<ProductWithInventory[]>({
+    queryKey: ["/api/products"],
+    queryFn: () => ecountService.getProducts(),
+  });
+
+  // Get stock for a product
+  const getProductStock = (productId: string): number => {
+    const product = products.find(p => p.id === productId);
+    return product?.availableQuantity ?? 999;
+  };
+
+  // Validate and update quantity with stock check
+  const handleUpdateQuantity = (productId: string, newQuantity: number) => {
+    if (newQuantity <= 0) {
+      removeItem(productId);
+      return;
+    }
+    
+    const maxStock = getProductStock(productId);
+    const item = items.find(i => i.productId === productId);
+    
+    if (newQuantity > maxStock) {
+      toast({
+        title: "Stock limit reached",
+        description: `Only ${maxStock} units available for ${item?.name || 'this product'}.`,
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    updateQuantity(productId, newQuantity);
+  };
 
   // Get user email from Supabase session
   useEffect(() => {
@@ -175,29 +209,45 @@ export default function Cart() {
                     </div>
 
                     <div className="flex items-center space-x-4">
-                      <div className="flex items-center space-x-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => updateQuantity(item.productId, item.quantity - 1)}
-                          disabled={item.quantity <= 1}
-                        >
-                          <Minus className="w-3 h-3" />
-                        </Button>
-                        <Input
-                          type="number"
-                          min="1"
-                          value={item.quantity}
-                          onChange={(e) => updateQuantity(item.productId, parseInt(e.target.value) || 1)}
-                          className="w-16 text-center"
-                        />
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => updateQuantity(item.productId, item.quantity + 1)}
-                        >
-                          <Plus className="w-3 h-3" />
-                        </Button>
+                      <div className="flex flex-col items-center space-y-1">
+                        <div className="flex items-center space-x-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleUpdateQuantity(item.productId, item.quantity - 1)}
+                            disabled={item.quantity <= 1}
+                            data-testid={`decrease-qty-${item.productId}`}
+                          >
+                            <Minus className="w-3 h-3" />
+                          </Button>
+                          <Input
+                            type="number"
+                            min="1"
+                            max={getProductStock(item.productId)}
+                            value={item.quantity}
+                            onChange={(e) => handleUpdateQuantity(item.productId, parseInt(e.target.value) || 1)}
+                            className="w-16 text-center"
+                            data-testid={`qty-input-${item.productId}`}
+                          />
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleUpdateQuantity(item.productId, item.quantity + 1)}
+                            disabled={item.quantity >= getProductStock(item.productId)}
+                            data-testid={`increase-qty-${item.productId}`}
+                          >
+                            <Plus className="w-3 h-3" />
+                          </Button>
+                        </div>
+                        {/* Show stock info */}
+                        <span className="text-xs text-gray-500">
+                          Stock: {getProductStock(item.productId)} available
+                        </span>
+                        {item.quantity >= getProductStock(item.productId) && (
+                          <span className="text-xs text-amber-600 flex items-center gap-1">
+                            <AlertTriangle className="w-3 h-3" /> Max stock
+                          </span>
+                        )}
                       </div>
 
                       <div className="text-right">
@@ -209,6 +259,7 @@ export default function Cart() {
                           size="sm"
                           onClick={() => removeItem(item.productId)}
                           className="text-red-500 hover:text-red-700"
+                          data-testid={`remove-item-${item.productId}`}
                         >
                           <Trash2 className="w-4 h-4 mr-1" />
                           Remove

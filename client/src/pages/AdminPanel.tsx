@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,6 +14,11 @@ import { BulkSyncManager } from "@/components/BulkSyncManager";
 import type { User, Order, OrderItem } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 
 // Extended User type for admin panel (includes Supabase metadata fields)
 interface AdminPanelUser extends Omit<User, 'password'> {
@@ -246,6 +252,77 @@ export default function AdminPanel() {
     },
   });
 
+  // State for edit and delete dialogs
+  const [editingUser, setEditingUser] = useState<AdminPanelUser | null>(null);
+  const [editFormData, setEditFormData] = useState({ companyName: '', phone: '', address: '', brelaNumber: '', tinNumber: '', userType: 'company' });
+  const [userToDelete, setUserToDelete] = useState<AdminPanelUser | null>(null);
+
+  // Delete user mutation
+  const deleteUserMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      const res = await apiRequest("DELETE", `/api/admin/users/${userId}`);
+      return await res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries();
+      setUserToDelete(null);
+      toast({
+        title: "User Deleted",
+        description: "The user has been removed from the system",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Delete Failed",
+        description: error instanceof Error ? error.message : "Failed to delete user",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Update user mutation
+  const updateUserMutation = useMutation({
+    mutationFn: async ({ userId, data }: { userId: string; data: typeof editFormData }) => {
+      const res = await apiRequest("PUT", `/api/admin/users/${userId}`, data);
+      return await res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries();
+      setEditingUser(null);
+      toast({
+        title: "User Updated",
+        description: "User information has been updated successfully",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Update Failed",
+        description: error instanceof Error ? error.message : "Failed to update user",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Open edit dialog with user data
+  const handleEditUser = (userItem: AdminPanelUser) => {
+    setEditFormData({
+      companyName: userItem.companyName || '',
+      phone: userItem.phone || '',
+      address: userItem.address || '',
+      brelaNumber: userItem.brelaNumber || '',
+      tinNumber: userItem.tinNumber || '',
+      userType: userItem.userType || 'company',
+    });
+    setEditingUser(userItem);
+  };
+
+  // Submit edit form
+  const handleSaveUser = () => {
+    if (editingUser) {
+      updateUserMutation.mutate({ userId: editingUser.id, data: editFormData });
+    }
+  };
+
   const { data: products = [], isLoading: productsLoading } = useQuery({
     queryKey: ["/api/products"],
     queryFn: () => ecountService.getProducts(),
@@ -361,11 +438,23 @@ export default function AdminPanel() {
                         )}
                       </div>
                       <div className="flex items-center space-x-2">
-                        <Button variant="ghost" size="sm" className="text-phomas-blue hover:text-phomas-green">
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="text-phomas-blue hover:text-phomas-green"
+                          onClick={() => handleEditUser(userItem)}
+                          data-testid={`edit-user-${userItem.id}`}
+                        >
                           <Edit className="w-4 h-4" />
                         </Button>
                         {userItem.role !== "admin" && (
-                          <Button variant="ghost" size="sm" className="text-red-500 hover:text-red-700">
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            className="text-red-500 hover:text-red-700"
+                            onClick={() => setUserToDelete(userItem)}
+                            data-testid={`delete-user-${userItem.id}`}
+                          >
                             <Trash2 className="w-4 h-4" />
                           </Button>
                         )}
@@ -599,6 +688,114 @@ export default function AdminPanel() {
           </TabsContent>
         </Tabs>
       </div>
+
+      {/* Edit User Dialog */}
+      <Dialog open={!!editingUser} onOpenChange={(open) => !open && setEditingUser(null)}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Edit User: {editingUser?.email}</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="companyName">Company Name</Label>
+              <Input
+                id="companyName"
+                value={editFormData.companyName}
+                onChange={(e) => setEditFormData({ ...editFormData, companyName: e.target.value })}
+                data-testid="edit-company-name"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="phone">Phone</Label>
+              <Input
+                id="phone"
+                value={editFormData.phone}
+                onChange={(e) => setEditFormData({ ...editFormData, phone: e.target.value })}
+                data-testid="edit-phone"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="address">Address</Label>
+              <Input
+                id="address"
+                value={editFormData.address}
+                onChange={(e) => setEditFormData({ ...editFormData, address: e.target.value })}
+                data-testid="edit-address"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="brelaNumber">Brela Registration #</Label>
+              <Input
+                id="brelaNumber"
+                value={editFormData.brelaNumber}
+                onChange={(e) => setEditFormData({ ...editFormData, brelaNumber: e.target.value })}
+                data-testid="edit-brela"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="tinNumber">TIN #</Label>
+              <Input
+                id="tinNumber"
+                value={editFormData.tinNumber}
+                onChange={(e) => setEditFormData({ ...editFormData, tinNumber: e.target.value })}
+                data-testid="edit-tin"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="userType">User Type</Label>
+              <Select
+                value={editFormData.userType}
+                onValueChange={(value) => setEditFormData({ ...editFormData, userType: value })}
+              >
+                <SelectTrigger data-testid="edit-user-type">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="company">Company</SelectItem>
+                  <SelectItem value="licensed_trader">Licensed Trader</SelectItem>
+                  <SelectItem value="individual">Individual</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditingUser(null)} data-testid="cancel-edit">
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleSaveUser} 
+              disabled={updateUserMutation.isPending}
+              data-testid="save-user"
+            >
+              {updateUserMutation.isPending ? "Saving..." : "Save Changes"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete User Confirmation Dialog */}
+      <AlertDialog open={!!userToDelete} onOpenChange={(open) => !open && setUserToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete User?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete <strong>{userToDelete?.companyName}</strong> ({userToDelete?.email})? 
+              This action cannot be undone and will remove the user from the system permanently.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="cancel-delete">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => userToDelete && deleteUserMutation.mutate(userToDelete.id)}
+              className="bg-red-600 hover:bg-red-700"
+              disabled={deleteUserMutation.isPending}
+              data-testid="confirm-delete"
+            >
+              {deleteUserMutation.isPending ? "Deleting..." : "Delete User"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

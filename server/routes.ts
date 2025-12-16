@@ -888,6 +888,87 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Delete user (admin only)
+  app.delete("/api/admin/users/:userId", requireAdminAuth, async (req, res) => {
+    try {
+      const { userId } = req.params;
+      console.log(`🗑️ Admin deleting user: ${userId}`);
+      
+      // Get user first to check if it's admin
+      const { data: { user: targetUser }, error: getUserError } = await supabase.auth.admin.getUserById(userId);
+      
+      if (getUserError || !targetUser) {
+        console.error('❌ Failed to get user:', getUserError);
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      // Prevent deleting admin account
+      if (targetUser.email === 'admin@phomas.com') {
+        return res.status(403).json({ message: "Cannot delete admin account" });
+      }
+      
+      // Delete user from Supabase Auth
+      const { error } = await supabase.auth.admin.deleteUser(userId);
+      
+      if (error) {
+        console.error('❌ Failed to delete user:', error);
+        return res.status(500).json({ message: "Failed to delete user", error: error.message });
+      }
+      
+      console.log(`✅ User deleted successfully: ${targetUser.email}`);
+      res.json({ success: true, message: "User deleted successfully" });
+    } catch (error) {
+      console.error('❌ Delete user error:', error);
+      res.status(500).json({ message: "Failed to delete user", error: error instanceof Error ? error.message : 'Unknown error' });
+    }
+  });
+
+  // Update user metadata (admin only)
+  app.put("/api/admin/users/:userId", requireAdminAuth, async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const { companyName, phone, address, brelaNumber, tinNumber, userType } = req.body;
+      
+      console.log(`✏️ Admin updating user: ${userId}`);
+      
+      // Get current user to preserve metadata
+      const { data: { user: currentUser }, error: getUserError } = await supabase.auth.admin.getUserById(userId);
+      
+      if (getUserError || !currentUser) {
+        console.error('❌ Failed to get user:', getUserError);
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      // Merge existing metadata with updates
+      const updatedMetadata = {
+        ...currentUser.user_metadata,
+        name: companyName || currentUser.user_metadata?.name,
+        company_name: companyName || currentUser.user_metadata?.company_name,
+        phone: phone || currentUser.user_metadata?.phone,
+        address: address || currentUser.user_metadata?.address,
+        brela_number: brelaNumber || currentUser.user_metadata?.brela_number,
+        tin_number: tinNumber || currentUser.user_metadata?.tin_number,
+        user_type: userType || currentUser.user_metadata?.user_type,
+      };
+      
+      // Update user metadata
+      const { data, error } = await supabase.auth.admin.updateUserById(userId, {
+        user_metadata: updatedMetadata
+      });
+      
+      if (error) {
+        console.error('❌ Failed to update user:', error);
+        return res.status(500).json({ message: "Failed to update user", error: error.message });
+      }
+      
+      console.log(`✅ User updated successfully: ${data.user.email}`);
+      res.json({ success: true, message: "User updated successfully", user: data.user });
+    } catch (error) {
+      console.error('❌ Update user error:', error);
+      res.status(500).json({ message: "Failed to update user", error: error instanceof Error ? error.message : 'Unknown error' });
+    }
+  });
+
   app.get("/api/admin/inventory", requireAdminAuth, async (req, res) => {
     try {
       const inventory = await storage.getAllInventory();
