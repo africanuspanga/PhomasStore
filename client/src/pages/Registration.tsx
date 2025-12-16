@@ -51,7 +51,7 @@ export default function Registration() {
     }
   };
 
-  const whatsappNumber = "178754718";
+  const whatsappNumber = "255755378111";
   const whatsappMessage = encodeURIComponent(`Hello Phomas Diagnostics, I just registered a new account with email: ${userEmail}. Please approve my account so I can start ordering medical supplies.`);
   const whatsappUrl = `https://wa.me/${whatsappNumber}?text=${whatsappMessage}`;
 

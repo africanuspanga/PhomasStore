@@ -157,7 +157,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           await supabase.auth.signOut();
           
           // Show pending approval message with WhatsApp option
-          const whatsappNumber = "178754718";
+          const whatsappNumber = "255755378111";
           const whatsappMessage = encodeURIComponent(`Hello Phomas Diagnostics, I would like to request approval for my account: ${credentials.email}`);
           const whatsappUrl = `https://wa.me/${whatsappNumber}?text=${whatsappMessage}`;
           
@@ -170,7 +170,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                   onClick={() => window.open(whatsappUrl, '_blank')}
                   className="text-green-600 hover:underline font-medium"
                 >
-                  Contact us on WhatsApp ({whatsappNumber})
+                  Contact us on WhatsApp (+255 755 378 111)
                 </button>
               </div>
             ) as any,
