@@ -3,7 +3,8 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { ecountApi } from "./ecountApi";
 import { ProductMapping } from "./productMapping";
-import { insertUserSchema, loginSchema, insertOrderSchema, supabaseSignUpSchema } from "@shared/schema";
+import { insertUserSchema, loginSchema, insertOrderSchema, supabaseSignUpSchema, adminSessions as adminSessionsTable } from "@shared/schema";
+import { eq, lt } from "drizzle-orm";
 import { v2 as cloudinary } from 'cloudinary';
 import multer from 'multer';
 import { randomUUID } from "crypto";
@@ -320,10 +321,7 @@ function getProductImage(productCode: string): string {
   return 'https://images.unsplash.com/photo-1559757148-5c350d0d3c56?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300';
 }
 
-// Admin session store for company admin access (in-memory fallback for legacy admin login)
-const adminSessions = new Map<string, { userId: string; role: string; email: string; createdAt: Date }>();
-
-// Admin authentication middleware - validates both Supabase JWT and in-memory sessions
+// Admin authentication middleware - validates both Supabase JWT and database sessions
 const requireAdminAuth = async (req: Request, res: Response, next: NextFunction) => {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -351,34 +349,46 @@ const requireAdminAuth = async (req: Request, res: Response, next: NextFunction)
       }
     }
   } catch (supabaseError) {
-    // Supabase validation failed, try in-memory session fallback
-    console.log('🔐 Supabase token validation failed, trying in-memory session...');
+    // Supabase validation failed, try database session fallback
+    console.log('🔐 Supabase token validation failed, trying database session...');
   }
   
-  // Fallback: Check in-memory session (for legacy admin login with hardcoded password)
-  const session = adminSessions.get(token);
-  
-  if (!session) {
-    console.log('🔐 Admin auth failed: Invalid or missing session token');
-    return res.status(401).json({ message: 'Invalid or expired admin session' });
-  }
+  // Fallback: Check database session (persists across restarts)
+  try {
+    const db = storage.getDb();
+    if (!db) {
+      console.log('🔐 Admin auth failed: Database not available');
+      return res.status(401).json({ message: 'Database not available for session validation' });
+    }
 
-  // Check if session is older than 24 hours
-  const now = new Date();
-  const sessionAge = now.getTime() - session.createdAt.getTime();
-  if (sessionAge > 24 * 60 * 60 * 1000) {
-    adminSessions.delete(token);
-    console.log('🔐 Admin auth failed: Session expired');
-    return res.status(401).json({ message: 'Admin session expired' });
-  }
+    const sessions = await db.select().from(adminSessionsTable).where(eq(adminSessionsTable.id, token));
+    const session = sessions[0];
+    
+    if (!session) {
+      console.log('🔐 Admin auth failed: Invalid or missing session token');
+      return res.status(401).json({ message: 'Invalid or expired admin session' });
+    }
 
-  // Attach admin info to request
-  (req as any).userId = session.userId;
-  (req as any).userRole = session.role;
-  (req as any).userEmail = session.email;
-  
-  console.log(`🔐 Admin auth successful via in-memory session: ${session.email}`);
-  next();
+    // Check if session is expired
+    const now = new Date();
+    if (session.expiresAt < now) {
+      // Delete expired session
+      await db.delete(adminSessionsTable).where(eq(adminSessionsTable.id, token));
+      console.log('🔐 Admin auth failed: Session expired');
+      return res.status(401).json({ message: 'Admin session expired' });
+    }
+
+    // Attach admin info to request
+    (req as any).userId = session.userId;
+    (req as any).userRole = session.role;
+    (req as any).userEmail = session.email;
+    
+    console.log(`🔐 Admin auth successful via database session: ${session.email}`);
+    next();
+  } catch (dbError) {
+    console.error('🔐 Database session lookup error:', dbError);
+    return res.status(401).json({ message: 'Session validation failed' });
+  }
 };
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -518,14 +528,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (email === "admin@phomas.com" && password === "admin123") {
         // Create admin session token
         const token = randomUUID();
-        adminSessions.set(token, {
-          userId: "admin-phomas",
-          role: "admin",
-          email: email,
-          createdAt: new Date()
-        });
+        const now = new Date();
+        const expiresAt = new Date(now.getTime() + 24 * 60 * 60 * 1000); // 24 hours
         
-        console.log(`🔐 Admin login successful: ${email}`);
+        // Save session to database for persistence across restarts
+        const db = storage.getDb();
+        if (db) {
+          try {
+            // Clean up old sessions for this email (keep only latest)
+            await db.delete(adminSessionsTable).where(eq(adminSessionsTable.email, email));
+            
+            // Insert new session
+            await db.insert(adminSessionsTable).values({
+              id: token,
+              userId: "admin-phomas",
+              email: email,
+              role: "admin",
+              createdAt: now,
+              expiresAt: expiresAt
+            });
+            console.log(`🔐 Admin login successful (database session): ${email}`);
+          } catch (dbError) {
+            console.error('🔐 Failed to save admin session to database:', dbError);
+            // Continue anyway - session will just not persist across restarts
+          }
+        } else {
+          console.warn('🔐 Admin login: Database not available, session will not persist across restarts');
+        }
         
         res.json({ 
           success: true, 
@@ -1337,7 +1366,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const prodKey = process.env.ECOUNT_AUTH_KEY!;
       
       // Helper function to test GetListInventoryBalanceStatus
-      async function testGetListAPI(apiKey: string, label: string) {
+      const testGetListAPI = async (apiKey: string, label: string) => {
         console.log(`\n📊 Testing ${label}...`);
         try {
           // Step 1: Get Zone (using POST as required by eCount API)

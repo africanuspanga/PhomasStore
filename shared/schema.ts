@@ -76,6 +76,16 @@ export const productImages = pgTable("product_images", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// Admin Sessions - persistent storage for admin login sessions
+export const adminSessions = pgTable("admin_sessions", {
+  id: varchar("id").primaryKey(), // Session token (UUID)
+  userId: varchar("user_id").notNull(),
+  email: text("email").notNull(),
+  role: text("role").notNull().default("admin"),
+  createdAt: timestamp("created_at").defaultNow(),
+  expiresAt: timestamp("expires_at").notNull(),
+});
+
 // Product Mapping Cache - persistent storage of Excel product names for production deployments
 export const productMappings = pgTable("product_mappings", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -162,6 +172,7 @@ export type InsertInventory = z.infer<typeof insertInventorySchema>;
 export type InsertOrder = z.infer<typeof insertOrderSchema>;
 export type ProductImage = typeof productImages.$inferSelect;
 export type InsertProductImage = z.infer<typeof insertProductImageSchema>;
+export type AdminSession = typeof adminSessions.$inferSelect;
 
 // Extended types for API responses
 export type ProductWithInventory = Product & {

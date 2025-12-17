@@ -491,6 +491,11 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
+  // Get database instance for direct queries (admin sessions, etc.)
+  getDb() {
+    return this.db;
+  }
+
   // Delegate all non-image methods to MemStorage
   async getUser(id: string): Promise<User | undefined> {
     return this.memStorage.getUser(id);
