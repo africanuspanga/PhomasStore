@@ -272,7 +272,7 @@ export class MemStorage implements IStorage {
         id: inventoryId,
         productId,
         availableQuantity: quantity,
-        expirationDate: undefined
+        expirationDate: null
       });
     }
   }

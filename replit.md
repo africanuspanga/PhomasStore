@@ -79,7 +79,24 @@ The application features a responsive design for mobile and desktop, a password 
 - **Supabase PostgreSQL**: Production database for persistent order storage (eu-north-1 region, Transaction Pooler on port 6543). Also handles user authentication, product images, and profiles.
 - **Cloudinary**: Direct image uploads for product images (Cloud Name: dvrdcyymo, Upload Preset: PHOMAS).
 
-# Recent Changes (November 18, 2025)
+# Recent Changes (December 17, 2025)
+
+## ✅ Order Persistence Fix Completed
+Fixed critical issue where orders were not being saved to the database:
+- **Root Cause**: Foreign key constraint (`orders_user_id_users_id_fk`) on orders table referencing empty users table
+- **Issue**: Users are managed by Supabase Auth, not stored in local `users` table, causing all order inserts to fail silently
+- **Fix Applied**: Dropped foreign key constraint from `orders` table and updated schema
+- **Status**: ✅ Orders now persist correctly to Supabase PostgreSQL
+- **Admin Dashboard**: Will display all orders from database
+- **Customer Order History**: Will show orders linked to Supabase Auth user IDs
+
+## ✅ eCount API Cookie Fix
+Fixed 412 Precondition Failed errors from eCount API:
+- **Root Cause**: Cookie construction failed when `session_guid` was not present in login response
+- **Fix Applied**: Use `SET_COOKIE` value directly when `session_guid` is missing
+- **Status**: ✅ 491 products loading with live stock data from eCount API
+
+# Previous Changes (November 18, 2025)
 
 ## ✅ Supabase PostgreSQL Integration Completed
 Successfully migrated from in-memory storage to Supabase PostgreSQL for persistent order storage:
@@ -88,7 +105,5 @@ Successfully migrated from in-memory storage to Supabase PostgreSQL for persiste
 - **Database Driver**: postgres.js with Drizzle ORM
 - **Password Encoding**: Special characters (@, #) URL-encoded for proper authentication
 - **Schema**: All tables created (orders, users, profiles, products, inventory, product_images)
-- **Status**: ✅ Connected and operational
 - **Order Persistence**: All new customer orders saved permanently to Supabase database
 - **Admin Dashboard**: Displays all orders with real-time data from database
-- **Fix Applied**: Added `encodeURIComponent()` to handle special characters in database password

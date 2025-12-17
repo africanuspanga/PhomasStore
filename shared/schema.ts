@@ -32,7 +32,7 @@ export const inventory = pgTable("inventory", {
 
 export const orders = pgTable("orders", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id),
+  userId: varchar("user_id").notNull(), // Supabase Auth user ID (no FK - users managed by Supabase Auth)
   orderNumber: text("order_number").notNull().unique(),
   items: text("items").notNull(), // JSON string of order items
   subtotal: decimal("subtotal", { precision: 10, scale: 2 }).notNull(),
