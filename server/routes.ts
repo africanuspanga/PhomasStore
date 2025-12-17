@@ -320,10 +320,10 @@ function getProductImage(productCode: string): string {
   return 'https://images.unsplash.com/photo-1559757148-5c350d0d3c56?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300';
 }
 
-// Admin session store for company admin access
+// Admin session store for company admin access (in-memory fallback for legacy admin login)
 const adminSessions = new Map<string, { userId: string; role: string; email: string; createdAt: Date }>();
 
-// Admin authentication middleware for company admin
+// Admin authentication middleware - validates both Supabase JWT and in-memory sessions
 const requireAdminAuth = async (req: Request, res: Response, next: NextFunction) => {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -331,9 +331,33 @@ const requireAdminAuth = async (req: Request, res: Response, next: NextFunction)
   }
 
   const token = authHeader.substring(7);
+  
+  // First, try to validate as Supabase JWT token (persists across restarts)
+  try {
+    const { data: { user }, error } = await supabase.auth.getUser(token);
+    
+    if (!error && user) {
+      // Check if user is admin (admin@phomas.com or has admin role in metadata)
+      const isAdmin = user.email === 'admin@phomas.com' || 
+                      user.user_metadata?.role === 'admin' ||
+                      user.user_metadata?.user_type === 'admin';
+      
+      if (isAdmin) {
+        (req as any).userId = user.id;
+        (req as any).userRole = 'admin';
+        (req as any).userEmail = user.email;
+        console.log(`🔐 Admin auth successful via Supabase: ${user.email}`);
+        return next();
+      }
+    }
+  } catch (supabaseError) {
+    // Supabase validation failed, try in-memory session fallback
+    console.log('🔐 Supabase token validation failed, trying in-memory session...');
+  }
+  
+  // Fallback: Check in-memory session (for legacy admin login with hardcoded password)
   const session = adminSessions.get(token);
   
-  // Only allow sessions that were properly created through admin login
   if (!session) {
     console.log('🔐 Admin auth failed: Invalid or missing session token');
     return res.status(401).json({ message: 'Invalid or expired admin session' });
@@ -353,7 +377,7 @@ const requireAdminAuth = async (req: Request, res: Response, next: NextFunction)
   (req as any).userRole = session.role;
   (req as any).userEmail = session.email;
   
-  console.log(`🔐 Admin auth successful: ${session.email}`);
+  console.log(`🔐 Admin auth successful via in-memory session: ${session.email}`);
   next();
 };
 
@@ -750,8 +774,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/orders/user/:userId", async (req, res) => {
     try {
-      const orders = await storage.getOrdersByUserId(req.params.userId);
-      res.json(orders);
+      // Require valid Supabase token to access orders
+      const authHeader = req.headers.authorization;
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ message: 'Authentication required to view orders' });
+      }
+      
+      const token = authHeader.substring(7);
+      
+      try {
+        const { data: { user }, error } = await supabase.auth.getUser(token);
+        
+        if (error || !user) {
+          console.log('🔐 Order access denied: Invalid or expired token');
+          return res.status(401).json({ message: 'Invalid or expired session. Please log in again.' });
+        }
+        
+        // User is authenticated - verify they're accessing their own orders
+        if (user.id !== req.params.userId) {
+          // Check if admin accessing another user's orders
+          const isAdmin = user.email === 'admin@phomas.com' || 
+                          user.user_metadata?.role === 'admin' ||
+                          user.user_metadata?.user_type === 'admin';
+          if (!isAdmin) {
+            console.log(`🔐 User ${user.id} attempted to access orders for ${req.params.userId}`);
+            return res.status(403).json({ message: "You can only access your own orders" });
+          }
+        }
+        
+        console.log(`📦 User ${user.email} fetching orders for ${req.params.userId}`);
+        const orders = await storage.getOrdersByUserId(req.params.userId);
+        res.json(orders);
+        
+      } catch (authError) {
+        console.error('🔐 Order auth validation error:', authError);
+        return res.status(401).json({ message: 'Authentication failed. Please log in again.' });
+      }
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch orders", error });
     }
