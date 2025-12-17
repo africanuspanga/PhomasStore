@@ -1,4 +1,28 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
+import { supabase } from "@/lib/supabase";
+
+// Helper to get the best available auth token
+async function getAuthToken(): Promise<string | null> {
+  // First check for admin token (in-memory admin sessions)
+  const adminToken = localStorage.getItem("phomas_admin_token");
+  if (adminToken) return adminToken;
+  
+  // Check for stored customer token
+  const customerToken = localStorage.getItem("phomas_auth_token");
+  if (customerToken) return customerToken;
+  
+  // Finally, get token from Supabase session (for Supabase Auth users)
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.access_token) {
+      return session.access_token;
+    }
+  } catch (error) {
+    console.log('Could not get Supabase session token');
+  }
+  
+  return null;
+}
 
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
@@ -37,9 +61,8 @@ export async function apiRequest(
     headers["Content-Type"] = "application/json";
   }
   
-  // This app uses localStorage-based authentication
-  // Check for both admin and customer tokens
-  const token = localStorage.getItem("phomas_admin_token") || localStorage.getItem("phomas_auth_token");
+  // Get auth token from admin sessions, localStorage, or Supabase session
+  const token = await getAuthToken();
   if (token) {
     headers["Authorization"] = `Bearer ${token}`;
   }
@@ -63,9 +86,8 @@ export const getQueryFn: <T>(options: {
   async ({ queryKey }) => {
     const headers: Record<string, string> = {};
     
-    // This app uses localStorage-based authentication
-    // Check for both admin and customer tokens
-    const token = localStorage.getItem("phomas_admin_token") || localStorage.getItem("phomas_auth_token");
+    // Get auth token from admin sessions, localStorage, or Supabase session
+    const token = await getAuthToken();
     if (token) {
       headers["Authorization"] = `Bearer ${token}`;
     }
