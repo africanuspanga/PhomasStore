@@ -456,11 +456,20 @@ class EcountApiService {
         // Session expires in 30 minutes by default (can be configured in ERP)
         const expiresAt = new Date(Date.now() + 25 * 60 * 1000); // 25 min for safety
         
-        // CRITICAL FIX: Build cookies EXACTLY like the working test endpoint
-        // Cookie format: ECOUNT_SessionId={sessionGuid}={setCookie}; SVID=Login-L{zone}05_4bc5c
-        const cookieString = setCookie && sessionGuid 
-          ? `ECOUNT_SessionId=${sessionGuid}=${setCookie}; SVID=Login-L${zone}05_4bc5c`
-          : '';
+        // CRITICAL FIX: Build cookies using available values from login response
+        // Cookie format depends on what's available from eCount API
+        let cookieString = '';
+        if (setCookie && sessionGuid) {
+          // Full cookie format with both values
+          cookieString = `ECOUNT_SessionId=${sessionGuid}=${setCookie}; SVID=Login-L${zone}05_4bc5c`;
+        } else if (setCookie) {
+          // Fallback: Use SET_COOKIE directly as the cookie value (common in newer eCount API)
+          cookieString = `ECOUNT_SessionId=${setCookie}; SVID=Login-L${zone}05_4bc5c`;
+        } else if (sessionId) {
+          // Ultimate fallback: Use session ID in cookie
+          cookieString = `ECOUNT_SessionId=${sessionId}; SVID=Login-L${zone}05_4bc5c`;
+        }
+        console.log(`🍪 Constructed cookie string: ${cookieString ? cookieString.substring(0, 50) + '...' : 'EMPTY'}`);
         
         this.session = {
           sessionId: sessionId,  // Use SESSION_ID from response body
@@ -470,10 +479,7 @@ class EcountApiService {
         };
 
         console.log(`✅ eCount login successful! (Zone: ${zone}, Session: ${this.session.sessionId.substring(0, 8)}...)`);
-        if (cookieString) {
-          console.log(`🍪 Constructed cookies using response body values (matches test endpoint)`);
-          console.log(`🍪 Cookie format: ECOUNT_SessionId=${sessionGuid?.substring(0, 15)}...=${setCookie?.substring(0, 15)}...; SVID=Login-L${zone}05_4bc5c`);
-        }
+        console.log(`🍪 Cookies available for API requests: ${cookieString ? 'YES' : 'NO'}`);
         return this.session.sessionId;
       }
 
