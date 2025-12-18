@@ -455,24 +455,40 @@ export class DatabaseStorage implements IStorage {
     // Use MemStorage for products/inventory (eCount handles those)
     this.memStorage = new MemStorage();
     
-    // Initialize Supabase PostgreSQL database connection via Transaction Pooler
+    // Initialize PostgreSQL database connection
+    // Priority: DATABASE_URL > Supabase Transaction Pooler > Memory fallback
+    const directDbUrl = process.env.DATABASE_URL;
     const supabaseUrl = process.env.SUPABASE_URL;
     const dbPassword = process.env.PGPASSWORD;
     const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
     
-    if (supabaseUrl && dbPassword) {
-      // Get project reference from Supabase URL (e.g., xvomxojbfhovbhbbkuoh from https://xvomxojbfhovbhbbkuoh.supabase.co)
-      const projectRef = supabaseUrl.replace('https://', '').replace('.supabase.co', '');
-      // URL-encode password to handle special characters (@, #, etc.)
-      const encodedPassword = encodeURIComponent(dbPassword);
-      // Supabase Transaction Pooler connection (IPv4 compatible, port 6543)
-      const supabaseDbUrl = `postgresql://postgres.${projectRef}:${encodedPassword}@aws-1-eu-north-1.pooler.supabase.com:6543/postgres`;
-      
-      const client = postgres(supabaseDbUrl, { prepare: false });
-      this.db = drizzle(client);
-      console.log('✅ Supabase PostgreSQL database connected via Transaction Pooler (eu-north-1)');
+    if (directDbUrl) {
+      // Use direct DATABASE_URL if provided (works with Render, Railway, etc.)
+      try {
+        const client = postgres(directDbUrl, { prepare: false });
+        this.db = drizzle(client);
+        console.log('✅ PostgreSQL database connected via DATABASE_URL');
+      } catch (error) {
+        console.error('❌ Failed to connect via DATABASE_URL:', error);
+        this.db = null;
+      }
+    } else if (supabaseUrl && dbPassword) {
+      // Fallback to Supabase Transaction Pooler connection
+      try {
+        const projectRef = supabaseUrl.replace('https://', '').replace('.supabase.co', '');
+        const encodedPassword = encodeURIComponent(dbPassword);
+        const supabaseDbUrl = `postgresql://postgres.${projectRef}:${encodedPassword}@aws-1-eu-north-1.pooler.supabase.com:6543/postgres`;
+        
+        const client = postgres(supabaseDbUrl, { prepare: false });
+        this.db = drizzle(client);
+        console.log('✅ Supabase PostgreSQL database connected via Transaction Pooler (eu-north-1)');
+      } catch (error) {
+        console.error('❌ Failed to connect to Supabase:', error);
+        this.db = null;
+      }
     } else {
-      console.warn('⚠️ Supabase database not configured (missing PGPASSWORD), falling back to memory storage');
+      console.error('❌ DATABASE NOT CONFIGURED! Orders will NOT persist!');
+      console.error('   Set DATABASE_URL or (SUPABASE_URL + PGPASSWORD) environment variables');
       this.db = null;
     }
     

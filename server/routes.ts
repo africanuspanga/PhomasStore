@@ -57,12 +57,13 @@ const ensureUploadPreset = async () => {
 // Initialize upload preset
 ensureUploadPreset();
 
-// Initialize Supabase client for server-side auth verification (optional)
+// Initialize Supabase client for server-side auth verification
 const supabaseUrl = process.env.SUPABASE_URL || 'https://placeholder.supabase.co';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || 'placeholder-key';
 
-// Note: Supabase is not configured for this app - using localStorage-based auth instead
-console.log('⚠️  Supabase not configured - using localStorage-based authentication');
+if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+  console.warn('⚠️  Supabase Auth not fully configured - some features may be limited');
+}
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey, {
   auth: {
