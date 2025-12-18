@@ -200,10 +200,28 @@ async function testInventoryWithKey(params: {
   }
 }
 
-// Authentication middleware - simple pass-through for client requests
+// Authentication middleware - extracts user ID from Supabase token
 const requireAuth = async (req: Request, res: Response, next: NextFunction) => {
-  // The app uses localStorage-based client-side authentication
-  // Attach a default user ID for order tracking
+  const authHeader = req.headers.authorization;
+  
+  // Try to get user ID from Supabase token if provided
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.substring(7);
+    try {
+      const { data: { user }, error } = await supabase.auth.getUser(token);
+      if (!error && user) {
+        (req as any).userId = user.id;
+        (req as any).userEmail = user.email || 'unknown@phomas.com';
+        (req as any).userRole = user.user_metadata?.user_type === 'admin' ? 'admin' : 'client';
+        console.log(`🔐 Auth: User ${user.email} (${user.id}) authenticated`);
+        return next();
+      }
+    } catch (err) {
+      console.log('🔐 Auth: Supabase token validation failed, using guest');
+    }
+  }
+  
+  // Fallback to guest user if no valid token
   (req as any).userId = 'guest-user';
   (req as any).userEmail = 'guest@phomas.com';
   (req as any).userRole = 'client';
