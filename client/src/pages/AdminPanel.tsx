@@ -33,6 +33,8 @@ interface AdminPanelUser extends Omit<User, 'password'> {
 
 // Orders Management Component - shows all orders with customer attribution
 function OrdersManagement() {
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  
   const { data: orders = [], isLoading } = useQuery<Order[]>({
     queryKey: ["/api/orders"],
     queryFn: () => ecountService.getAllOrders(),
@@ -121,6 +123,7 @@ function OrdersManagement() {
                 <th className="text-left py-3 px-4 font-semibold text-gray-700">Total</th>
                 <th className="text-left py-3 px-4 font-semibold text-gray-700">Status</th>
                 <th className="text-left py-3 px-4 font-semibold text-gray-700">ERP</th>
+                <th className="text-left py-3 px-4 font-semibold text-gray-700">Action</th>
               </tr>
             </thead>
             <tbody>
@@ -196,6 +199,16 @@ function OrdersManagement() {
                     <td className="py-4 px-4">
                       {getErpSyncBadge(order.erpSyncStatus)}
                     </td>
+                    <td className="py-4 px-4">
+                      <Button 
+                        variant="link" 
+                        className="text-phomas-blue hover:underline text-sm p-0"
+                        onClick={() => setSelectedOrder(order)}
+                        data-testid={`button-view-order-${order.id}`}
+                      >
+                        View Details
+                      </Button>
+                    </td>
                   </tr>
                 );
               })}
@@ -203,6 +216,147 @@ function OrdersManagement() {
           </table>
         </div>
       </CardContent>
+
+      {/* Order Details Dialog */}
+      <Dialog open={!!selectedOrder} onOpenChange={(open) => !open && setSelectedOrder(null)}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold text-phomas-green">
+              Order Details - {selectedOrder?.orderNumber}
+            </DialogTitle>
+          </DialogHeader>
+
+          {selectedOrder && (() => {
+            let orderItems: OrderItem[] = [];
+            try {
+              orderItems = JSON.parse(selectedOrder.items);
+            } catch (e) {
+              console.error('Failed to parse order items:', e);
+            }
+
+            return (
+              <div className="space-y-6 mt-4">
+                {/* Customer Info */}
+                <div className="p-4 bg-gray-50 rounded-lg">
+                  <h4 className="font-semibold text-gray-800 mb-3">Customer Information</h4>
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <p className="text-gray-500">Name</p>
+                      <p className="font-medium">{selectedOrder.customerName || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500">Company</p>
+                      <p className="font-medium">{selectedOrder.customerCompany || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500">Email</p>
+                      <p className="font-medium">{selectedOrder.customerEmail}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500">Phone</p>
+                      <p className="font-medium">{selectedOrder.customerPhone || 'N/A'}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Order Status */}
+                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                  <div>
+                    <p className="text-sm text-gray-500">Order Status</p>
+                    <Badge className={`mt-1 ${getStatusColor(selectedOrder.status)}`}>
+                      <span className="capitalize">{selectedOrder.status}</span>
+                    </Badge>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">Date Placed</p>
+                    <p className="font-medium">
+                      {selectedOrder.createdAt ? format(new Date(selectedOrder.createdAt), 'MMM d, yyyy \'at\' h:mm a') : 'N/A'}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm text-gray-500">Total Amount</p>
+                    <p className="text-xl font-bold text-phomas-green">
+                      TZS {Math.round(parseFloat(selectedOrder.total)).toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Order Items */}
+                <div>
+                  <h4 className="font-semibold text-gray-800 mb-3">Order Items ({orderItems.length})</h4>
+                  <div className="space-y-3">
+                    {orderItems.map((item, index) => (
+                      <div key={index} className="flex justify-between items-center p-3 border border-gray-200 rounded-lg">
+                        <div>
+                          <p className="font-medium text-gray-800">{item.name}</p>
+                          <p className="text-sm text-gray-500">Ref: {item.referenceNumber}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm text-gray-600">{item.quantity}x @ TZS {parseFloat(item.price).toLocaleString()}</p>
+                          <p className="font-semibold text-phomas-green">
+                            TZS {Math.round(item.quantity * parseFloat(item.price)).toLocaleString()}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Order Summary */}
+                <div className="border-t pt-4">
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Subtotal</span>
+                      <span>TZS {Math.round(parseFloat(selectedOrder.subtotal)).toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Tax (18% VAT)</span>
+                      <span>TZS {Math.round(parseFloat(selectedOrder.tax)).toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between font-bold text-lg border-t pt-2">
+                      <span>Total</span>
+                      <span className="text-phomas-green">TZS {Math.round(parseFloat(selectedOrder.total)).toLocaleString()}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* ERP Sync Status */}
+                <div className="p-3 bg-gray-50 rounded-lg text-sm">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-gray-600">
+                        <span className="font-medium">ERP Sync:</span>{' '}
+                        {selectedOrder.erpSyncStatus === 'synced' ? (
+                          <span className="text-green-600">Synced to eCount</span>
+                        ) : selectedOrder.erpSyncStatus === 'failed' ? (
+                          <span className="text-red-600">Sync failed</span>
+                        ) : (
+                          <span className="text-amber-600">Pending sync</span>
+                        )}
+                      </p>
+                      {selectedOrder.erpDocNumber && (
+                        <p className="text-gray-500 mt-1">eCount Document: {selectedOrder.erpDocNumber}</p>
+                      )}
+                    </div>
+                    {getErpSyncBadge(selectedOrder.erpSyncStatus)}
+                  </div>
+                </div>
+
+                {/* Close Button */}
+                <div className="flex justify-end pt-2">
+                  <Button 
+                    onClick={() => setSelectedOrder(null)}
+                    className="bg-phomas-green hover:bg-phomas-green/90"
+                    data-testid="button-close-order-details"
+                  >
+                    Close
+                  </Button>
+                </div>
+              </div>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }
