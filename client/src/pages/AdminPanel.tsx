@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/contexts/AuthContext";
 import { ecountService } from "@/services/ecountService";
-import { Users, Package, AlertTriangle, Clock, CheckCircle, Edit, Trash2, Plus, Upload, UserCheck, MessageCircle } from "lucide-react";
+import { Users, Package, AlertTriangle, Clock, CheckCircle, Edit, Trash2, Plus, Upload, UserCheck, MessageCircle, Shield, Eye, EyeOff, Lock } from "lucide-react";
 import { format } from "date-fns";
 import { useLocation } from "wouter";
 import { AdminProductManager } from "@/components/AdminProductManager";
@@ -425,6 +425,211 @@ function OrdersManagement() {
   );
 }
 
+// Security Management Component - admin password change
+function SecurityManagement() {
+  const { logout } = useAuth();
+  const { toast } = useToast();
+  const [, setLocation] = useLocation();
+  const [oldPassword, setOldPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showOldPassword, setShowOldPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+  const changePasswordMutation = useMutation({
+    mutationFn: async (data: { oldPassword: string; newPassword: string }) => {
+      const res = await apiRequest("POST", "/api/admin/change-password", data);
+      return await res.json();
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Password Changed",
+        description: data.message || "Your password has been updated. Please log in again.",
+      });
+      // Clear form
+      setOldPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      // Logout and redirect to admin login
+      logout();
+      setLocation("/admin/login");
+    },
+    onError: (error) => {
+      toast({
+        title: "Password Change Failed",
+        description: error instanceof Error ? error.message : "Failed to change password",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    // Validation
+    if (!oldPassword || !newPassword || !confirmPassword) {
+      toast({
+        title: "Validation Error",
+        description: "Please fill in all fields",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      toast({
+        title: "Validation Error",
+        description: "New password and confirmation do not match",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (newPassword.length < 8) {
+      toast({
+        title: "Validation Error",
+        description: "New password must be at least 8 characters long",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!/[A-Z]/.test(newPassword)) {
+      toast({
+        title: "Validation Error",
+        description: "New password must contain at least one uppercase letter",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!/[a-z]/.test(newPassword)) {
+      toast({
+        title: "Validation Error",
+        description: "New password must contain at least one lowercase letter",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!/[0-9]/.test(newPassword)) {
+      toast({
+        title: "Validation Error",
+        description: "New password must contain at least one number",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    changePasswordMutation.mutate({ oldPassword, newPassword });
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Shield className="w-5 h-5 text-phomas-green" />
+          Security Settings
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="max-w-md">
+          <div className="mb-6">
+            <h3 className="text-lg font-semibold flex items-center gap-2 mb-2">
+              <Lock className="w-4 h-4" />
+              Change Admin Password
+            </h3>
+            <p className="text-sm text-gray-600 mb-4">
+              Update your admin password. After changing, you will be logged out and need to sign in again.
+            </p>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="oldPassword">Current Password</Label>
+              <div className="relative">
+                <Input
+                  id="oldPassword"
+                  type={showOldPassword ? "text" : "password"}
+                  value={oldPassword}
+                  onChange={(e) => setOldPassword(e.target.value)}
+                  placeholder="Enter current password"
+                  data-testid="input-old-password"
+                />
+                <button
+                  type="button"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                  onClick={() => setShowOldPassword(!showOldPassword)}
+                  data-testid="toggle-old-password"
+                >
+                  {showOldPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="newPassword">New Password</Label>
+              <div className="relative">
+                <Input
+                  id="newPassword"
+                  type={showNewPassword ? "text" : "password"}
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="Enter new password"
+                  data-testid="input-new-password"
+                />
+                <button
+                  type="button"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                  onClick={() => setShowNewPassword(!showNewPassword)}
+                  data-testid="toggle-new-password"
+                >
+                  {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+              <p className="text-xs text-gray-500">
+                Password must be at least 8 characters with one uppercase, one lowercase, and one number.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="confirmPassword">Confirm New Password</Label>
+              <div className="relative">
+                <Input
+                  id="confirmPassword"
+                  type={showConfirmPassword ? "text" : "password"}
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="Confirm new password"
+                  data-testid="input-confirm-password"
+                />
+                <button
+                  type="button"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  data-testid="toggle-confirm-password"
+                >
+                  {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+
+            <Button
+              type="submit"
+              className="w-full bg-phomas-green hover:bg-phomas-green/90"
+              disabled={changePasswordMutation.isPending}
+              data-testid="button-change-password"
+            >
+              {changePasswordMutation.isPending ? "Changing Password..." : "Change Password"}
+            </Button>
+          </form>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function AdminPanel() {
   const { user, isAdmin } = useAuth();
   const [, setLocation] = useLocation();
@@ -596,6 +801,7 @@ export default function AdminPanel() {
             <TabsTrigger value="orders">Orders</TabsTrigger>
             <TabsTrigger value="products">Product Management</TabsTrigger>
             <TabsTrigger value="sync">Bulk Sync</TabsTrigger>
+            <TabsTrigger value="security">Security</TabsTrigger>
           </TabsList>
           
           <TabsContent value="overview">
@@ -903,6 +1109,10 @@ export default function AdminPanel() {
           
           <TabsContent value="sync">
             <BulkSyncManager />
+          </TabsContent>
+
+          <TabsContent value="security">
+            <SecurityManagement />
           </TabsContent>
         </Tabs>
       </div>
