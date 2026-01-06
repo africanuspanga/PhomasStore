@@ -34,10 +34,34 @@ interface AdminPanelUser extends Omit<User, 'password'> {
 // Orders Management Component - shows all orders with customer attribution
 function OrdersManagement() {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [orderToDelete, setOrderToDelete] = useState<Order | null>(null);
+  const { toast } = useToast();
   
   const { data: orders = [], isLoading } = useQuery<Order[]>({
     queryKey: ["/api/orders"],
     queryFn: () => ecountService.getAllOrders(),
+  });
+
+  const deleteOrderMutation = useMutation({
+    mutationFn: async (orderId: string) => {
+      const res = await apiRequest("DELETE", `/api/admin/orders/${orderId}`);
+      return await res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+      setOrderToDelete(null);
+      toast({
+        title: "Order Deleted",
+        description: "The order has been successfully removed",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Delete Failed",
+        description: error instanceof Error ? error.message : "Failed to delete order",
+        variant: "destructive",
+      });
+    },
   });
 
   const getStatusColor = (status: string) => {
@@ -200,14 +224,25 @@ function OrdersManagement() {
                       {getErpSyncBadge(order.erpSyncStatus)}
                     </td>
                     <td className="py-4 px-4">
-                      <Button 
-                        variant="link" 
-                        className="text-phomas-blue hover:underline text-sm p-0"
-                        onClick={() => setSelectedOrder(order)}
-                        data-testid={`button-view-order-${order.id}`}
-                      >
-                        View Details
-                      </Button>
+                      <div className="flex items-center space-x-2">
+                        <Button 
+                          variant="link" 
+                          className="text-phomas-blue hover:underline text-sm p-0"
+                          onClick={() => setSelectedOrder(order)}
+                          data-testid={`button-view-order-${order.id}`}
+                        >
+                          View Details
+                        </Button>
+                        <Button 
+                          variant="ghost" 
+                          size="sm"
+                          className="text-red-500 hover:text-red-700 hover:bg-red-50 p-1 h-7 w-7"
+                          onClick={() => setOrderToDelete(order)}
+                          data-testid={`button-delete-order-${order.id}`}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
                     </td>
                   </tr>
                 );
@@ -216,6 +251,35 @@ function OrdersManagement() {
           </table>
         </div>
       </CardContent>
+
+      {/* Delete Order Confirmation Dialog */}
+      <AlertDialog open={!!orderToDelete} onOpenChange={(open) => !open && setOrderToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Order</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete order <strong>{orderToDelete?.orderNumber}</strong>?
+              <br /><br />
+              This action cannot be undone. The order will be permanently removed from the system.
+              {orderToDelete?.erpSyncStatus === 'synced' && (
+                <p className="mt-2 text-amber-600 font-medium">
+                  Note: This order was already synced to eCount. Deleting it here will not remove it from the ERP system.
+                </p>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700"
+              onClick={() => orderToDelete && deleteOrderMutation.mutate(orderToDelete.id)}
+              disabled={deleteOrderMutation.isPending}
+            >
+              {deleteOrderMutation.isPending ? "Deleting..." : "Delete Order"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Order Details Dialog */}
       <Dialog open={!!selectedOrder} onOpenChange={(open) => !open && setSelectedOrder(null)}>

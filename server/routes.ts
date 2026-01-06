@@ -1086,6 +1086,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Delete order (admin only)
+  app.delete("/api/admin/orders/:orderId", requireAdminAuth, async (req, res) => {
+    try {
+      const { orderId } = req.params;
+      
+      console.log(`🗑️ Admin deleting order: ${orderId}`);
+      
+      const deleted = await storage.deleteOrder(orderId);
+      
+      if (!deleted) {
+        return res.status(404).json({ message: "Order not found" });
+      }
+      
+      console.log(`✅ Order deleted successfully: ${orderId}`);
+      res.json({ success: true, message: "Order deleted successfully" });
+    } catch (error) {
+      console.error('❌ Delete order error:', error);
+      res.status(500).json({ message: "Failed to delete order", error: error instanceof Error ? error.message : 'Unknown error' });
+    }
+  });
+
   app.get("/api/admin/inventory", requireAdminAuth, async (req, res) => {
     try {
       const inventory = await storage.getAllInventory();

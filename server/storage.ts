@@ -41,6 +41,7 @@ export interface IStorage {
   getOrdersByUserId(userId: string): Promise<Order[]>;
   getAllOrders(): Promise<Order[]>;
   getFailedOrders(): Promise<Order[]>;
+  deleteOrder(orderId: string): Promise<boolean>;
   updateOrderErpInfo(orderId: string, erpInfo: {
     erpDocNumber?: string;
     erpIoDate?: string;
@@ -420,6 +421,16 @@ export class MemStorage implements IStorage {
     return this.orders.get(id);
   }
 
+  async deleteOrder(orderId: string): Promise<boolean> {
+    const order = this.orders.get(orderId);
+    if (order) {
+      this.orders.delete(orderId);
+      console.log(`🗑️ Deleted order ${order.orderNumber} from memory`);
+      return true;
+    }
+    return false;
+  }
+
   async updateOrderErpInfo(orderId: string, erpInfo: {
     erpDocNumber?: string;
     erpIoDate?: string;
@@ -670,6 +681,27 @@ export class DatabaseStorage implements IStorage {
       }
     }
     return this.memStorage.getFailedOrders();
+  }
+
+  async deleteOrder(orderId: string): Promise<boolean> {
+    if (this.db) {
+      try {
+        const result = await this.db
+          .delete(ordersTable)
+          .where(eq(ordersTable.id, orderId))
+          .returning();
+        
+        if (result.length > 0) {
+          console.log(`🗑️ Deleted order ${result[0].orderNumber} from database`);
+          return true;
+        }
+        return false;
+      } catch (error) {
+        console.error('❌ Database error deleting order:', error);
+        return false;
+      }
+    }
+    return this.memStorage.deleteOrder(orderId);
   }
 
   async getPendingUsers(): Promise<User[]> {
