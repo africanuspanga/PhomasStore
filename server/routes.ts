@@ -3,12 +3,15 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { ecountApi } from "./ecountApi";
 import { ProductMapping } from "./productMapping";
-import { insertUserSchema, loginSchema, insertOrderSchema, supabaseSignUpSchema, adminSessions as adminSessionsTable } from "@shared/schema";
+import { insertUserSchema, loginSchema, insertOrderSchema, supabaseSignUpSchema, adminSessions as adminSessionsTable, adminPasswordChangeSchema } from "@shared/schema";
 import { eq, lt } from "drizzle-orm";
 import { v2 as cloudinary } from 'cloudinary';
 import multer from 'multer';
 import { randomUUID } from "crypto";
 import { createClient } from '@supabase/supabase-js';
+import bcrypt from 'bcrypt';
+
+const BCRYPT_ROUNDS = 12;
 
 // Validate and configure Cloudinary
 if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
@@ -538,60 +541,139 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Initialize admin credentials on first startup
+  const initializeAdminCredentials = async () => {
+    try {
+      const adminEmail = "admin@phomas.com";
+      const defaultPassword = "admin123";
+      
+      // Check if admin credentials exist
+      const existingCredential = await storage.getAdminCredential(adminEmail);
+      
+      if (!existingCredential) {
+        // Hash the default password and create initial credentials
+        const passwordHash = await bcrypt.hash(defaultPassword, BCRYPT_ROUNDS);
+        await storage.initAdminCredential(adminEmail, passwordHash);
+        console.log('🔐 Admin credentials initialized with default password');
+      } else {
+        console.log('🔐 Admin credentials already exist in database');
+      }
+    } catch (error) {
+      console.error('❌ Failed to initialize admin credentials:', error);
+    }
+  };
+  
+  // Initialize credentials (non-blocking)
+  initializeAdminCredentials();
+
   // Admin authentication endpoint for company admin
   app.post("/api/admin/login", async (req, res) => {
     try {
       const { email, password } = req.body;
       
-      // Check hardcoded admin credentials
-      if (email === "admin@phomas.com" && password === "admin123") {
-        // Create admin session token
-        const token = randomUUID();
-        const now = new Date();
-        const expiresAt = new Date(now.getTime() + 24 * 60 * 60 * 1000); // 24 hours
-        
-        // Save session to database for persistence across restarts
-        const db = storage.getDb();
-        if (db) {
-          try {
-            // Clean up old sessions for this email (keep only latest)
-            await db.delete(adminSessionsTable).where(eq(adminSessionsTable.email, email));
-            
-            // Insert new session
-            await db.insert(adminSessionsTable).values({
-              id: token,
-              userId: "admin-phomas",
-              email: email,
-              role: "admin",
-              createdAt: now,
-              expiresAt: expiresAt
-            });
-            console.log(`🔐 Admin login successful (database session): ${email}`);
-          } catch (dbError) {
-            console.error('🔐 Failed to save admin session to database:', dbError);
-            // Continue anyway - session will just not persist across restarts
-          }
-        } else {
-          console.warn('🔐 Admin login: Database not available, session will not persist across restarts');
-        }
-        
-        res.json({ 
-          success: true, 
-          token, 
-          user: { 
-            id: "admin-phomas",
-            email: email,
-            name: "PHOMAS DIAGNOSTICS",
-            role: "admin" 
-          } 
-        });
-      } else {
-        console.log(`🔐 Admin login failed: Invalid credentials for ${email}`);
+      // Get admin credentials from database
+      const credential = await storage.getAdminCredential(email);
+      
+      if (!credential) {
+        console.log(`🔐 Admin login failed: No credential found for ${email}`);
         return res.status(401).json({ message: "Invalid admin credentials" });
       }
+      
+      // Verify password with bcrypt
+      const passwordValid = await bcrypt.compare(password, credential.passwordHash);
+      
+      if (!passwordValid) {
+        console.log(`🔐 Admin login failed: Invalid password for ${email}`);
+        return res.status(401).json({ message: "Invalid admin credentials" });
+      }
+      
+      // Create admin session token
+      const token = randomUUID();
+      const now = new Date();
+      const expiresAt = new Date(now.getTime() + 24 * 60 * 60 * 1000); // 24 hours
+      
+      // Save session to database for persistence across restarts
+      const db = storage.getDb();
+      if (db) {
+        try {
+          // Clean up old sessions for this email (keep only latest)
+          await db.delete(adminSessionsTable).where(eq(adminSessionsTable.email, email));
+          
+          // Insert new session
+          await db.insert(adminSessionsTable).values({
+            id: token,
+            userId: "admin-phomas",
+            email: email,
+            role: "admin",
+            createdAt: now,
+            expiresAt: expiresAt
+          });
+          console.log(`🔐 Admin login successful (database session): ${email}`);
+        } catch (dbError) {
+          console.error('🔐 Failed to save admin session to database:', dbError);
+        }
+      }
+      
+      res.json({ 
+        success: true, 
+        token, 
+        user: { 
+          id: "admin-phomas",
+          email: email,
+          name: "PHOMAS DIAGNOSTICS",
+          role: "admin" 
+        } 
+      });
     } catch (error) {
       console.error('🔐 Admin login error:', error);
       res.status(400).json({ message: "Admin login failed", error });
+    }
+  });
+  
+  // Admin password change endpoint
+  app.post("/api/admin/change-password", requireAdminAuth, async (req, res) => {
+    try {
+      const validatedData = adminPasswordChangeSchema.parse(req.body);
+      const { oldPassword, newPassword } = validatedData;
+      const adminEmail = (req as any).userEmail;
+      
+      // Get current admin credentials
+      const credential = await storage.getAdminCredential(adminEmail);
+      
+      if (!credential) {
+        return res.status(400).json({ message: "Admin credentials not found" });
+      }
+      
+      // Verify old password
+      const oldPasswordValid = await bcrypt.compare(oldPassword, credential.passwordHash);
+      
+      if (!oldPasswordValid) {
+        return res.status(400).json({ message: "Current password is incorrect" });
+      }
+      
+      // Hash new password and update
+      const newPasswordHash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
+      await storage.updateAdminPassword(adminEmail, newPasswordHash);
+      
+      // Invalidate all existing admin sessions (force re-login)
+      const db = storage.getDb();
+      if (db) {
+        await db.delete(adminSessionsTable).where(eq(adminSessionsTable.email, adminEmail));
+        console.log(`🔐 All admin sessions invalidated for ${adminEmail}`);
+      }
+      
+      console.log(`🔐 Admin password changed successfully for ${adminEmail}`);
+      
+      res.json({ 
+        success: true, 
+        message: "Password changed successfully. Please log in again with your new password." 
+      });
+    } catch (error) {
+      if (error instanceof Error && error.name === 'ZodError') {
+        return res.status(400).json({ message: "Invalid password format", error: (error as any).errors });
+      }
+      console.error('🔐 Password change error:', error);
+      res.status(500).json({ message: "Failed to change password" });
     }
   });
 
