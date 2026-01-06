@@ -1,4 +1,4 @@
-import { type User, type InsertUser, type Product, type InsertProduct, type Inventory, type InsertInventory, type Order, type InsertOrder, type ProductWithInventory, type OrderItem, type ProductImage, type InsertProductImage, productImages, orders as ordersTable, users as usersTable } from "@shared/schema";
+import { type User, type InsertUser, type Product, type InsertProduct, type Inventory, type InsertInventory, type Order, type InsertOrder, type ProductWithInventory, type OrderItem, type ProductImage, type InsertProductImage, type AdminCredential, productImages, orders as ordersTable, users as usersTable, adminCredentials as adminCredentialsTable } from "@shared/schema";
 import { randomUUID } from "crypto";
 import * as fs from "fs";
 import * as path from "path";
@@ -48,6 +48,11 @@ export interface IStorage {
     erpSyncStatus?: string;
     erpSyncError?: string | null;
   }): Promise<Order>;
+
+  // Admin credential management
+  getAdminCredential(email: string): Promise<AdminCredential | null>;
+  updateAdminPassword(email: string, passwordHash: string): Promise<void>;
+  initAdminCredential(email: string, passwordHash: string): Promise<void>;
 }
 
 export class MemStorage implements IStorage {
@@ -454,6 +459,19 @@ export class MemStorage implements IStorage {
     this.orders.set(orderId, updatedOrder);
     return updatedOrder;
   }
+
+  // Admin credential methods - MemStorage doesn't persist these
+  async getAdminCredential(_email: string): Promise<AdminCredential | null> {
+    return null;
+  }
+
+  async updateAdminPassword(_email: string, _passwordHash: string): Promise<void> {
+    throw new Error("Admin credentials require database storage");
+  }
+
+  async initAdminCredential(_email: string, _passwordHash: string): Promise<void> {
+    throw new Error("Admin credentials require database storage");
+  }
 }
 
 // Database Storage using PostgreSQL for persistent data
@@ -857,6 +875,73 @@ export class DatabaseStorage implements IStorage {
   // Legacy method - for compatibility
   async updateProductImage(productId: string, imageUrl: string): Promise<void> {
     return this.setProductImage(productId, imageUrl);
+  }
+
+  // Admin credential management - stored in database for persistence
+  async getAdminCredential(email: string): Promise<AdminCredential | null> {
+    if (!this.db) {
+      console.error('❌ Database not available for admin credentials');
+      return null;
+    }
+
+    try {
+      const credentials = await this.db
+        .select()
+        .from(adminCredentialsTable)
+        .where(eq(adminCredentialsTable.email, email));
+      
+      return credentials[0] || null;
+    } catch (error) {
+      console.error('❌ Error fetching admin credentials:', error);
+      return null;
+    }
+  }
+
+  async updateAdminPassword(email: string, passwordHash: string): Promise<void> {
+    if (!this.db) {
+      throw new Error('Database not available for admin credentials');
+    }
+
+    try {
+      await this.db
+        .update(adminCredentialsTable)
+        .set({
+          passwordHash: passwordHash,
+          updatedAt: new Date()
+        })
+        .where(eq(adminCredentialsTable.email, email));
+      
+      console.log(`🔐 Admin password updated for ${email}`);
+    } catch (error) {
+      console.error('❌ Error updating admin password:', error);
+      throw new Error('Failed to update admin password');
+    }
+  }
+
+  async initAdminCredential(email: string, passwordHash: string): Promise<void> {
+    if (!this.db) {
+      throw new Error('Database not available for admin credentials');
+    }
+
+    try {
+      // Check if credential already exists
+      const existing = await this.getAdminCredential(email);
+      if (existing) {
+        console.log(`🔐 Admin credentials already exist for ${email}`);
+        return;
+      }
+
+      // Insert new admin credential
+      await this.db.insert(adminCredentialsTable).values({
+        email: email,
+        passwordHash: passwordHash
+      });
+      
+      console.log(`🔐 Admin credentials initialized for ${email}`);
+    } catch (error) {
+      console.error('❌ Error initializing admin credentials:', error);
+      throw new Error('Failed to initialize admin credentials');
+    }
   }
 }
 
