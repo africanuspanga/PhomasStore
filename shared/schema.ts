@@ -86,6 +86,15 @@ export const adminSessions = pgTable("admin_sessions", {
   expiresAt: timestamp("expires_at").notNull(),
 });
 
+// Admin Credentials - secure storage for admin password (hashed)
+export const adminCredentials = pgTable("admin_credentials", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  email: text("email").notNull().unique(),
+  passwordHash: text("password_hash").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // Product Mapping Cache - persistent storage of Excel product names for production deployments
 export const productMappings = pgTable("product_mappings", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -173,6 +182,23 @@ export type InsertOrder = z.infer<typeof insertOrderSchema>;
 export type ProductImage = typeof productImages.$inferSelect;
 export type InsertProductImage = z.infer<typeof insertProductImageSchema>;
 export type AdminSession = typeof adminSessions.$inferSelect;
+export type AdminCredential = typeof adminCredentials.$inferSelect;
+
+// Admin password change schema with validation
+export const adminPasswordChangeSchema = z.object({
+  oldPassword: z.string().min(1, "Current password is required"),
+  newPassword: z.string()
+    .min(8, "Password must be at least 8 characters")
+    .regex(/[A-Z]/, "Password must contain at least one uppercase letter")
+    .regex(/[a-z]/, "Password must contain at least one lowercase letter")
+    .regex(/[0-9]/, "Password must contain at least one number"),
+  confirmPassword: z.string().min(1, "Please confirm your new password"),
+}).refine((data) => data.newPassword === data.confirmPassword, {
+  message: "Passwords don't match",
+  path: ["confirmPassword"],
+});
+
+export type AdminPasswordChange = z.infer<typeof adminPasswordChangeSchema>;
 
 // Extended types for API responses
 export type ProductWithInventory = Product & {
