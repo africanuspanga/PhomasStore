@@ -14,7 +14,9 @@ import {
   Clock, 
   CheckCircle, 
   AlertCircle,
-  Info
+  Info,
+  FileSpreadsheet,
+  Upload
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -24,9 +26,21 @@ interface CacheStatus {
   isExpired: boolean;
 }
 
+interface ProductMappingStatus {
+  totalMapped: number;
+  isLoaded: boolean;
+  unmatchedCount: number;
+  productsWithImages: number;
+  activeExcelPath: string | null;
+  activeExcelFileName: string | null;
+  lastLoadedAt: string | null;
+}
+
 export function BulkSyncManager() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [excelFile, setExcelFile] = useState<File | null>(null);
+  const [fileInputKey, setFileInputKey] = useState(0);
   const [lastSyncTimes, setLastSyncTimes] = useState<{
     products?: string;
     inventory?: string;
@@ -37,6 +51,17 @@ export function BulkSyncManager() {
     queryKey: ['/api/admin/cache-status'],
     refetchInterval: 30000, // Refetch every 30 seconds
   });
+
+  const { data: mappingStatusResponse, refetch: refetchMappingStatus } = useQuery<{ success: boolean; data: ProductMappingStatus }>({
+    queryKey: ['/api/admin/product-mapping/status'],
+    queryFn: async () => {
+      const response = await apiRequest('GET', '/api/admin/product-mapping/status');
+      return response.json();
+    },
+    refetchInterval: 30000
+  });
+
+  const mappingStatus = mappingStatusResponse?.data;
 
   // Bulk product sync mutation
   const bulkSyncProductsMutation = useMutation({
@@ -101,6 +126,36 @@ export function BulkSyncManager() {
       toast({
         title: "Cache clear failed",
         description: error.message || "Failed to clear cache",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const uploadExcelMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const response = await apiRequest('POST', '/api/admin/product-mapping/upload', formData);
+      return response.json();
+    },
+    onSuccess: (data: any) => {
+      toast({
+        title: "Excel mapping updated",
+        description: `Loaded ${data.data?.totalMapped || 0} products and imported ${data.data?.importedImages || 0} images.`,
+      });
+      setExcelFile(null);
+      setFileInputKey(prev => prev + 1);
+      queryClient.invalidateQueries({ queryKey: ['/api/products'] });
+      queryClient.invalidateQueries({ queryKey: ['product-images'] });
+      queryClient.invalidateQueries({ queryKey: ['product-image'] });
+      refetchCacheStatus();
+      refetchMappingStatus();
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Excel upload failed",
+        description: error.message || "Failed to replace product mapping file",
         variant: "destructive",
       });
     },
@@ -271,6 +326,70 @@ export function BulkSyncManager() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Excel Mapping Upload */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center space-x-2">
+            <FileSpreadsheet className="w-5 h-5" />
+            <span>Excel Product Mapping</span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-gray-600">
+            Upload a new Excel file to replace the current product name/price mapping. Product codes must match eCount item codes. If the file has image URL columns, images will also be mapped automatically.
+          </p>
+
+          <div className="rounded-md border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700 space-y-1">
+            <div>
+              Active file: <span className="font-medium">{mappingStatus?.activeExcelFileName || 'Not loaded'}</span>
+            </div>
+            <div>
+              Mapped products: <span className="font-medium">{mappingStatus?.totalMapped ?? 0}</span>
+            </div>
+            <div>
+              Products with image URLs: <span className="font-medium">{mappingStatus?.productsWithImages ?? 0}</span>
+            </div>
+            <div>
+              Last loaded: <span className="font-medium">{formatLastUpdated(mappingStatus?.lastLoadedAt || null)}</span>
+            </div>
+          </div>
+
+          <input
+            key={fileInputKey}
+            type="file"
+            accept=".xlsx,.xls,.csv"
+            onChange={(event) => setExcelFile(event.target.files?.[0] || null)}
+            className="block w-full text-sm text-gray-700 file:mr-3 file:rounded-md file:border-0 file:bg-gray-100 file:px-3 file:py-2 file:text-sm file:font-medium hover:file:bg-gray-200"
+            data-testid="input-upload-product-excel"
+          />
+
+          {excelFile && (
+            <div className="text-xs text-gray-600">
+              Selected: <span className="font-medium">{excelFile.name}</span>
+            </div>
+          )}
+
+          <Button
+            onClick={() => excelFile && uploadExcelMutation.mutate(excelFile)}
+            disabled={!excelFile || uploadExcelMutation.isPending}
+            className="w-full"
+            data-testid="button-upload-product-excel"
+          >
+            {uploadExcelMutation.isPending ? (
+              <>
+                <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                Replacing Excel Mapping...
+              </>
+            ) : (
+              <>
+                <Upload className="w-4 h-4 mr-2" />
+                Upload and Replace Excel
+              </>
+            )}
+          </Button>
+        </CardContent>
+      </Card>
 
       <Separator />
 

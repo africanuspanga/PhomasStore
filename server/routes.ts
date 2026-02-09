@@ -10,6 +10,8 @@ import multer from 'multer';
 import { randomUUID } from "crypto";
 import { createClient } from '@supabase/supabase-js';
 import bcrypt from 'bcrypt';
+import * as fs from 'fs';
+import * as path from 'path';
 
 const BCRYPT_ROUNDS = 12;
 
@@ -90,6 +92,14 @@ const upload = multer({
     } else {
       cb(new Error('Only image files are allowed'));
     }
+  }
+});
+
+const excelUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 20 * 1024 * 1024, // 20MB limit
+    files: 1
   }
 });
 
@@ -1195,6 +1205,110 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(inventory);
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch inventory", error });
+    }
+  });
+
+  app.get("/api/admin/product-mapping/status", requireAdminAuth, async (_req, res) => {
+    try {
+      await ProductMapping.ensureLoaded();
+      const stats = ProductMapping.getStats();
+
+      res.json({
+        success: true,
+        data: stats
+      });
+    } catch (error) {
+      console.error('Failed to get product mapping status:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to get product mapping status',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
+  app.post("/api/admin/product-mapping/upload", requireAdminAuth, excelUpload.single('file'), async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({
+          success: false,
+          message: 'No Excel file provided'
+        });
+      }
+
+      const uploadDir = path.join(process.cwd(), 'attached_assets');
+      if (!fs.existsSync(uploadDir)) {
+        fs.mkdirSync(uploadDir, { recursive: true });
+      }
+
+      const originalName = req.file.originalname || 'product-mapping.xlsx';
+      const extension = path.extname(originalName).toLowerCase() || '.xlsx';
+      const allowedExtensions = new Set(['.xlsx', '.xls', '.csv']);
+      if (!allowedExtensions.has(extension)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid file type. Please upload .xlsx, .xls, or .csv'
+        });
+      }
+
+      const safeBaseName = path
+        .basename(originalName, extension)
+        .replace(/[^a-zA-Z0-9_-]/g, '_')
+        .slice(0, 80) || 'product_mapping';
+      const fileName = `${safeBaseName}_${Date.now()}${extension}`;
+      const filePath = path.join(uploadDir, fileName);
+
+      fs.writeFileSync(filePath, req.file.buffer);
+      await ProductMapping.setExcelFilePath(filePath);
+
+      const mappingStats = ProductMapping.getStats();
+      const imageMappings = ProductMapping.getImageMappings();
+      let importedImages = 0;
+      let failedImageImports = 0;
+
+      // Import image URLs from Excel when the file includes an image URL column.
+      if (imageMappings.length > 0) {
+        const batchSize = 25;
+
+        for (let i = 0; i < imageMappings.length; i += batchSize) {
+          const batch = imageMappings.slice(i, i + batchSize);
+          const results = await Promise.allSettled(
+            batch.map(mapping => storage.setProductImage(mapping.code, mapping.imageUrl))
+          );
+
+          for (const result of results) {
+            if (result.status === 'fulfilled') {
+              importedImages++;
+            } else {
+              failedImageImports++;
+            }
+          }
+        }
+      }
+
+      // Clear cache so /api/products immediately uses fresh Excel mapping.
+      ecountApi.clearInventoryCache();
+
+      res.json({
+        success: true,
+        message: 'Excel mapping replaced successfully',
+        data: {
+          fileName,
+          filePath,
+          totalMapped: mappingStats.totalMapped,
+          productsWithImages: mappingStats.productsWithImages,
+          importedImages,
+          failedImageImports,
+          lastLoadedAt: mappingStats.lastLoadedAt
+        }
+      });
+    } catch (error) {
+      console.error('Failed to upload and apply product mapping Excel:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to upload product mapping Excel',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
     }
   });
 
