@@ -203,7 +203,7 @@ export class ProductMapping {
       const sheetName = workbook.SheetNames[0];
       const worksheet = workbook.Sheets[sheetName];
       
-      const rawRows = XLSX.utils.sheet_to_json<(string | number)[]>(worksheet, { header: 1, defval: '' });
+      const rawRows = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' }) as Array<(string | number)[]>;
       console.log('📊 Total raw rows:', rawRows.length);
       
       // Find header row

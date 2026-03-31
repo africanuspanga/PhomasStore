@@ -17,7 +17,7 @@ interface ProductCardProps {
 export function ProductCard({ product, viewMode = "grid" }: ProductCardProps) {
   const [quantity, setQuantity] = useState(1);
   const { addItem, getItemQuantity } = useCart();
-  const { user } = useAuth();
+  const { isAdmin } = useAuth();
   const [isAdding, setIsAdding] = useState(false);
   
   // Fetch image separately from product data
@@ -79,7 +79,7 @@ export function ProductCard({ product, viewMode = "grid" }: ProductCardProps) {
                       Exp: {new Date(product.expirationDate!).toLocaleDateString()}
                     </Badge>
                   )}
-                  {product.isLowStock && user?.role === 'admin' && (
+                  {product.isLowStock && isAdmin && (
                     <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">
                       <AlertTriangle className="w-3 h-3 mr-1" />
                       Low Stock
@@ -147,7 +147,7 @@ export function ProductCard({ product, viewMode = "grid" }: ProductCardProps) {
               Exp: {new Date(product.expirationDate!).toLocaleDateString().split('/').slice(0, 2).join('/')}
             </Badge>
           )}
-          {product.isLowStock && user?.role === 'admin' && (
+          {product.isLowStock && isAdmin && (
             <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200 block">
               <AlertTriangle className="w-3 h-3 mr-1" />
               Low Stock
