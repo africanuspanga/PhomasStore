@@ -50,7 +50,7 @@ export const ecountService = {
   },
 
   async getAllOrders(): Promise<Order[]> {
-    const response = await apiRequest("GET", "/api/orders");
+    const response = await apiRequest("GET", "/api/admin/orders");
     return await response.json();
   },
 

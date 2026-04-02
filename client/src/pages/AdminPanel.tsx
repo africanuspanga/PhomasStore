@@ -38,7 +38,7 @@ function OrdersManagement() {
   const { toast } = useToast();
   
   const { data: orders = [], isLoading } = useQuery<Order[]>({
-    queryKey: ["/api/orders"],
+    queryKey: ["/api/admin/orders"],
     queryFn: () => ecountService.getAllOrders(),
   });
 
@@ -48,7 +48,7 @@ function OrdersManagement() {
       return await res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/orders"] });
       setOrderToDelete(null);
       toast({
         title: "Order Deleted",

@@ -3,7 +3,19 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist/public",
   "functions": {
+    "api/products.ts": {
+      "maxDuration": 60
+    },
     "api/admin/login.ts": {
+      "maxDuration": 60
+    },
+    "api/admin/orders.ts": {
+      "maxDuration": 60
+    },
+    "api/admin/users.ts": {
+      "maxDuration": 60
+    },
+    "api/admin/pending-users.ts": {
       "maxDuration": 60
     },
     "api/admin/change-password.ts": {
@@ -18,8 +30,24 @@
   },
   "routes": [
     {
+      "src": "/api/products",
+      "dest": "/api/products.ts"
+    },
+    {
       "src": "/api/admin/login",
       "dest": "/api/admin/login.ts"
+    },
+    {
+      "src": "/api/admin/orders",
+      "dest": "/api/admin/orders.ts"
+    },
+    {
+      "src": "/api/admin/users",
+      "dest": "/api/admin/users.ts"
+    },
+    {
+      "src": "/api/admin/pending-users",
+      "dest": "/api/admin/pending-users.ts"
     },
     {
       "src": "/api/admin/change-password",
