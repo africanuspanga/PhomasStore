@@ -60,9 +60,13 @@ export default function AdminRecovery() {
 
       setLocation("/admin-login");
     } catch (error) {
+      const description = error instanceof Error
+        ? error.message.replace(/^\d+:\s*/, "").trim() || "The server blocked the recovery request. If this is on Vercel, redeploy after the API routing fix."
+        : "Failed to recover admin access";
+
       toast({
         title: "Recovery Failed",
-        description: error instanceof Error ? error.message.replace(/^\d+:\s*/, "") : "Failed to recover admin access",
+        description,
         variant: "destructive",
       });
     } finally {

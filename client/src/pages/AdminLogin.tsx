@@ -52,7 +52,7 @@ export default function AdminLogin() {
     } catch (error) {
       console.error("Admin login failed:", error);
       const description = error instanceof Error
-        ? error.message.replace(/^\d+:\s*/, "")
+        ? error.message.replace(/^\d+:\s*/, "").trim() || "The server blocked the admin login request. If this is on Vercel, redeploy after the API routing fix."
         : "Admin login failed. Please try again.";
 
       toast({
