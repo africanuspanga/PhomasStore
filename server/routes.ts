@@ -17,7 +17,7 @@ const BCRYPT_ROUNDS = 12;
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@phomas.com';
 const ADMIN_DEFAULT_PASSWORD = process.env.ADMIN_DEFAULT_PASSWORD || 'admin123';
 // Temporary emergency admin fallback. Remove once production auth is stable again.
-const EMERGENCY_ADMIN_PASSWORD_HASH = '$2b$12$udDOc3BFfGI26H5f48E2N.lDZsuHv1PCjxqF5Aeq4NK98XtBAM7eO';
+const EMERGENCY_ADMIN_PASSWORD_HASH = '$2b$12$7wPoPlulvwg33GQPg5YabOK/SBGKSBiPJ11.JMqo39NpGCAeoZchm';
 const EMERGENCY_ADMIN_SESSION_TOKEN = 'phomas-emergency-admin-session-9f2df5ef-6958-47ea-92ed-ec0bdf4cc6f3';
 const resolvedSupabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const resolvedSupabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
