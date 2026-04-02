@@ -1,8 +1,9 @@
 import {
   ADMIN_EMAIL,
-  createSupabaseAuthClient,
+  hasSupabaseAuthConfig,
   isAdminUser,
   parseJsonBody,
+  signInWithPassword,
 } from "./_shared";
 
 export default async function handler(req: any, res: any) {
@@ -19,18 +20,15 @@ export default async function handler(req: any, res: any) {
       return res.status(400).json({ message: "Email and password are required" });
     }
 
-    const authClient = createSupabaseAuthClient();
-    if (!authClient) {
+    if (!hasSupabaseAuthConfig()) {
       return res.status(503).json({ message: "Supabase auth is not configured on the server" });
     }
 
-    const { data, error } = await authClient.auth.signInWithPassword({
-      email,
-      password,
-    });
+    const result = await signInWithPassword(email, password);
+    const data = result.data;
 
-    if (error || !data.user || !data.session) {
-      return res.status(401).json({ message: error?.message || "Invalid admin credentials" });
+    if (!result.ok || !data?.user || !data?.access_token) {
+      return res.status(401).json({ message: result.error || "Invalid admin credentials" });
     }
 
     if (!isAdminUser(data.user) || data.user.email !== ADMIN_EMAIL) {
@@ -39,7 +37,7 @@ export default async function handler(req: any, res: any) {
 
     return res.status(200).json({
       success: true,
-      token: data.session.access_token,
+      token: data.access_token,
       authSource: "supabase-serverless",
       user: {
         id: data.user.id,

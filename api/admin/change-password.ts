@@ -1,10 +1,11 @@
 import {
   ADMIN_EMAIL,
   adminMetadata,
-  createSupabaseAdminClient,
-  createSupabaseAuthClient,
-  isAdminUser,
+  hasSupabaseAdminConfig,
+  hasSupabaseAuthConfig,
   parseJsonBody,
+  signInWithPassword,
+  updateUserById,
   validatePassword,
 } from "./_shared";
 
@@ -14,12 +15,6 @@ export default async function handler(req: any, res: any) {
   }
 
   try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return res.status(401).json({ message: "Admin authentication required" });
-    }
-
-    const token = authHeader.slice(7);
     const body = parseJsonBody(req);
     const oldPassword = body.oldPassword;
     const newPassword = body.newPassword;
@@ -33,42 +28,28 @@ export default async function handler(req: any, res: any) {
       return res.status(400).json({ message: passwordError });
     }
 
-    const authClient = createSupabaseAuthClient();
-    const adminClient = createSupabaseAdminClient();
-
-    if (!authClient) {
+    if (!hasSupabaseAuthConfig()) {
       return res.status(503).json({ message: "Supabase auth is not configured on the server" });
     }
 
-    if (!adminClient) {
+    if (!hasSupabaseAdminConfig()) {
       return res.status(503).json({ message: "Supabase admin API is not configured on the server" });
     }
 
-    const { data: userData, error: userError } = await authClient.auth.getUser(token);
-    if (userError || !userData.user) {
-      return res.status(401).json({ message: "Invalid or expired admin session" });
-    }
+    const verifyResult = await signInWithPassword(ADMIN_EMAIL, oldPassword);
+    const adminUser = verifyResult.data?.user;
 
-    if (!isAdminUser(userData.user) || userData.user.email !== ADMIN_EMAIL) {
-      return res.status(403).json({ message: "Admin access required" });
-    }
-
-    const { error: verifyError } = await authClient.auth.signInWithPassword({
-      email: userData.user.email!,
-      password: oldPassword,
-    });
-
-    if (verifyError) {
+    if (!verifyResult.ok || !adminUser || adminUser.email !== ADMIN_EMAIL) {
       return res.status(400).json({ message: "Current password is incorrect" });
     }
 
-    const { error: updateError } = await adminClient.auth.admin.updateUserById(userData.user.id, {
+    const updateResult = await updateUserById(adminUser.id, {
       password: newPassword,
-      user_metadata: adminMetadata(userData.user),
+      user_metadata: adminMetadata(adminUser),
     });
 
-    if (updateError) {
-      console.error("Admin password change failed:", updateError.message);
+    if (!updateResult.ok) {
+      console.error("Admin password change failed:", updateResult.error);
       return res.status(500).json({ message: "Failed to change password" });
     }
 

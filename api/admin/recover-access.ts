@@ -1,9 +1,11 @@
 import {
   ADMIN_EMAIL,
   adminMetadata,
-  createSupabaseAdminClient,
+  createUser,
   findAdminUser,
+  hasSupabaseAdminConfig,
   parseJsonBody,
+  updateUserById,
   validatePassword,
 } from "./_shared";
 
@@ -36,37 +38,36 @@ export default async function handler(req: any, res: any) {
       return res.status(400).json({ message: passwordError });
     }
 
-    const adminClient = createSupabaseAdminClient();
-    if (!adminClient) {
+    if (!hasSupabaseAdminConfig()) {
       return res.status(503).json({ message: "Supabase admin API is not configured on the server" });
     }
 
-    const { user: existingUser, error: findError } = await findAdminUser(adminClient, email);
+    const { user: existingUser, error: findError } = await findAdminUser(email);
     if (findError) {
       console.error("Admin recovery user lookup failed:", findError);
       return res.status(500).json({ message: "Failed to look up admin account" });
     }
 
     if (existingUser) {
-      const { error } = await adminClient.auth.admin.updateUserById(existingUser.id, {
+      const result = await updateUserById(existingUser.id, {
         password: newPassword,
         user_metadata: adminMetadata(existingUser),
       });
 
-      if (error) {
-        console.error("Admin recovery password update failed:", error.message);
+      if (!result.ok) {
+        console.error("Admin recovery password update failed:", result.error);
         return res.status(500).json({ message: "Failed to reset admin password" });
       }
     } else {
-      const { error } = await adminClient.auth.admin.createUser({
+      const result = await createUser({
         email,
         password: newPassword,
         email_confirm: true,
         user_metadata: adminMetadata(),
       });
 
-      if (error) {
-        console.error("Admin recovery user creation failed:", error.message);
+      if (!result.ok) {
+        console.error("Admin recovery user creation failed:", result.error);
         return res.status(500).json({ message: "Failed to create admin account" });
       }
     }
