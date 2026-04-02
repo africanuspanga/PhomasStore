@@ -656,7 +656,7 @@ export default function AdminPanel() {
 
   const approveUserMutation = useMutation({
     mutationFn: async (userId: string) => {
-      const res = await apiRequest("POST", `/api/admin/approve-user/${userId}`);
+      const res = await apiRequest("POST", "/api/admin/approve-user", { userId });
       return await res.json();
     },
     onSuccess: () => {

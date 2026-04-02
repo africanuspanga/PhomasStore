@@ -15,6 +15,9 @@
     "api/admin/orders.ts": {
       "maxDuration": 60
     },
+    "api/admin/approve-user.ts": {
+      "maxDuration": 60
+    },
     "api/admin/users.ts": {
       "maxDuration": 60
     },
@@ -47,6 +50,10 @@
     {
       "src": "/api/admin/orders",
       "dest": "/api/admin/orders.ts"
+    },
+    {
+      "src": "/api/admin/approve-user",
+      "dest": "/api/admin/approve-user.ts"
     },
     {
       "src": "/api/admin/users",

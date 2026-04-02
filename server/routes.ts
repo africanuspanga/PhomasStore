@@ -1373,40 +1373,61 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  const approveUserRegistration = async (userId: string, res: Response) => {
+    console.log(`✅ Admin approving user: ${userId}`);
+    const adminClient = getSupabaseAdminClientOrRespond(res);
+    if (!adminClient) {
+      return;
+    }
+
+    const { data: { user: currentUser }, error: getUserError } = await adminClient.auth.admin.getUserById(userId);
+
+    if (getUserError || !currentUser) {
+      console.error('❌ Failed to get user:', getUserError);
+      res.status(getUserError?.status || 404).json({
+        message: currentUser ? "Failed to get user" : "User not found",
+        error: getUserError?.message
+      });
+      return;
+    }
+
+    const updatedMetadata = {
+      ...currentUser.user_metadata,
+      approved: true
+    };
+
+    const { data, error } = await adminClient.auth.admin.updateUserById(userId, {
+      user_metadata: updatedMetadata
+    });
+
+    if (error) {
+      console.error('❌ Failed to approve user:', error);
+      res.status(500).json({ message: "Failed to approve user", error: error.message });
+      return;
+    }
+
+    console.log(`✅ User approved successfully: ${data.user.email}`);
+    res.json({ success: true, message: "User approved successfully", user: data.user });
+  };
+
   // Approve a user registration
+  app.post("/api/admin/approve-user", requireAdminAuth, async (req, res) => {
+    try {
+      const userId = typeof req.body?.userId === 'string' ? req.body.userId.trim() : '';
+      if (!userId) {
+        return res.status(400).json({ message: "User ID is required" });
+      }
+      await approveUserRegistration(userId, res);
+    } catch (error) {
+      console.error('❌ Approve user error:', error);
+      res.status(500).json({ message: "Failed to approve user", error: error instanceof Error ? error.message : 'Unknown error' });
+    }
+  });
+
   app.post("/api/admin/approve-user/:userId", requireAdminAuth, async (req, res) => {
     try {
       const { userId } = req.params;
-      console.log(`✅ Admin approving user: ${userId}`);
-      const adminClient = getSupabaseAdminClientOrRespond(res);
-      if (!adminClient) return;
-      
-      // First, get the current user to preserve their metadata
-      const { data: { user: currentUser }, error: getUserError } = await adminClient.auth.admin.getUserById(userId);
-      
-      if (getUserError || !currentUser) {
-        console.error('❌ Failed to get user:', getUserError);
-        return res.status(500).json({ message: "Failed to get user", error: getUserError?.message });
-      }
-      
-      // Merge existing metadata with approved flag
-      const updatedMetadata = {
-        ...currentUser.user_metadata,
-        approved: true
-      };
-      
-      // Update user metadata to set approved = true while preserving other fields
-      const { data, error } = await adminClient.auth.admin.updateUserById(userId, {
-        user_metadata: updatedMetadata
-      });
-      
-      if (error) {
-        console.error('❌ Failed to approve user:', error);
-        return res.status(500).json({ message: "Failed to approve user", error: error.message });
-      }
-      
-      console.log(`✅ User approved successfully: ${data.user.email}`);
-      res.json({ success: true, message: "User approved successfully", user: data.user });
+      await approveUserRegistration(userId, res);
     } catch (error) {
       console.error('❌ Approve user error:', error);
       res.status(500).json({ message: "Failed to approve user", error: error instanceof Error ? error.message : 'Unknown error' });
