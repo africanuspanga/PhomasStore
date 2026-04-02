@@ -6,6 +6,7 @@ import { createClient } from '@supabase/supabase-js';
 import { eq, desc } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
+import { getProductCodeLookupCandidates, normalizeProductCode } from "./productCode.ts";
 
 export interface IStorage {
   // User management
@@ -111,6 +112,56 @@ export class MemStorage implements IStorage {
     } catch (error) {
       console.error('Failed to save image mappings:', error);
     }
+  }
+
+  private findProductImage(productCode: string): ProductImage | undefined {
+    const exactMatch = this.productImages.get(productCode);
+    if (exactMatch) {
+      return exactMatch;
+    }
+
+    const normalizedCode = normalizeProductCode(productCode);
+    if (!normalizedCode) {
+      return undefined;
+    }
+
+    return Array.from(this.productImages.values()).find((image) =>
+      normalizeProductCode(image.productCode) === normalizedCode
+    );
+  }
+
+  private async upsertProductImage(
+    productCode: string,
+    imageUrl: string,
+    priority: number,
+    persist: boolean
+  ): Promise<void> {
+    const existingImage = this.productImages.get(productCode);
+
+    if (existingImage) {
+      existingImage.imageUrl = imageUrl;
+      existingImage.priority = priority;
+      existingImage.updatedAt = new Date();
+    } else {
+      const newImage: ProductImage = {
+        id: randomUUID(),
+        productCode,
+        imageUrl,
+        priority,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      this.productImages.set(productCode, newImage);
+    }
+
+    if (persist) {
+      console.log(`🖼️ Set image for product ${productCode}: ${imageUrl}`);
+      await this.saveImageMappings();
+    }
+  }
+
+  async cacheProductImage(productCode: string, imageUrl: string, priority: number = 0): Promise<void> {
+    await this.upsertProductImage(productCode, imageUrl, priority, false);
   }
 
   private initializeData() {
@@ -318,42 +369,19 @@ export class MemStorage implements IStorage {
 
   // NEW IMAGE MANAGEMENT METHODS - completely separate from eCount
   async getProductImage(productCode: string): Promise<string | null> {
-    const productImage = this.productImages.get(productCode);
+    const productImage = this.findProductImage(productCode);
     return productImage?.imageUrl || null;
   }
 
   async setProductImage(productCode: string, imageUrl: string, priority: number = 0): Promise<void> {
-    const existingImage = this.productImages.get(productCode);
-    
-    if (existingImage) {
-      // Update existing image
-      existingImage.imageUrl = imageUrl;
-      existingImage.priority = priority;
-      existingImage.updatedAt = new Date();
-    } else {
-      // Create new image record
-      const newImage: ProductImage = {
-        id: randomUUID(),
-        productCode,
-        imageUrl,
-        priority,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-      this.productImages.set(productCode, newImage);
-    }
-    
-    console.log(`🖼️ Set image for product ${productCode}: ${imageUrl}`);
-    
-    // Save to persistent storage
-    await this.saveImageMappings();
+    await this.upsertProductImage(productCode, imageUrl, priority, true);
   }
 
   async getProductImages(productCodes: string[]): Promise<Record<string, string>> {
     const result: Record<string, string> = {};
     
     for (const code of productCodes) {
-      const productImage = this.productImages.get(code);
+      const productImage = this.findProductImage(code);
       if (productImage) {
         result[code] = productImage.imageUrl;
       }
@@ -363,7 +391,18 @@ export class MemStorage implements IStorage {
   }
 
   async deleteProductImage(productCode: string): Promise<void> {
-    const deleted = this.productImages.delete(productCode);
+    let deleted = this.productImages.delete(productCode);
+    const normalizedCode = normalizeProductCode(productCode);
+
+    if (normalizedCode) {
+      for (const [storedCode] of Array.from(this.productImages.entries())) {
+        if (normalizeProductCode(storedCode) === normalizedCode) {
+          this.productImages.delete(storedCode);
+          deleted = true;
+        }
+      }
+    }
+
     if (deleted) {
       console.log(`🗑️ Deleted image for product ${productCode}`);
       
@@ -479,6 +518,9 @@ export class DatabaseStorage implements IStorage {
   private memStorage: MemStorage;
   private supabase: any;
   private db: any; // Drizzle database instance
+  private productImagesCache: Array<{ productCode: string; imageUrl: string }> | null = null;
+  private productImagesCacheTimestamp = 0;
+  private readonly PRODUCT_IMAGES_CACHE_TTL = 5 * 60 * 1000;
 
   constructor() {
     // Use MemStorage for products/inventory (eCount handles those)
@@ -546,6 +588,51 @@ export class DatabaseStorage implements IStorage {
   // Get database instance for direct queries (admin sessions, etc.)
   getDb() {
     return this.db;
+  }
+
+  private invalidateProductImagesCache(): void {
+    this.productImagesCache = null;
+    this.productImagesCacheTimestamp = 0;
+  }
+
+  private async loadAllProductImagesFromDatabase(forceRefresh = false): Promise<Array<{ productCode: string; imageUrl: string }>> {
+    if (!this.supabase) {
+      return [];
+    }
+
+    const cacheIsFresh =
+      this.productImagesCache &&
+      (Date.now() - this.productImagesCacheTimestamp) < this.PRODUCT_IMAGES_CACHE_TTL;
+
+    if (!forceRefresh && cacheIsFresh && this.productImagesCache) {
+      return this.productImagesCache;
+    }
+
+    const { data, error } = await this.supabase
+      .from('product_images')
+      .select('product_code, image_url');
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    const images = (data || [])
+      .filter((row: any) => row?.product_code && row?.image_url)
+      .map((row: any) => ({
+        productCode: row.product_code as string,
+        imageUrl: row.image_url as string,
+      }));
+
+    this.productImagesCache = images;
+    this.productImagesCacheTimestamp = Date.now();
+
+    await Promise.allSettled(
+      images.map((image: { productCode: string; imageUrl: string }) =>
+        this.memStorage.cacheProductImage(image.productCode, image.imageUrl, 0)
+      )
+    );
+
+    return images;
   }
 
   // Delegate all non-image methods to MemStorage
@@ -772,36 +859,38 @@ export class DatabaseStorage implements IStorage {
 
   // PERSISTENT PRODUCT IMAGE METHODS - DATABASE-FIRST (PRODUCTION FIX)
   async getProductImage(productCode: string): Promise<string | null> {
-    // PRODUCTION FIX: Use raw SQL to bypass schema cache
     if (this.supabase) {
-      try {
-        const { data, error } = await this.supabase.rpc('get_product_image', {
-          p_product_code: productCode
-        });
+      const candidates = getProductCodeLookupCandidates(productCode);
 
-        if (!error && data) {
-          const imageUrl = data as string;
-          // Cache in memory for faster subsequent reads
-          this.memStorage.setProductImage(productCode, imageUrl, 0).catch(() => {
-            // Ignore cache write failures
+      try {
+        for (const candidate of candidates) {
+          const { data, error } = await this.supabase.rpc('get_product_image', {
+            p_product_code: candidate
           });
-          return imageUrl;
+
+          if (!error && data) {
+            const imageUrl = data as string;
+            this.memStorage.cacheProductImage(productCode, imageUrl, 0).catch(() => {
+              // Ignore cache write failures
+            });
+            return imageUrl;
+          }
+
+          if (error && error.code !== 'PGRST116') {
+            console.error(`❌ Database read error for ${candidate}:`, error.message);
+          }
         }
-        
-        if (error && error.code !== 'PGRST116') { // PGRST116 = not found
-          console.error(`❌ Database read error for ${productCode}:`, error.message);
-        }
+
+        await this.loadAllProductImagesFromDatabase();
       } catch (error) {
         console.error(`❌ Database exception for ${productCode}:`, error);
       }
     }
 
-    // Fallback to file cache (will be empty after restart)
     return this.memStorage.getProductImage(productCode);
   }
 
   async setProductImage(productCode: string, imageUrl: string, priority: number = 0): Promise<void> {
-    // PRODUCTION FIX: Use raw SQL to bypass schema cache
     if (this.supabase) {
       try {
         await this.supabase.rpc('set_product_image', {
@@ -809,6 +898,7 @@ export class DatabaseStorage implements IStorage {
           p_image_url: imageUrl,
           p_priority: priority
         });
+        this.invalidateProductImagesCache();
         console.log(`💾 Saved image to database: ${productCode}`);
       } catch (error) {
         console.error(`❌ Failed to save image to database for ${productCode}:`, error);
@@ -828,21 +918,43 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getProductImages(productCodes: string[]): Promise<Record<string, string>> {
-    // PRODUCTION FIX: Use raw SQL to bypass schema cache
+    const uniqueRequestedCodes = Array.from(new Set(productCodes.filter(Boolean)));
+    const resolvedImages: Record<string, string> = {};
+
     if (this.supabase && productCodes.length > 0) {
+      const lookupCodes = Array.from(new Set(
+        uniqueRequestedCodes.flatMap((code) => getProductCodeLookupCandidates(code))
+      ));
+
       try {
         const { data, error } = await this.supabase.rpc('get_product_images_batch', {
-          p_product_codes: productCodes
+          p_product_codes: lookupCodes
         });
 
         if (!error && data && Array.isArray(data)) {
-          const result: Record<string, string> = {};
+          const exactMatches = new Map<string, string>();
+          const normalizedMatches = new Map<string, string>();
+
           for (const row of data) {
-            result[row.product_code] = row.image_url;
-            // Warm cache in background (non-blocking)
-            this.memStorage.setProductImage(row.product_code, row.image_url, 0).catch(() => {});
+            if (!row?.product_code || !row?.image_url) {
+              continue;
+            }
+
+            const rowCode = row.product_code as string;
+            const rowImageUrl = row.image_url as string;
+
+            exactMatches.set(rowCode, rowImageUrl);
+            normalizedMatches.set(normalizeProductCode(rowCode), rowImageUrl);
+            this.memStorage.cacheProductImage(rowCode, rowImageUrl, 0).catch(() => {});
           }
-          return result;
+
+          for (const code of uniqueRequestedCodes) {
+            const imageUrl = exactMatches.get(code) || normalizedMatches.get(normalizeProductCode(code));
+            if (imageUrl) {
+              resolvedImages[code] = imageUrl;
+              this.memStorage.cacheProductImage(code, imageUrl, 0).catch(() => {});
+            }
+          }
         }
         
         if (error) {
@@ -853,17 +965,35 @@ export class DatabaseStorage implements IStorage {
       }
     }
 
-    // Fallback to file cache
-    return this.memStorage.getProductImages(productCodes);
+    const unresolvedCodes = uniqueRequestedCodes.filter((code) => !resolvedImages[code]);
+
+    if (unresolvedCodes.length > 0 && this.supabase) {
+      try {
+        await this.loadAllProductImagesFromDatabase();
+      } catch (error) {
+        console.error('❌ Failed to refresh product images cache:', error);
+      }
+    }
+
+    const fallbackImages = await this.memStorage.getProductImages(unresolvedCodes);
+    return {
+      ...fallbackImages,
+      ...resolvedImages,
+    };
   }
 
   async deleteProductImage(productCode: string): Promise<void> {
-    // PRODUCTION FIX: Use raw SQL to bypass schema cache
     if (this.supabase) {
       try {
-        await this.supabase.rpc('delete_product_image', {
-          p_product_code: productCode
-        });
+        const candidates = getProductCodeLookupCandidates(productCode);
+
+        for (const candidate of candidates) {
+          await this.supabase.rpc('delete_product_image', {
+            p_product_code: candidate
+          });
+        }
+
+        this.invalidateProductImagesCache();
         console.log(`🗑️ Deleted image from database: ${productCode}`);
       } catch (error) {
         console.error(`❌ Failed to delete image from database for ${productCode}:`, error);

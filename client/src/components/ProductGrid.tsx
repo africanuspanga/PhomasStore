@@ -6,6 +6,7 @@ import { ProductCard } from "./ProductCard";
 import { SearchBar } from "./SearchBar";
 import type { ProductWithInventory } from "@shared/schema";
 import { cn } from "@/lib/utils";
+import { useProductImages } from "@/hooks/useProductImages";
 
 interface ProductGridProps {
   products: ProductWithInventory[];
@@ -16,6 +17,8 @@ export function ProductGrid({ products, isLoading }: ProductGridProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [categoryFilter, setCategoryFilter] = useState("all");
+  const productCodes = useMemo(() => products.map((product) => product.id), [products]);
+  const { data: productImages = {} } = useProductImages(productCodes);
 
   const filteredProducts = useMemo(() => {
     const filtered = products.filter(product => {
@@ -148,6 +151,7 @@ export function ProductGrid({ products, isLoading }: ProductGridProps) {
               key={product.id}
               product={product}
               viewMode={viewMode}
+              productImageUrl={productImages[product.id] || null}
             />
           ))}
         </div>

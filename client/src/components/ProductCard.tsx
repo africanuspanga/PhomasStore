@@ -6,22 +6,20 @@ import { Badge } from "@/components/ui/badge";
 import { useCart } from "@/contexts/CartContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { ShoppingCart, Clock, AlertTriangle } from "lucide-react";
-import { useProductImage, getImageWithFallback } from "@/hooks/useProductImages";
+import { getImageWithFallback } from "@/hooks/useProductImages";
 import type { ProductWithInventory } from "@shared/schema";
 
 interface ProductCardProps {
   product: ProductWithInventory;
   viewMode?: "grid" | "list";
+  productImageUrl?: string | null;
 }
 
-export function ProductCard({ product, viewMode = "grid" }: ProductCardProps) {
+export function ProductCard({ product, viewMode = "grid", productImageUrl }: ProductCardProps) {
   const [quantity, setQuantity] = useState(1);
   const { addItem, getItemQuantity } = useCart();
   const { isAdmin } = useAuth();
   const [isAdding, setIsAdding] = useState(false);
-  
-  // Fetch image separately from product data
-  const { data: productImageUrl } = useProductImage(product.id);
 
   const currentCartQuantity = getItemQuantity(product.id);
   const maxQuantity = product.availableQuantity - currentCartQuantity;

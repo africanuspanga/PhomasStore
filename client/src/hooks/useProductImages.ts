@@ -10,15 +10,19 @@ export interface ProductImageData {
  * This replaces the old system where images were embedded in product data
  */
 export function useProductImages(productCodes: string[]) {
+  const normalizedCodes = [...productCodes].sort();
+
   return useQuery({
-    queryKey: ['product-images', productCodes.sort().join(',')],
+    queryKey: ['product-images', normalizedCodes.join(',')],
     queryFn: async (): Promise<ProductImageData> => {
-      if (productCodes.length === 0) {
+      if (normalizedCodes.length === 0) {
         return {};
       }
       
-      const codesParam = productCodes.join(',');
-      const response = await fetch(`/api/images?codes=${codesParam}`);
+      const searchParams = new URLSearchParams({
+        codes: normalizedCodes.join(','),
+      });
+      const response = await fetch(`/api/images?${searchParams.toString()}`);
       
       if (!response.ok) {
         console.warn('Failed to fetch product images:', response.status);
@@ -28,7 +32,7 @@ export function useProductImages(productCodes: string[]) {
       const data = await response.json();
       return data.images || {};
     },
-    enabled: productCodes.length > 0,
+    enabled: normalizedCodes.length > 0,
     staleTime: 5 * 60 * 1000, // 5 minutes (matches server cache)
     refetchOnWindowFocus: false,
   });
@@ -41,7 +45,7 @@ export function useProductImage(productCode: string) {
   return useQuery({
     queryKey: ['product-image', productCode],
     queryFn: async (): Promise<string | null> => {
-      const response = await fetch(`/api/images/${productCode}`);
+      const response = await fetch(`/api/images/${encodeURIComponent(productCode)}`);
       
       if (response.status === 404) {
         return null; // No image found
@@ -131,7 +135,7 @@ export function useSetProductImageUrl() {
 export function useDeleteProductImage() {
   return useMutation({
     mutationFn: async (productCode: string) => {
-      const response = await fetch(`/api/images/${productCode}`, {
+      const response = await fetch(`/api/images/${encodeURIComponent(productCode)}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('phomas_admin_token')}`,

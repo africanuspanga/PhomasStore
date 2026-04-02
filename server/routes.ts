@@ -2218,7 +2218,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "codes parameter is required" });
       }
       
-      const productCodes = typeof codes === 'string' ? codes.split(',') : [];
+      const productCodes = typeof codes === 'string'
+        ? codes.split(',').map((code) => code.trim()).filter(Boolean)
+        : [];
       const images = await storage.getProductImages(productCodes);
       
       res.setHeader('Cache-Control', 'public, max-age=300'); // 5 minute cache
@@ -2230,9 +2232,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get single image by product code
-  app.get("/api/images/:code", async (req, res) => {
+  app.get("/api/images/:code(*)", async (req, res) => {
     try {
-      const { code } = req.params;
+      const code = decodeURIComponent(req.params.code || '').trim();
       const imageUrl = await storage.getProductImage(code);
       
       if (!imageUrl) {
@@ -2248,9 +2250,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Delete image by product code
-  app.delete("/api/images/:code", async (req, res) => {
+  app.delete("/api/images/:code(*)", async (req, res) => {
     try {
-      const { code } = req.params;
+      const code = decodeURIComponent(req.params.code || '').trim();
       await storage.deleteProductImage(code);
       
       console.log(`🗑️ Deleted image for product ${code}`);

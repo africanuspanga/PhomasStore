@@ -1,6 +1,7 @@
 import * as XLSX from 'xlsx/xlsx.mjs';
 import * as fs from 'fs';
 import { basename, extname, isAbsolute, join, resolve } from 'path';
+import { normalizeProductCode as normalizeCode } from './productCode.ts';
 
 interface ProductMappingEntry {
   name: string;
@@ -45,14 +46,7 @@ export class ProductMapping {
    * Normalize product codes for consistent matching
    */
   private static normalizeProductCode(code: string): string {
-    if (!code) return '';
-    
-    return code
-      .toString()
-      .trim()
-      .replace(/[-\s]/g, '')
-      .replace(/^0+/, '')
-      .toUpperCase();
+    return normalizeCode(code);
   }
 
   /**
