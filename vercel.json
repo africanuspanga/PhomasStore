@@ -3,7 +3,7 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist/public",
   "functions": {
-    "api/admin/login.js": {
+    "api/admin/login.ts": {
       "maxDuration": 60
     },
     "api/admin/change-password.ts": {
@@ -19,7 +19,7 @@
   "routes": [
     {
       "src": "/api/admin/login",
-      "dest": "/api/admin/login.js"
+      "dest": "/api/admin/login.ts"
     },
     {
       "src": "/api/admin/change-password",
