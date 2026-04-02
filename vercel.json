@@ -3,22 +3,22 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist/public",
   "functions": {
-    "api/health-read.js": {
+    "api/health.ts": {
       "maxDuration": 60
     },
-    "api/products-read.js": {
+    "api/products.ts": {
       "maxDuration": 60
     },
     "api/admin/login.ts": {
       "maxDuration": 60
     },
-    "api/admin/orders-read.js": {
+    "api/admin/orders.ts": {
       "maxDuration": 60
     },
-    "api/admin/users-read.js": {
+    "api/admin/users.ts": {
       "maxDuration": 60
     },
-    "api/admin/pending-users-read.js": {
+    "api/admin/pending-users.ts": {
       "maxDuration": 60
     },
     "api/admin/change-password.ts": {
@@ -34,11 +34,11 @@
   "routes": [
     {
       "src": "/api/health",
-      "dest": "/api/health-read.js"
+      "dest": "/api/health.ts"
     },
     {
       "src": "/api/products",
-      "dest": "/api/products-read.js"
+      "dest": "/api/products.ts"
     },
     {
       "src": "/api/admin/login",
@@ -46,15 +46,15 @@
     },
     {
       "src": "/api/admin/orders",
-      "dest": "/api/admin/orders-read.js"
+      "dest": "/api/admin/orders.ts"
     },
     {
       "src": "/api/admin/users",
-      "dest": "/api/admin/users-read.js"
+      "dest": "/api/admin/users.ts"
     },
     {
       "src": "/api/admin/pending-users",
-      "dest": "/api/admin/pending-users-read.js"
+      "dest": "/api/admin/pending-users.ts"
     },
     {
       "src": "/api/admin/change-password",
