@@ -23,6 +23,7 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+const ADMIN_EMAIL = "admin@phomas.com";
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<Profile | null>(null);
@@ -94,6 +95,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Get current user data for fallback
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
+      const isSupabaseAdmin = user.email === ADMIN_EMAIL ||
+        user.user_metadata?.role === "admin" ||
+        user.user_metadata?.user_type === "admin";
 
       // Try to load profile from Supabase profiles table (if it exists)
       try {
@@ -121,7 +125,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         address: user.user_metadata?.address || '',
         brelaNumber: user.user_metadata?.brela_number || '',
         tinNumber: user.user_metadata?.tin_number || '',
-        userType: user.user_metadata?.user_type || 'company',
+        userType: isSupabaseAdmin ? 'admin' : user.user_metadata?.user_type || 'company',
         createdAt: new Date(user.created_at)
       });
     } catch (error) {
@@ -150,7 +154,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // Check if user is approved (unless they're admin)
         const metadata = data.user.user_metadata || {};
         const isApproved = metadata.approved === true;
-        const isAdmin = credentials.email === 'admin@phomas.com';
+        const isAdmin = data.user.email === ADMIN_EMAIL ||
+          metadata.role === 'admin' ||
+          metadata.user_type === 'admin';
 
         if (!isApproved && !isAdmin) {
           // Sign out the user immediately

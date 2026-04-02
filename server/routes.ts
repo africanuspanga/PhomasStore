@@ -14,6 +14,11 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 const BCRYPT_ROUNDS = 12;
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@phomas.com';
+const ADMIN_DEFAULT_PASSWORD = process.env.ADMIN_DEFAULT_PASSWORD || 'admin123';
+const resolvedSupabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+const resolvedSupabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+const resolvedSupabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || resolvedSupabaseAnonKey;
 
 // Validate and configure Cloudinary
 if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
@@ -63,20 +68,73 @@ const ensureUploadPreset = async () => {
 ensureUploadPreset();
 
 // Initialize Supabase client for server-side auth verification
-const supabaseUrl = process.env.SUPABASE_URL || 'https://placeholder.supabase.co';
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || 'placeholder-key';
-
-if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+if (!resolvedSupabaseUrl || !resolvedSupabaseServiceKey) {
   console.warn('⚠️  Supabase Auth not fully configured - some features may be limited');
 }
 
-const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+const supabase = createClient(
+  resolvedSupabaseUrl || 'https://placeholder.supabase.co',
+  resolvedSupabaseServiceKey || 'placeholder-key',
+  {
   auth: {
     autoRefreshToken: false,
     persistSession: false
   },
   db: { schema: 'public' }
-})
+});
+
+const createSupabaseAuthClient = () => {
+  const authKey = resolvedSupabaseAnonKey || resolvedSupabaseServiceKey;
+
+  if (!resolvedSupabaseUrl || !authKey) {
+    return null;
+  }
+
+  return createClient(resolvedSupabaseUrl, authKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false
+    },
+    db: { schema: 'public' }
+  });
+};
+
+const isSupabaseAdminUser = (user: any) => {
+  return user?.email === ADMIN_EMAIL ||
+    user?.user_metadata?.role === 'admin' ||
+    user?.user_metadata?.user_type === 'admin';
+};
+
+let adminCredentialInitPromise: Promise<void> | null = null;
+
+const ensureAdminCredentialsInitialized = async () => {
+  if (!adminCredentialInitPromise) {
+    adminCredentialInitPromise = (async () => {
+      if (!storage.getDb()) {
+        console.warn('⚠️ Admin credential bootstrap skipped: database not configured');
+        return;
+      }
+
+      const existingCredential = await storage.getAdminCredential(ADMIN_EMAIL);
+
+      if (existingCredential) {
+        console.log('🔐 Admin credentials already exist in database');
+        return;
+      }
+
+      const passwordHash = await bcrypt.hash(ADMIN_DEFAULT_PASSWORD, BCRYPT_ROUNDS);
+      await storage.initAdminCredential(ADMIN_EMAIL, passwordHash);
+      console.log('🔐 Admin credentials initialized for bootstrap admin account');
+    })();
+  }
+
+  try {
+    await adminCredentialInitPromise;
+  } catch (error) {
+    adminCredentialInitPromise = null;
+    throw error;
+  }
+};
 
 // Configure multer with proper validation
 const upload = multer({ 
@@ -368,9 +426,7 @@ const requireAdminAuth = async (req: Request, res: Response, next: NextFunction)
     
     if (!error && user) {
       // Check if user is admin (admin@phomas.com or has admin role in metadata)
-      const isAdmin = user.email === 'admin@phomas.com' || 
-                      user.user_metadata?.role === 'admin' ||
-                      user.user_metadata?.user_type === 'admin';
+      const isAdmin = isSupabaseAdminUser(user);
       
       if (isAdmin) {
         (req as any).userId = user.id;
@@ -519,7 +575,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Check if user is approved
       const metadata = authData.user.user_metadata || {};
       const isApproved = metadata.approved === true;
-      const isAdmin = email === 'admin@phomas.com';
+      const isAdmin = authData.user.email === ADMIN_EMAIL || isSupabaseAdminUser(authData.user);
       
       if (!isApproved && !isAdmin) {
         console.log('🔐 Login blocked - user not approved:', { email, userId: authData.user.id });
@@ -551,47 +607,80 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Initialize admin credentials on first startup
-  const initializeAdminCredentials = async () => {
-    try {
-      const adminEmail = "admin@phomas.com";
-      const defaultPassword = "admin123";
-      
-      // Check if admin credentials exist
-      const existingCredential = await storage.getAdminCredential(adminEmail);
-      
-      if (!existingCredential) {
-        // Hash the default password and create initial credentials
-        const passwordHash = await bcrypt.hash(defaultPassword, BCRYPT_ROUNDS);
-        await storage.initAdminCredential(adminEmail, passwordHash);
-        console.log('🔐 Admin credentials initialized with default password');
-      } else {
-        console.log('🔐 Admin credentials already exist in database');
-      }
-    } catch (error) {
-      console.error('❌ Failed to initialize admin credentials:', error);
-    }
-  };
-  
   // Initialize credentials (non-blocking)
-  initializeAdminCredentials();
+  ensureAdminCredentialsInitialized().catch((error) => {
+    console.error('❌ Failed to initialize admin credentials:', error);
+  });
 
   // Admin authentication endpoint for company admin
   app.post("/api/admin/login", async (req, res) => {
     try {
       const { email, password } = req.body;
-      
-      // Get admin credentials from database
+
+      if (!email || !password) {
+        return res.status(400).json({ message: "Email and password are required" });
+      }
+
+      await ensureAdminCredentialsInitialized().catch((error) => {
+        console.error('❌ Admin credential bootstrap failed during login:', error);
+      });
+
+      const supabaseAuthClient = createSupabaseAuthClient();
+
+      if (supabaseAuthClient) {
+        try {
+          const { data, error } = await supabaseAuthClient.auth.signInWithPassword({
+            email,
+            password
+          });
+
+          if (!error && data.user && data.session) {
+            if (!isSupabaseAdminUser(data.user)) {
+              console.log(`🔐 Admin login rejected: ${email} is not an admin user`);
+              return res.status(403).json({ message: "Admin access required" });
+            }
+
+            console.log(`🔐 Admin login successful via Supabase: ${email}`);
+            return res.json({
+              success: true,
+              token: data.session.access_token,
+              authSource: "supabase",
+              user: {
+                id: data.user.id,
+                email: data.user.email,
+                name: data.user.user_metadata?.name || "PHOMAS DIAGNOSTICS",
+                role: "admin"
+              }
+            });
+          }
+
+          if (error) {
+            console.log(`🔐 Supabase admin login fallback failed for ${email}: ${error.message}`);
+          }
+        } catch (supabaseError) {
+          console.error('🔐 Supabase admin login exception:', supabaseError);
+        }
+      } else {
+        console.warn('⚠️ Supabase admin login fallback unavailable: missing server-side Supabase configuration');
+      }
+
+      // Fall back to database-backed admin credentials for compatibility
       const credential = await storage.getAdminCredential(email);
-      
+
       if (!credential) {
+        if (!storage.getDb() && !supabaseAuthClient) {
+          console.log(`🔐 Admin login failed: No auth backend configured for ${email}`);
+          return res.status(503).json({
+            message: "Admin authentication is not configured on the server"
+          });
+        }
+
         console.log(`🔐 Admin login failed: No credential found for ${email}`);
         return res.status(401).json({ message: "Invalid admin credentials" });
       }
-      
-      // Verify password with bcrypt
+
       const passwordValid = await bcrypt.compare(password, credential.passwordHash);
-      
+
       if (!passwordValid) {
         console.log(`🔐 Admin login failed: Invalid password for ${email}`);
         return res.status(401).json({ message: "Invalid admin credentials" });
@@ -626,7 +715,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json({ 
         success: true, 
-        token, 
+        token,
+        authSource: "database",
         user: { 
           id: "admin-phomas",
           email: email,
@@ -933,9 +1023,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // User is authenticated - verify they're accessing their own orders
         if (user.id !== req.params.userId) {
           // Check if admin accessing another user's orders
-          const isAdmin = user.email === 'admin@phomas.com' || 
-                          user.user_metadata?.role === 'admin' ||
-                          user.user_metadata?.user_type === 'admin';
+          const isAdmin = isSupabaseAdminUser(user);
           if (!isAdmin) {
             console.log(`🔐 User ${user.id} attempted to access orders for ${req.params.userId}`);
             return res.status(403).json({ message: "You can only access your own orders" });
@@ -992,7 +1080,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           id: user.id,
           email: user.email || '',
           companyName: metadata.name || metadata.company_name || 'Unknown Company',
-          role: user.email === 'admin@phomas.com' ? 'admin' : 'client',
+          role: user.email === ADMIN_EMAIL ? 'admin' : 'client',
           createdAt: user.created_at ? new Date(user.created_at) : new Date(),
           userType: metadata.user_type || 'individual',
           phone: metadata.phone || '',
@@ -1035,7 +1123,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // This includes both new users (approved: false) and existing users (approved: undefined)
       const pendingUsers = users.filter(user => {
         const metadata = user.user_metadata || {};
-        return metadata.approved !== true && user.email !== 'admin@phomas.com';
+        return metadata.approved !== true && user.email !== ADMIN_EMAIL;
       }).map(user => {
         const metadata = user.user_metadata || {};
         return {
@@ -1112,7 +1200,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Prevent deleting admin account
-      if (targetUser.email === 'admin@phomas.com') {
+      if (targetUser.email === ADMIN_EMAIL) {
         return res.status(403).json({ message: "Cannot delete admin account" });
       }
       

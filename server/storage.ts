@@ -486,10 +486,17 @@ export class DatabaseStorage implements IStorage {
     
     // Initialize PostgreSQL database connection
     // Priority: DATABASE_URL > Supabase Transaction Pooler > Memory fallback
-    const directDbUrl = process.env.DATABASE_URL;
-    const supabaseUrl = process.env.SUPABASE_URL;
-    const dbPassword = process.env.PGPASSWORD;
-    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
+    const directDbUrl = process.env.DATABASE_URL ||
+      process.env.POSTGRES_URL ||
+      process.env.POSTGRES_PRISMA_URL ||
+      process.env.SUPABASE_DB_URL;
+    const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+    const dbPassword = process.env.PGPASSWORD ||
+      process.env.SUPABASE_DB_PASSWORD ||
+      process.env.POSTGRES_PASSWORD;
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ||
+      process.env.SUPABASE_ANON_KEY ||
+      process.env.VITE_SUPABASE_ANON_KEY;
     
     if (directDbUrl) {
       // Use direct DATABASE_URL if provided (works with Render, Railway, etc.)
@@ -517,7 +524,7 @@ export class DatabaseStorage implements IStorage {
       }
     } else {
       console.error('❌ DATABASE NOT CONFIGURED! Orders will NOT persist!');
-      console.error('   Set DATABASE_URL or (SUPABASE_URL + PGPASSWORD) environment variables');
+      console.error('   Set DATABASE_URL/POSTGRES_URL or (SUPABASE_URL + PGPASSWORD/SUPABASE_DB_PASSWORD) environment variables');
       this.db = null;
     }
     

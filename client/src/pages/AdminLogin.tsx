@@ -47,13 +47,17 @@ export default function AdminLogin() {
         });
         
         // Force page refresh to trigger AuthContext re-initialization
-        window.location.href = "/";
+        window.location.href = "/admin";
       }
     } catch (error) {
       console.error("Admin login failed:", error);
+      const description = error instanceof Error
+        ? error.message.replace(/^\d+:\s*/, "")
+        : "Admin login failed. Please try again.";
+
       toast({
         title: "Login Failed",
-        description: "Invalid admin credentials. Please check your email and password.",
+        description,
         variant: "destructive",
       });
     } finally {
