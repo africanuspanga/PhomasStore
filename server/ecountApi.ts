@@ -11,8 +11,17 @@ const ECOUNT_CONFIG = {
   warehouseCode: process.env.ECOUNT_WAREHOUSE_CODE!,
 };
 
+const authKeyLength = ECOUNT_CONFIG.authKey?.length ?? 0;
+const authKeyPreview = authKeyLength > 0
+  ? `${ECOUNT_CONFIG.authKey.substring(0, Math.min(8, authKeyLength))}...${ECOUNT_CONFIG.authKey.substring(Math.max(authKeyLength - 4, 0))}`
+  : "NOT_CONFIGURED";
+
 // Log auth key status (first 8 chars only for security)
-console.log(`🔑 Using AUTH_KEY: ${ECOUNT_CONFIG.authKey?.substring(0, 8)}...${ECOUNT_CONFIG.authKey?.substring(ECOUNT_CONFIG.authKey.length - 4)} (length: ${ECOUNT_CONFIG.authKey?.length})`);
+console.log(`🔑 Using AUTH_KEY: ${authKeyPreview} (length: ${authKeyLength})`);
+
+if (!ECOUNT_CONFIG.companyCode || !ECOUNT_CONFIG.authKey || !ECOUNT_CONFIG.userId || !ECOUNT_CONFIG.zone || !ECOUNT_CONFIG.warehouseCode) {
+  console.warn('⚠️ eCount environment variables are incomplete. eCount product/order routes may fail, but non-eCount routes should still work.');
+}
 
 const TEST_BASE_URL = "https://sboapi{ZONE}.ecount.com";
 const PROD_BASE_URL = "https://oapi{ZONE}.ecount.com";
