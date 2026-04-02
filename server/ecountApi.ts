@@ -1,6 +1,6 @@
 import type { ProductWithInventory, Order } from "@shared/schema";
-import { ProductMapping } from "./productMapping";
-import { storage } from "./storage";
+import { ProductMapping } from "./productMapping.ts";
+import { storage } from "./storage.ts";
 
 // eCount API Configuration - Production Ready
 const ECOUNT_CONFIG = {
