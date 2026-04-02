@@ -2,7 +2,11 @@ export const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "admin@phomas.com";
 
 const resolvedSupabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const resolvedSupabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
-const resolvedSupabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const resolvedSupabaseServiceRoleKey =
+  process.env.SUPABASE_SERVICE_ROLE_KEY ||
+  process.env.SUPABASE_SERVICE_KEY ||
+  process.env.SUPABASE_SERVICE_ROLE ||
+  process.env.SUPABASE_SECRET_KEY;
 const authBaseUrl = resolvedSupabaseUrl ? `${resolvedSupabaseUrl.replace(/\/$/, "")}/auth/v1` : null;
 
 type SupabaseFetchOptions = {
@@ -146,7 +150,7 @@ export async function listUsers() {
 }
 
 export async function updateUserById(userId: string, payload: Record<string, unknown>) {
-  return supabaseFetch(`/admin/user/${userId}`, {
+  return supabaseFetch(`/admin/users/${userId}`, {
     method: "PUT",
     body: payload,
     useServiceRole: true,
