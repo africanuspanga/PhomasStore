@@ -3,11 +3,32 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist/public",
   "functions": {
+    "api/admin/login.ts": {
+      "maxDuration": 60
+    },
+    "api/admin/change-password.ts": {
+      "maxDuration": 60
+    },
+    "api/admin/recover-access.ts": {
+      "maxDuration": 60
+    },
     "api/[...path].ts": {
       "maxDuration": 60
     }
   },
   "routes": [
+    {
+      "src": "/api/admin/login",
+      "dest": "/api/admin/login.ts"
+    },
+    {
+      "src": "/api/admin/change-password",
+      "dest": "/api/admin/change-password.ts"
+    },
+    {
+      "src": "/api/admin/recover-access",
+      "dest": "/api/admin/recover-access.ts"
+    },
     {
       "src": "/api/(.*)",
       "dest": "/api/[...path].ts"
