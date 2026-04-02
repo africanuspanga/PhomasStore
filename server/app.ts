@@ -1,6 +1,6 @@
 import express, { type Express, type NextFunction, type Request, type Response } from "express";
 import { registerRoutes } from "./routes";
-import { log, serveStatic, setupVite } from "./vite";
+import { log } from "./logger";
 
 let cachedVercelAppPromise: Promise<Express> | null = null;
 
@@ -57,8 +57,10 @@ export async function createServerApp() {
   applyErrorHandler(app);
 
   if (app.get("env") === "development") {
+    const { setupVite } = await import("./vite");
     await setupVite(app, server);
   } else {
+    const { serveStatic } = await import("./vite");
     serveStatic(app);
   }
 

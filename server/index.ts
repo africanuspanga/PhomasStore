@@ -1,5 +1,5 @@
 import { createServerApp } from "./app";
-import { log } from "./vite";
+import { log } from "./logger";
 
 (async () => {
   const { server } = await createServerApp();
