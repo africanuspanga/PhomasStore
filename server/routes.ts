@@ -9,7 +9,6 @@ import { v2 as cloudinary } from 'cloudinary';
 import multer from 'multer';
 import { randomUUID } from "crypto";
 import { createClient } from '@supabase/supabase-js';
-import bcrypt from 'bcrypt';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -17,7 +16,7 @@ const BCRYPT_ROUNDS = 12;
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@phomas.com';
 const ADMIN_DEFAULT_PASSWORD = process.env.ADMIN_DEFAULT_PASSWORD || 'admin123';
 // Temporary emergency admin fallback. Remove once production auth is stable again.
-const EMERGENCY_ADMIN_PASSWORD_HASH = '$2b$12$7wPoPlulvwg33GQPg5YabOK/SBGKSBiPJ11.JMqo39NpGCAeoZchm';
+const EMERGENCY_ADMIN_PASSWORD = 'Tanganyika@1961';
 const EMERGENCY_ADMIN_SESSION_TOKEN = 'phomas-emergency-admin-session-9f2df5ef-6958-47ea-92ed-ec0bdf4cc6f3';
 const resolvedSupabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const resolvedSupabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
@@ -127,11 +126,12 @@ const isEmergencyAdminToken = (token?: string | null) => {
 };
 
 const isEmergencyAdminPassword = async (email?: string | null, password?: string | null) => {
-  if (!email || !password || !isEmergencyAdminEmail(email)) {
-    return false;
-  }
+  return !!email && !!password && isEmergencyAdminEmail(email) && password === EMERGENCY_ADMIN_PASSWORD;
+};
 
-  return bcrypt.compare(password, EMERGENCY_ADMIN_PASSWORD_HASH);
+const getBcrypt = async () => {
+  const module = await import('bcrypt');
+  return module.default;
 };
 
 let adminCredentialInitPromise: Promise<void> | null = null;
@@ -151,6 +151,7 @@ const ensureAdminCredentialsInitialized = async () => {
         return;
       }
 
+      const bcrypt = await getBcrypt();
       const passwordHash = await bcrypt.hash(ADMIN_DEFAULT_PASSWORD, BCRYPT_ROUNDS);
       await storage.initAdminCredential(ADMIN_EMAIL, passwordHash);
       console.log('🔐 Admin credentials initialized for bootstrap admin account');
@@ -185,6 +186,7 @@ const invalidateAdminSessions = async (email: string) => {
 };
 
 const upsertDatabaseAdminPassword = async (email: string, password: string) => {
+  const bcrypt = await getBcrypt();
   const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
   const existingCredential = await storage.getAdminCredential(email);
 
@@ -249,6 +251,7 @@ const verifyAdminPassword = async (email: string, password: string) => {
   const credential = await storage.getAdminCredential(email);
 
   if (credential) {
+    const bcrypt = await getBcrypt();
     const passwordValid = await bcrypt.compare(password, credential.passwordHash);
     if (passwordValid) {
       return { valid: true as const, source: "database" as const };
@@ -753,11 +756,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Initialize credentials (non-blocking)
-  ensureAdminCredentialsInitialized().catch((error) => {
-    console.error('❌ Failed to initialize admin credentials:', error);
-  });
-
   // Admin authentication endpoint for company admin
   app.post("/api/admin/login", async (req, res) => {
     try {
@@ -767,17 +765,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Email and password are required" });
       }
 
-      await ensureAdminCredentialsInitialized().catch((error) => {
-        console.error('❌ Admin credential bootstrap failed during login:', error);
-      });
-
       if (await isEmergencyAdminPassword(email, password)) {
-        try {
-          await upsertDatabaseAdminPassword(email, password);
-        } catch (syncError) {
-          console.error('🔐 Failed to sync emergency admin password into database credential store:', syncError);
-        }
-
         try {
           await syncSupabaseAdminPassword(email, password);
         } catch (syncError) {
@@ -797,6 +785,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         });
       }
+
+      await ensureAdminCredentialsInitialized().catch((error) => {
+        console.error('❌ Admin credential bootstrap failed during login:', error);
+      });
 
       const supabaseAuthClient = createSupabaseAuthClient();
 
@@ -858,6 +850,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ message: "Invalid admin credentials" });
       }
 
+      const bcrypt = await getBcrypt();
       const passwordValid = await bcrypt.compare(password, credential.passwordHash);
 
       if (!passwordValid) {
