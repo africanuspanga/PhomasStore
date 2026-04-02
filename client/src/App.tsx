@@ -11,6 +11,7 @@ import Login from "@/pages/Login";
 import Registration from "@/pages/Registration";
 import AuthConfirm from "@/pages/AuthConfirm";
 import AdminLogin from "@/pages/AdminLogin";
+import AdminRecovery from "@/pages/AdminRecovery";
 import Cart from "@/pages/Cart";
 import OrderHistory from "@/pages/OrderHistory";
 import AdminPanel from "@/pages/AdminPanel";
@@ -49,6 +50,7 @@ function Router() {
       <Route path="/registration" component={Registration} />
       <Route path="/auth/confirm" component={AuthConfirm} />
       <Route path="/admin-login" component={AdminLogin} />
+      <Route path="/admin-recovery" component={AdminRecovery} />
       <Route path="/">
         <ProtectedRoute>
           <Home />

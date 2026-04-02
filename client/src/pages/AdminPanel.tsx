@@ -453,7 +453,7 @@ function SecurityManagement() {
       setConfirmPassword("");
       // Logout and redirect to admin login
       logout();
-      setLocation("/admin/login");
+      setLocation("/admin-login");
     },
     onError: (error) => {
       toast({

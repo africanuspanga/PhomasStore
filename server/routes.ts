@@ -83,6 +83,16 @@ const supabase = createClient(
   db: { schema: 'public' }
 });
 
+const supabaseAdminClient = resolvedSupabaseUrl && process.env.SUPABASE_SERVICE_ROLE_KEY
+  ? createClient(resolvedSupabaseUrl, process.env.SUPABASE_SERVICE_ROLE_KEY, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false
+      },
+      db: { schema: 'public' }
+    })
+  : null;
+
 const createSupabaseAuthClient = () => {
   const authKey = resolvedSupabaseAnonKey || resolvedSupabaseServiceKey;
 
@@ -134,6 +144,111 @@ const ensureAdminCredentialsInitialized = async () => {
     adminCredentialInitPromise = null;
     throw error;
   }
+};
+
+const getSupabaseAdminClientOrRespond = (res: Response) => {
+  if (!supabaseAdminClient) {
+    res.status(503).json({ message: "Supabase admin API is not configured on the server" });
+    return null;
+  }
+
+  return supabaseAdminClient;
+};
+
+const invalidateAdminSessions = async (email: string) => {
+  const db = storage.getDb();
+  if (!db) {
+    return;
+  }
+
+  await db.delete(adminSessionsTable).where(eq(adminSessionsTable.email, email));
+  console.log(`🔐 All admin sessions invalidated for ${email}`);
+};
+
+const upsertDatabaseAdminPassword = async (email: string, password: string) => {
+  const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
+  const existingCredential = await storage.getAdminCredential(email);
+
+  if (existingCredential) {
+    await storage.updateAdminPassword(email, passwordHash);
+  } else {
+    await storage.initAdminCredential(email, passwordHash);
+  }
+};
+
+const syncSupabaseAdminPassword = async (email: string, password: string) => {
+  if (!supabaseAdminClient) {
+    return { available: false as const, action: "skipped" as const };
+  }
+
+  const { data: { users }, error } = await supabaseAdminClient.auth.admin.listUsers();
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const existingUser = users.find((user) => user.email?.toLowerCase() === email.toLowerCase());
+  const userMetadata = {
+    ...(existingUser?.user_metadata || {}),
+    name: existingUser?.user_metadata?.name || "PHOMAS DIAGNOSTICS",
+    role: "admin",
+    user_type: "admin",
+    approved: true,
+  };
+
+  if (existingUser) {
+    const { error: updateError } = await supabaseAdminClient.auth.admin.updateUserById(existingUser.id, {
+      password,
+      user_metadata: userMetadata,
+    });
+
+    if (updateError) {
+      throw new Error(updateError.message);
+    }
+
+    return { available: true as const, action: "updated" as const };
+  }
+
+  const { error: createError } = await supabaseAdminClient.auth.admin.createUser({
+    email,
+    password,
+    email_confirm: true,
+    user_metadata: userMetadata,
+  });
+
+  if (createError) {
+    throw new Error(createError.message);
+  }
+
+  return { available: true as const, action: "created" as const };
+};
+
+const verifyAdminPassword = async (email: string, password: string) => {
+  const credential = await storage.getAdminCredential(email);
+
+  if (credential) {
+    const passwordValid = await bcrypt.compare(password, credential.passwordHash);
+    if (passwordValid) {
+      return { valid: true as const, source: "database" as const };
+    }
+  }
+
+  const supabaseAuthClient = createSupabaseAuthClient();
+  if (supabaseAuthClient) {
+    try {
+      const { data, error } = await supabaseAuthClient.auth.signInWithPassword({
+        email,
+        password
+      });
+
+      if (!error && data.user && isSupabaseAdminUser(data.user)) {
+        return { valid: true as const, source: "supabase" as const };
+      }
+    } catch (supabaseError) {
+      console.error('🔐 Supabase admin password verification failed:', supabaseError);
+    }
+  }
+
+  return { valid: false as const, source: null };
 };
 
 // Configure multer with proper validation
@@ -640,6 +755,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
               return res.status(403).json({ message: "Admin access required" });
             }
 
+            try {
+              await upsertDatabaseAdminPassword(email, password);
+            } catch (syncError) {
+              console.error('🔐 Failed to sync admin password into database credential store:', syncError);
+            }
+
             console.log(`🔐 Admin login successful via Supabase: ${email}`);
             return res.json({
               success: true,
@@ -684,6 +805,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!passwordValid) {
         console.log(`🔐 Admin login failed: Invalid password for ${email}`);
         return res.status(401).json({ message: "Invalid admin credentials" });
+      }
+
+      try {
+        await syncSupabaseAdminPassword(email, password);
+      } catch (syncError) {
+        console.error('🔐 Failed to sync admin password into Supabase:', syncError);
       }
       
       // Create admin session token
@@ -736,31 +863,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const validatedData = adminPasswordChangeSchema.parse(req.body);
       const { oldPassword, newPassword } = validatedData;
       const adminEmail = (req as any).userEmail;
-      
-      // Get current admin credentials
-      const credential = await storage.getAdminCredential(adminEmail);
-      
-      if (!credential) {
-        return res.status(400).json({ message: "Admin credentials not found" });
-      }
-      
-      // Verify old password
-      const oldPasswordValid = await bcrypt.compare(oldPassword, credential.passwordHash);
-      
-      if (!oldPasswordValid) {
+
+      const passwordCheck = await verifyAdminPassword(adminEmail, oldPassword);
+
+      if (!passwordCheck.valid) {
         return res.status(400).json({ message: "Current password is incorrect" });
       }
-      
-      // Hash new password and update
-      const newPasswordHash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
-      await storage.updateAdminPassword(adminEmail, newPasswordHash);
-      
-      // Invalidate all existing admin sessions (force re-login)
-      const db = storage.getDb();
-      if (db) {
-        await db.delete(adminSessionsTable).where(eq(adminSessionsTable.email, adminEmail));
-        console.log(`🔐 All admin sessions invalidated for ${adminEmail}`);
+
+      await upsertDatabaseAdminPassword(adminEmail, newPassword);
+
+      try {
+        await syncSupabaseAdminPassword(adminEmail, newPassword);
+      } catch (syncError) {
+        console.error('🔐 Failed to sync changed admin password to Supabase:', syncError);
       }
+
+      await invalidateAdminSessions(adminEmail);
       
       console.log(`🔐 Admin password changed successfully for ${adminEmail}`);
       
@@ -774,6 +892,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       console.error('🔐 Password change error:', error);
       res.status(500).json({ message: "Failed to change password" });
+    }
+  });
+
+  // Emergency admin recovery endpoint
+  app.post("/api/admin/recover-access", async (req, res) => {
+    try {
+      const recoveryToken = req.body?.recoveryToken || req.headers['x-admin-recovery-token'];
+      const configuredRecoveryToken = process.env.ADMIN_RECOVERY_TOKEN;
+      const email = req.body?.email || ADMIN_EMAIL;
+      const newPassword = req.body?.newPassword;
+
+      if (!configuredRecoveryToken) {
+        return res.status(503).json({ message: "Admin recovery is not configured on the server" });
+      }
+
+      if (!recoveryToken || recoveryToken !== configuredRecoveryToken) {
+        return res.status(401).json({ message: "Invalid recovery token" });
+      }
+
+      if (!email || email !== ADMIN_EMAIL) {
+        return res.status(400).json({ message: "Recovery is only allowed for the configured admin account" });
+      }
+
+      adminPasswordChangeSchema.shape.newPassword.parse(newPassword);
+
+      await upsertDatabaseAdminPassword(email, newPassword);
+
+      let supabaseSyncMessage = "Supabase sync skipped";
+      try {
+        const syncResult = await syncSupabaseAdminPassword(email, newPassword);
+        if (syncResult.available) {
+          supabaseSyncMessage = `Supabase admin account ${syncResult.action}`;
+        }
+      } catch (syncError) {
+        console.error('🔐 Admin recovery Supabase sync failed:', syncError);
+        supabaseSyncMessage = "Supabase sync failed; database credential was still updated";
+      }
+
+      await invalidateAdminSessions(email);
+
+      console.log(`🔐 Admin access recovered for ${email}`);
+
+      res.json({
+        success: true,
+        message: "Admin password reset successfully. You can now sign in with the new password.",
+        supabase: supabaseSyncMessage,
+      });
+    } catch (error) {
+      if (error instanceof Error && error.name === 'ZodError') {
+        return res.status(400).json({ message: "Invalid password format", error: (error as any).errors });
+      }
+      console.error('🔐 Admin recovery error:', error);
+      res.status(500).json({ message: "Failed to recover admin access" });
     }
   });
 
@@ -1060,9 +1231,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/admin/users", requireAdminAuth, async (req, res) => {
     try {
       console.log('🔍 Admin fetching all users from Supabase Auth...');
+      const adminClient = getSupabaseAdminClientOrRespond(res);
+      if (!adminClient) return;
       
       // Fetch all users from Supabase Auth using Admin API
-      const { data: { users }, error } = await supabase.auth.admin.listUsers();
+      const { data: { users }, error } = await adminClient.auth.admin.listUsers();
       
       if (error) {
         console.error('❌ Failed to fetch users from Supabase:', error);
@@ -1111,8 +1284,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/admin/pending-users", requireAdminAuth, async (req, res) => {
     try {
       console.log('🔍 Admin fetching pending user registrations...');
+      const adminClient = getSupabaseAdminClientOrRespond(res);
+      if (!adminClient) return;
       
-      const { data: { users }, error } = await supabase.auth.admin.listUsers();
+      const { data: { users }, error } = await adminClient.auth.admin.listUsers();
       
       if (error) {
         console.error('❌ Failed to fetch users:', error);
@@ -1152,9 +1327,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { userId } = req.params;
       console.log(`✅ Admin approving user: ${userId}`);
+      const adminClient = getSupabaseAdminClientOrRespond(res);
+      if (!adminClient) return;
       
       // First, get the current user to preserve their metadata
-      const { data: { user: currentUser }, error: getUserError } = await supabase.auth.admin.getUserById(userId);
+      const { data: { user: currentUser }, error: getUserError } = await adminClient.auth.admin.getUserById(userId);
       
       if (getUserError || !currentUser) {
         console.error('❌ Failed to get user:', getUserError);
@@ -1168,7 +1345,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
       
       // Update user metadata to set approved = true while preserving other fields
-      const { data, error } = await supabase.auth.admin.updateUserById(userId, {
+      const { data, error } = await adminClient.auth.admin.updateUserById(userId, {
         user_metadata: updatedMetadata
       });
       
@@ -1190,9 +1367,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { userId } = req.params;
       console.log(`🗑️ Admin deleting user: ${userId}`);
+      const adminClient = getSupabaseAdminClientOrRespond(res);
+      if (!adminClient) return;
       
       // Get user first to check if it's admin
-      const { data: { user: targetUser }, error: getUserError } = await supabase.auth.admin.getUserById(userId);
+      const { data: { user: targetUser }, error: getUserError } = await adminClient.auth.admin.getUserById(userId);
       
       if (getUserError || !targetUser) {
         console.error('❌ Failed to get user:', getUserError);
@@ -1205,7 +1384,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Delete user from Supabase Auth
-      const { error } = await supabase.auth.admin.deleteUser(userId);
+      const { error } = await adminClient.auth.admin.deleteUser(userId);
       
       if (error) {
         console.error('❌ Failed to delete user:', error);
@@ -1227,9 +1406,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { companyName, phone, address, brelaNumber, tinNumber, userType } = req.body;
       
       console.log(`✏️ Admin updating user: ${userId}`);
+      const adminClient = getSupabaseAdminClientOrRespond(res);
+      if (!adminClient) return;
       
       // Get current user to preserve metadata
-      const { data: { user: currentUser }, error: getUserError } = await supabase.auth.admin.getUserById(userId);
+      const { data: { user: currentUser }, error: getUserError } = await adminClient.auth.admin.getUserById(userId);
       
       if (getUserError || !currentUser) {
         console.error('❌ Failed to get user:', getUserError);
@@ -1249,7 +1430,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
       
       // Update user metadata
-      const { data, error } = await supabase.auth.admin.updateUserById(userId, {
+      const { data, error } = await adminClient.auth.admin.updateUserById(userId, {
         user_metadata: updatedMetadata
       });
       

@@ -150,6 +150,16 @@ export default function AdminLogin() {
                 Customer login here
               </Button>
             </p>
+            <p className="text-gray-600 text-sm mt-2">
+              Locked out? {" "}
+              <Button
+                variant="link"
+                className="text-phomas-blue hover:underline p-0"
+                onClick={() => setLocation("/admin-recovery")}
+              >
+                Recover admin access
+              </Button>
+            </p>
           </div>
         </CardContent>
       </Card>
