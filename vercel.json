@@ -19,15 +19,15 @@
   "routes": [
     {
       "src": "/api/admin/login",
-      "dest": "/api/[...path].ts"
+      "dest": "/api/admin/login.ts"
     },
     {
       "src": "/api/admin/change-password",
-      "dest": "/api/[...path].ts"
+      "dest": "/api/admin/change-password.ts"
     },
     {
       "src": "/api/admin/recover-access",
-      "dest": "/api/[...path].ts"
+      "dest": "/api/admin/recover-access.ts"
     },
     {
       "src": "/api/(.*)",
