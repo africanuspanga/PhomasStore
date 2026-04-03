@@ -101,7 +101,7 @@ export const productMappings = pgTable("product_mappings", {
   normalizedCode: text("normalized_code").notNull().unique(), // Normalized product code
   originalCode: text("original_code").notNull(), // Original code from Excel
   name: text("name").notNull(), // Product name
-  price: decimal("price", { precision: 10, scale: 2 }).notNull(), // Product price
+  price: decimal("price", { precision: 14, scale: 2 }).notNull(), // Product price
   uom: text("uom").notNull(), // Unit of measure
   category: text("category"), // Product category
   createdAt: timestamp("created_at").defaultNow(),

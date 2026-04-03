@@ -518,7 +518,19 @@ export class ProductMapping {
       throw new Error('Uploaded Excel file did not produce any product mappings');
     }
 
-    return parsedEntries;
+    // Keep the last occurrence for duplicate normalized codes so runtime and DB persistence behave the same way.
+    const dedupedEntries = Array.from(
+      parsedEntries.reduce((map, entry) => {
+        map.set(entry.normalizedCode, entry);
+        return map;
+      }, new Map<string, ParsedProductMappingEntry>()).values()
+    );
+
+    if (dedupedEntries.length !== parsedEntries.length) {
+      console.log(`♻️ Deduplicated Excel mappings from ${parsedEntries.length} rows to ${dedupedEntries.length} unique product codes`);
+    }
+
+    return dedupedEntries;
   }
 
   private static async ensureDatabaseTable(): Promise<boolean> {
@@ -540,12 +552,17 @@ export class ProductMapping {
           normalized_code text NOT NULL UNIQUE,
           original_code text NOT NULL,
           name text NOT NULL,
-          price numeric(10, 2) NOT NULL,
+          price numeric(14, 2) NOT NULL,
           uom text NOT NULL,
           category text,
           created_at timestamp DEFAULT now(),
           updated_at timestamp DEFAULT now()
         )
+      `);
+
+      await db.execute(sql`
+        ALTER TABLE product_mappings
+        ALTER COLUMN price TYPE numeric(14, 2)
       `);
 
       return true;
