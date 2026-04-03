@@ -1,17 +1,17 @@
 import { useState, useMemo } from 'react';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Package, Edit, Upload, Eye, AlertTriangle, CheckCircle, Search, X } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Package, Edit, Upload, AlertTriangle, CheckCircle, Search, X } from 'lucide-react';
 import { ecountService } from '@/services/ecountService';
 import { ImageUpload } from './ImageUpload';
 import { useToast } from '@/hooks/use-toast';
-import { apiRequest, queryClient } from '@/lib/queryClient';
-import { useProductImages, getImageWithFallback, useSetProductImageUrl } from '@/hooks/useProductImages';
+import { queryClient } from '@/lib/queryClient';
+import { useProductImages, getImageWithFallback } from '@/hooks/useProductImages';
 import type { ProductWithInventory } from '@shared/schema';
 
 export function AdminProductManager() {
@@ -20,7 +20,7 @@ export function AdminProductManager() {
   const [searchQuery, setSearchQuery] = useState('');
   const { toast } = useToast();
 
-  const { data: products = [], isLoading, refetch } = useQuery({
+  const { data: products = [], isLoading } = useQuery({
     queryKey: ['/api/products'],
     queryFn: () => ecountService.getProducts(),
   });
@@ -58,30 +58,18 @@ export function AdminProductManager() {
     });
   }, [products, searchQuery]);
 
-  const setImageUrlMutation = useSetProductImageUrl();
-
   const handleImageUpload = (imageUrl: string) => {
     if (selectedProduct && imageUrl) {
-      setImageUrlMutation.mutate(
-        { productCode: selectedProduct.id, imageUrl },
-        {
-          onSuccess: () => {
-            toast({
-              title: "Image updated successfully",
-              description: "The product image has been updated",
-            });
-            setImageDialogOpen(false);
-            setSelectedProduct(null);
-          },
-          onError: (error) => {
-            toast({
-              title: "Update failed",
-              description: error instanceof Error ? error.message : "Failed to update product image",
-              variant: "destructive",
-            });
-          }
-        }
-      );
+      queryClient.invalidateQueries({ queryKey: ['product-images'] });
+      queryClient.invalidateQueries({ queryKey: ['product-image', selectedProduct.id] });
+
+      toast({
+        title: "Image updated successfully",
+        description: "The product image has been uploaded and saved",
+      });
+
+      setImageDialogOpen(false);
+      setSelectedProduct(null);
     }
   };
 
@@ -348,6 +336,7 @@ export function AdminProductManager() {
               <ImageUpload
                 currentImage={productImages[selectedProduct.id] || undefined}
                 onImageUploaded={handleImageUpload}
+                productCode={selectedProduct.id}
               />
               
               <div className="flex justify-end space-x-2">

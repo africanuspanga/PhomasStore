@@ -3,7 +3,7 @@ import { randomUUID } from "crypto";
 import * as fs from "fs";
 import * as path from "path";
 import { createClient } from '@supabase/supabase-js';
-import { eq, desc } from 'drizzle-orm';
+import { eq, desc, inArray } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import { getProductCodeLookupCandidates, normalizeProductCode } from "./productCode.ts";
@@ -537,8 +537,9 @@ export class DatabaseStorage implements IStorage {
       process.env.SUPABASE_DB_PASSWORD ||
       process.env.POSTGRES_PASSWORD;
     const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ||
-      process.env.SUPABASE_ANON_KEY ||
-      process.env.VITE_SUPABASE_ANON_KEY;
+      process.env.SUPABASE_SERVICE_KEY ||
+      process.env.SUPABASE_SERVICE_ROLE ||
+      process.env.SUPABASE_SECRET_KEY;
     
     if (directDbUrl) {
       // Use direct DATABASE_URL if provided (works with Render, Railway, etc.)
@@ -595,8 +596,53 @@ export class DatabaseStorage implements IStorage {
     this.productImagesCacheTimestamp = 0;
   }
 
+  private resolveProductImages(
+    productCodes: string[],
+    images: Array<{ productCode: string; imageUrl: string }>
+  ): Record<string, string> {
+    const exactMatches = new Map<string, string>();
+    const normalizedMatches = new Map<string, string>();
+
+    for (const image of images) {
+      exactMatches.set(image.productCode, image.imageUrl);
+
+      const normalizedCode = normalizeProductCode(image.productCode);
+      if (normalizedCode && !normalizedMatches.has(normalizedCode)) {
+        normalizedMatches.set(normalizedCode, image.imageUrl);
+      }
+    }
+
+    const resolved: Record<string, string> = {};
+
+    for (const code of productCodes) {
+      const candidates = getProductCodeLookupCandidates(code);
+      let imageUrl: string | undefined;
+
+      for (const candidate of candidates) {
+        imageUrl = exactMatches.get(candidate);
+        if (imageUrl) {
+          break;
+        }
+
+        const normalizedCandidate = normalizeProductCode(candidate);
+        if (normalizedCandidate) {
+          imageUrl = normalizedMatches.get(normalizedCandidate);
+          if (imageUrl) {
+            break;
+          }
+        }
+      }
+
+      if (imageUrl) {
+        resolved[code] = imageUrl;
+      }
+    }
+
+    return resolved;
+  }
+
   private async loadAllProductImagesFromDatabase(forceRefresh = false): Promise<Array<{ productCode: string; imageUrl: string }>> {
-    if (!this.supabase) {
+    if (!this.db && !this.supabase) {
       return [];
     }
 
@@ -608,20 +654,38 @@ export class DatabaseStorage implements IStorage {
       return this.productImagesCache;
     }
 
-    const { data, error } = await this.supabase
-      .from('product_images')
-      .select('product_code, image_url');
+    let images: Array<{ productCode: string; imageUrl: string }> = [];
 
-    if (error) {
-      throw new Error(error.message);
+    if (this.db) {
+      const rows = await this.db
+        .select({
+          productCode: productImages.productCode,
+          imageUrl: productImages.imageUrl,
+        })
+        .from(productImages);
+
+      images = rows
+        .filter((row: any) => row?.productCode && row?.imageUrl)
+        .map((row: any) => ({
+          productCode: row.productCode as string,
+          imageUrl: row.imageUrl as string,
+        }));
+    } else if (this.supabase) {
+      const { data, error } = await this.supabase
+        .from('product_images')
+        .select('product_code, image_url');
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      images = (data || [])
+        .filter((row: any) => row?.product_code && row?.image_url)
+        .map((row: any) => ({
+          productCode: row.product_code as string,
+          imageUrl: row.image_url as string,
+        }));
     }
-
-    const images = (data || [])
-      .filter((row: any) => row?.product_code && row?.image_url)
-      .map((row: any) => ({
-        productCode: row.product_code as string,
-        imageUrl: row.image_url as string,
-      }));
 
     this.productImagesCache = images;
     this.productImagesCacheTimestamp = Date.now();
@@ -859,29 +923,22 @@ export class DatabaseStorage implements IStorage {
 
   // PERSISTENT PRODUCT IMAGE METHODS - DATABASE-FIRST (PRODUCTION FIX)
   async getProductImage(productCode: string): Promise<string | null> {
-    if (this.supabase) {
+    if (this.db || this.supabase) {
       const candidates = getProductCodeLookupCandidates(productCode);
 
       try {
+        const images = await this.loadAllProductImagesFromDatabase();
+        const resolvedImages = this.resolveProductImages(candidates, images);
+
         for (const candidate of candidates) {
-          const { data, error } = await this.supabase.rpc('get_product_image', {
-            p_product_code: candidate
-          });
-
-          if (!error && data) {
-            const imageUrl = data as string;
-            this.memStorage.cacheProductImage(productCode, imageUrl, 0).catch(() => {
-              // Ignore cache write failures
-            });
-            return imageUrl;
+          const imageUrl = resolvedImages[candidate];
+          if (!imageUrl) {
+            continue;
           }
 
-          if (error && error.code !== 'PGRST116') {
-            console.error(`❌ Database read error for ${candidate}:`, error.message);
-          }
+          this.memStorage.cacheProductImage(productCode, imageUrl, 0).catch(() => {});
+          return imageUrl;
         }
-
-        await this.loadAllProductImagesFromDatabase();
       } catch (error) {
         console.error(`❌ Database exception for ${productCode}:`, error);
       }
@@ -891,23 +948,67 @@ export class DatabaseStorage implements IStorage {
   }
 
   async setProductImage(productCode: string, imageUrl: string, priority: number = 0): Promise<void> {
-    if (this.supabase) {
+    const now = new Date();
+    let persisted = false;
+
+    if (this.db) {
       try {
-        await this.supabase.rpc('set_product_image', {
-          p_product_code: productCode,
-          p_image_url: imageUrl,
-          p_priority: priority
-        });
-        this.invalidateProductImagesCache();
-        console.log(`💾 Saved image to database: ${productCode}`);
+        await this.db
+          .insert(productImages)
+          .values({
+            id: randomUUID(),
+            productCode,
+            imageUrl,
+            priority,
+            createdAt: now,
+            updatedAt: now,
+          })
+          .onConflictDoUpdate({
+            target: productImages.productCode,
+            set: {
+              imageUrl,
+              priority,
+              updatedAt: now,
+            },
+          });
+
+        persisted = true;
+        console.log(`💾 Saved image to PostgreSQL: ${productCode}`);
       } catch (error) {
-        console.error(`❌ Failed to save image to database for ${productCode}:`, error);
-        throw new Error(`Failed to persist image: ${error}`);
+        console.error(`❌ Failed to save image to PostgreSQL for ${productCode}:`, error);
       }
-    } else {
+    }
+
+    if (!persisted && this.supabase) {
+      try {
+        const { error } = await this.supabase
+          .from('product_images')
+          .upsert({
+            product_code: productCode,
+            image_url: imageUrl,
+            priority,
+            updated_at: now.toISOString(),
+          }, {
+            onConflict: 'product_code',
+          });
+
+        if (error) {
+          throw error;
+        }
+
+        persisted = true;
+        console.log(`💾 Saved image to Supabase REST: ${productCode}`);
+      } catch (error) {
+        console.error(`❌ Failed to save image via Supabase REST for ${productCode}:`, error);
+      }
+    }
+
+    if (!persisted) {
       console.error('❌ Supabase not configured - images will be lost on restart!');
       throw new Error('Database not configured for image storage');
     }
+
+    this.invalidateProductImagesCache();
     
     // Cache in memory for faster reads (non-blocking)
     this.memStorage.setProductImage(productCode, imageUrl, priority).catch((error) => {
@@ -921,44 +1022,14 @@ export class DatabaseStorage implements IStorage {
     const uniqueRequestedCodes = Array.from(new Set(productCodes.filter(Boolean)));
     const resolvedImages: Record<string, string> = {};
 
-    if (this.supabase && productCodes.length > 0) {
-      const lookupCodes = Array.from(new Set(
-        uniqueRequestedCodes.flatMap((code) => getProductCodeLookupCandidates(code))
-      ));
-
+    if ((this.db || this.supabase) && productCodes.length > 0) {
       try {
-        const { data, error } = await this.supabase.rpc('get_product_images_batch', {
-          p_product_codes: lookupCodes
-        });
+        const images = await this.loadAllProductImagesFromDatabase();
+        const matches = this.resolveProductImages(uniqueRequestedCodes, images);
 
-        if (!error && data && Array.isArray(data)) {
-          const exactMatches = new Map<string, string>();
-          const normalizedMatches = new Map<string, string>();
-
-          for (const row of data) {
-            if (!row?.product_code || !row?.image_url) {
-              continue;
-            }
-
-            const rowCode = row.product_code as string;
-            const rowImageUrl = row.image_url as string;
-
-            exactMatches.set(rowCode, rowImageUrl);
-            normalizedMatches.set(normalizeProductCode(rowCode), rowImageUrl);
-            this.memStorage.cacheProductImage(rowCode, rowImageUrl, 0).catch(() => {});
-          }
-
-          for (const code of uniqueRequestedCodes) {
-            const imageUrl = exactMatches.get(code) || normalizedMatches.get(normalizeProductCode(code));
-            if (imageUrl) {
-              resolvedImages[code] = imageUrl;
-              this.memStorage.cacheProductImage(code, imageUrl, 0).catch(() => {});
-            }
-          }
-        }
-        
-        if (error) {
-          console.error('❌ Database batch read error:', error.message);
+        for (const [code, imageUrl] of Object.entries(matches)) {
+          resolvedImages[code] = imageUrl;
+          this.memStorage.cacheProductImage(code, imageUrl, 0).catch(() => {});
         }
       } catch (error) {
         console.error('❌ Database batch exception:', error);
@@ -966,15 +1037,6 @@ export class DatabaseStorage implements IStorage {
     }
 
     const unresolvedCodes = uniqueRequestedCodes.filter((code) => !resolvedImages[code]);
-
-    if (unresolvedCodes.length > 0 && this.supabase) {
-      try {
-        await this.loadAllProductImagesFromDatabase();
-      } catch (error) {
-        console.error('❌ Failed to refresh product images cache:', error);
-      }
-    }
-
     const fallbackImages = await this.memStorage.getProductImages(unresolvedCodes);
     return {
       ...fallbackImages,
@@ -983,14 +1045,36 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteProductImage(productCode: string): Promise<void> {
-    if (this.supabase) {
-      try {
-        const candidates = getProductCodeLookupCandidates(productCode);
+    const normalizedCode = normalizeProductCode(productCode);
 
-        for (const candidate of candidates) {
-          await this.supabase.rpc('delete_product_image', {
-            p_product_code: candidate
-          });
+    if (this.db || this.supabase) {
+      try {
+        const allImages = await this.loadAllProductImagesFromDatabase(true);
+        const candidateSet = new Set(getProductCodeLookupCandidates(productCode));
+        const matchingCodes = Array.from(new Set(
+          allImages
+            .filter((image) => {
+              const imageNormalizedCode = normalizeProductCode(image.productCode);
+              return candidateSet.has(image.productCode) || (!!normalizedCode && imageNormalizedCode === normalizedCode);
+            })
+            .map((image) => image.productCode)
+        ));
+
+        if (matchingCodes.length > 0) {
+          if (this.db) {
+            await this.db
+              .delete(productImages)
+              .where(inArray(productImages.productCode, matchingCodes));
+          } else if (this.supabase) {
+            const { error } = await this.supabase
+              .from('product_images')
+              .delete()
+              .in('product_code', matchingCodes);
+
+            if (error) {
+              throw error;
+            }
+          }
         }
 
         this.invalidateProductImagesCache();

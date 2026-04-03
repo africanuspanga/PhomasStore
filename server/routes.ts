@@ -20,22 +20,56 @@ const EMERGENCY_ADMIN_PASSWORD = 'Tanganyika@1961';
 const EMERGENCY_ADMIN_SESSION_TOKEN = 'phomas-emergency-admin-session-9f2df5ef-6958-47ea-92ed-ec0bdf4cc6f3';
 const resolvedSupabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const resolvedSupabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
-const resolvedSupabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || resolvedSupabaseAnonKey;
+const resolvedSupabaseServiceKey =
+  process.env.SUPABASE_SERVICE_ROLE_KEY ||
+  process.env.SUPABASE_SERVICE_KEY ||
+  process.env.SUPABASE_SERVICE_ROLE ||
+  process.env.SUPABASE_SECRET_KEY;
+
+const resolveCloudinaryCredentials = () => {
+  const cloudinaryUrl = process.env.CLOUDINARY_URL;
+
+  if (cloudinaryUrl) {
+    try {
+      const parsed = new URL(cloudinaryUrl);
+      return {
+        cloudName: process.env.CLOUDINARY_CLOUD_NAME || parsed.hostname,
+        apiKey: process.env.CLOUDINARY_API_KEY || decodeURIComponent(parsed.username),
+        apiSecret: process.env.CLOUDINARY_API_SECRET || decodeURIComponent(parsed.password),
+      };
+    } catch (error) {
+      console.warn('⚠️ Failed to parse CLOUDINARY_URL:', error);
+    }
+  }
+
+  return {
+    cloudName: process.env.CLOUDINARY_CLOUD_NAME,
+    apiKey: process.env.CLOUDINARY_API_KEY,
+    apiSecret: process.env.CLOUDINARY_API_SECRET,
+  };
+};
+
+const cloudinaryCredentials = resolveCloudinaryCredentials();
+const isCloudinaryConfigured = !!(
+  cloudinaryCredentials.cloudName &&
+  cloudinaryCredentials.apiKey &&
+  cloudinaryCredentials.apiSecret
+);
 
 // Validate and configure Cloudinary
-if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
+if (!isCloudinaryConfigured) {
   console.warn('⚠️  Cloudinary environment variables not set. Image uploads will fail.');
 }
 
 cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
+  cloud_name: cloudinaryCredentials.cloudName,
+  api_key: cloudinaryCredentials.apiKey,
+  api_secret: cloudinaryCredentials.apiSecret,
 });
 
 // Automatically create unsigned upload preset for direct frontend uploads
 const ensureUploadPreset = async () => {
-  if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
+  if (!isCloudinaryConfigured) {
     return;
   }
   
@@ -85,8 +119,8 @@ const supabase = createClient(
   db: { schema: 'public' }
 });
 
-const supabaseAdminClient = resolvedSupabaseUrl && process.env.SUPABASE_SERVICE_ROLE_KEY
-  ? createClient(resolvedSupabaseUrl, process.env.SUPABASE_SERVICE_ROLE_KEY, {
+const supabaseAdminClient = resolvedSupabaseUrl && resolvedSupabaseServiceKey
+  ? createClient(resolvedSupabaseUrl, resolvedSupabaseServiceKey, {
       auth: {
         autoRefreshToken: false,
         persistSession: false
@@ -1577,11 +1611,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      const uploadDir = path.join(process.cwd(), 'attached_assets');
-      if (!fs.existsSync(uploadDir)) {
-        fs.mkdirSync(uploadDir, { recursive: true });
-      }
-
       const originalName = req.file.originalname || 'product-mapping.xlsx';
       const extension = path.extname(originalName).toLowerCase() || '.xlsx';
       const allowedExtensions = new Set(['.xlsx', '.xls', '.csv']);
@@ -1592,15 +1621,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      const safeBaseName = path
-        .basename(originalName, extension)
-        .replace(/[^a-zA-Z0-9_-]/g, '_')
-        .slice(0, 80) || 'product_mapping';
-      const fileName = `${safeBaseName}_${Date.now()}${extension}`;
-      const filePath = path.join(uploadDir, fileName);
-
-      fs.writeFileSync(filePath, req.file.buffer);
-      await ProductMapping.setExcelFilePath(filePath);
+      const uploadResult = await ProductMapping.replaceUploadedExcel({
+        buffer: req.file.buffer,
+        originalName
+      });
 
       const mappingStats = ProductMapping.getStats();
       const imageMappings = ProductMapping.getImageMappings();
@@ -1634,8 +1658,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         success: true,
         message: 'Excel mapping replaced successfully',
         data: {
-          fileName,
-          filePath,
+          fileName: uploadResult.fileName,
+          filePath: uploadResult.filePath,
+          storageMode: uploadResult.storageMode,
           totalMapped: mappingStats.totalMapped,
           productsWithImages: mappingStats.productsWithImages,
           importedImages,
@@ -2133,12 +2158,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Image upload route - no authentication required for simplicity
-  app.post("/api/admin/upload-image", upload.single('image'), async (req, res) => {
+  // Image upload route - uploads to Cloudinary and persists the URL in the same request
+  app.post("/api/admin/upload-image", requireAdminAuth, upload.single('image'), async (req, res) => {
     try {
+      if (!isCloudinaryConfigured) {
+        return res.status(503).json({ message: "Cloudinary is not configured on the server" });
+      }
+
       if (!req.file) {
         return res.status(400).json({ message: "No image file provided" });
       }
+
+      const productCode = req.body?.productCode?.toString().trim() || null;
 
       // Upload to Cloudinary
       const result = await new Promise<any>((resolve, reject) => {
@@ -2158,10 +2189,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ).end(req.file!.buffer);
       });
 
+      if (!result?.secure_url) {
+        return res.status(502).json({ message: "Cloudinary did not return a secure image URL" });
+      }
+
+      if (productCode) {
+        try {
+          await storage.setProductImage(productCode, result.secure_url);
+        } catch (storageError) {
+          if (result.public_id) {
+            cloudinary.uploader.destroy(result.public_id, { resource_type: "image" }).catch(() => {
+              // Best-effort cleanup to avoid orphaned assets when DB persistence fails.
+            });
+          }
+
+          throw new Error(storageError instanceof Error
+            ? storageError.message
+            : `Failed to save image URL for ${productCode}`);
+        }
+      }
+
       res.json({
         success: true,
         imageUrl: result.secure_url,
         publicId: result.public_id,
+        productCode,
+        savedToDatabase: !!productCode,
         width: result.width,
         height: result.height
       });
@@ -2203,11 +2256,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // NEW IMAGE API - completely separate from eCount system
-  // Note: Image uploads now happen directly from frontend to Cloudinary
-  // These endpoints only manage image URL storage and retrieval
+  // These endpoints manage image URL storage and retrieval.
 
   // Set image URL for product code (for external URLs)
-  app.post("/api/images/set-url", async (req, res) => {
+  app.post("/api/images/set-url", requireAdminAuth, async (req, res) => {
     try {
       const { productCode, imageUrl } = req.body;
       
@@ -2271,7 +2323,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Delete image by product code
-  app.delete("/api/images/:code(*)", async (req, res) => {
+  app.delete("/api/images/:code(*)", requireAdminAuth, async (req, res) => {
     try {
       const code = decodeURIComponent(req.params.code || '').trim();
       await storage.deleteProductImage(code);
@@ -2286,7 +2338,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Update product image route (LEGACY - will be removed)
-  app.put("/api/admin/products/:id/image", async (req, res) => {
+  app.put("/api/admin/products/:id/image", requireAdminAuth, async (req, res) => {
     try {
       const { id } = req.params;
       const { imageUrl } = req.body;

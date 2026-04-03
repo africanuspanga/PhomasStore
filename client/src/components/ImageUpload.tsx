@@ -3,14 +3,16 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Upload, X, Image as ImageIcon, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { apiRequest } from '@/lib/queryClient';
 
 interface ImageUploadProps {
   onImageUploaded?: (imageUrl: string) => void;
   currentImage?: string;
+  productCode?: string;
   className?: string;
 }
 
-export function ImageUpload({ onImageUploaded, currentImage, className }: ImageUploadProps) {
+export function ImageUpload({ onImageUploaded, currentImage, productCode, className }: ImageUploadProps) {
   const [uploading, setUploading] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(currentImage || null);
   const [dragActive, setDragActive] = useState(false);
@@ -38,26 +40,14 @@ export function ImageUpload({ onImageUploaded, currentImage, className }: ImageU
 
     setUploading(true);
     try {
-      // Upload via backend (avoids CORS issues!)
       const formData = new FormData();
       formData.append('image', file);
+      if (productCode) {
+        formData.append('productCode', productCode);
+      }
       
       console.log('📤 Uploading image via backend...');
-      const response = await fetch('/api/admin/upload-image', {
-        method: 'POST',
-        body: formData
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        console.error('Upload error:', {
-          status: response.status,
-          statusText: response.statusText,
-          errorData
-        });
-        throw new Error(`Upload failed: ${errorData.message || response.statusText}`);
-      }
-
+      const response = await apiRequest('POST', '/api/admin/upload-image', formData);
       const result = await response.json();
       console.log('Upload successful:', result);
       const imageUrl = result.imageUrl;
@@ -71,11 +61,13 @@ export function ImageUpload({ onImageUploaded, currentImage, className }: ImageU
       onImageUploaded?.(imageUrl);
       toast({
         title: "Image uploaded successfully",
-        description: "Direct upload to Cloudinary completed",
+        description: productCode
+          ? "Cloudinary upload completed and the image was saved for this product"
+          : "Cloudinary upload completed",
       });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error('Direct Cloudinary upload error:', {
+      console.error('Backend image upload error:', {
         error,
         message: errorMessage,
         name: error instanceof Error ? error.name : 'Unknown',
@@ -83,7 +75,7 @@ export function ImageUpload({ onImageUploaded, currentImage, className }: ImageU
       });
       toast({
         title: "Upload failed",
-        description: errorMessage || "Failed to upload directly to Cloudinary. Please try again.",
+        description: errorMessage || "Failed to upload and save the product image. Please try again.",
         variant: "destructive",
       });
     } finally {
