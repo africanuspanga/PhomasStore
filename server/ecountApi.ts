@@ -1,6 +1,6 @@
-import type { ProductWithInventory, Order } from "@shared/schema";
-import { ProductMapping } from "./productMapping.ts";
-import { storage } from "./storage.ts";
+import type { ProductWithInventory, Order } from "../shared/schema.js";
+import { ProductMapping } from "./productMapping.js";
+import { storage } from "./storage.js";
 
 // eCount API Configuration - Production Ready
 const ECOUNT_CONFIG = {
@@ -1733,7 +1733,7 @@ class EcountApiService {
   private async retryFailedOrders(): Promise<void> {
     try {
       // Import storage from the same module used throughout the app
-      const { storage } = await import('./storage');
+      const { storage } = await import('./storage.js');
       if (!storage) {
         console.log('⚠️ Storage not available for order retry');
         return;

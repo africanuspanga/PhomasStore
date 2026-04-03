@@ -1,4 +1,4 @@
-import { type User, type InsertUser, type Product, type InsertProduct, type Inventory, type InsertInventory, type Order, type InsertOrder, type ProductWithInventory, type OrderItem, type ProductImage, type InsertProductImage, type AdminCredential, productImages, orders as ordersTable, users as usersTable, adminCredentials as adminCredentialsTable } from "@shared/schema";
+import { type User, type InsertUser, type Product, type InsertProduct, type Inventory, type InsertInventory, type Order, type InsertOrder, type ProductWithInventory, type OrderItem, type ProductImage, type InsertProductImage, type AdminCredential, productImages, orders as ordersTable, users as usersTable, adminCredentials as adminCredentialsTable } from "../shared/schema.js";
 import { randomUUID } from "crypto";
 import * as fs from "fs";
 import * as path from "path";
@@ -6,7 +6,7 @@ import { createClient } from '@supabase/supabase-js';
 import { eq, desc, inArray } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
-import { getProductCodeLookupCandidates, normalizeProductCode } from "./productCode.ts";
+import { getProductCodeLookupCandidates, normalizeProductCode } from "./productCode.js";
 
 export interface IStorage {
   // User management

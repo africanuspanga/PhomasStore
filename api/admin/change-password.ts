@@ -9,7 +9,7 @@ import {
   signInWithPassword,
   updateUserById,
   validatePassword,
-} from "./_shared.ts";
+} from "./_shared.js";
 
 const EMERGENCY_ADMIN_PASSWORD = "Tanganyika@1961";
 const EMERGENCY_ADMIN_SESSION_TOKEN = "phomas-emergency-admin-session-9f2df5ef-6958-47ea-92ed-ec0bdf4cc6f3";

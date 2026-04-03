@@ -4,9 +4,9 @@ import * as os from 'os';
 import { randomUUID } from 'crypto';
 import { desc, sql } from 'drizzle-orm';
 import { basename, extname, isAbsolute, join, resolve } from 'path';
-import { productMappings } from '@shared/schema';
-import { storage } from './storage.ts';
-import { normalizeProductCode as normalizeCode } from './productCode.ts';
+import { productMappings } from '../shared/schema.js';
+import { storage } from './storage.js';
+import { normalizeProductCode as normalizeCode } from './productCode.js';
 
 interface ProductMappingEntry {
   name: string;

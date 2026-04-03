@@ -1,4 +1,4 @@
-import { getVercelApp } from "../../../server/app.ts";
+import { getVercelApp } from "../../../server/app.js";
 
 export const config = {
   api: {

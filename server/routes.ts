@@ -1,9 +1,9 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
-import { storage } from "./storage.ts";
-import { ecountApi } from "./ecountApi.ts";
-import { ProductMapping } from "./productMapping.ts";
-import { insertUserSchema, loginSchema, insertOrderSchema, supabaseSignUpSchema, adminSessions as adminSessionsTable, adminPasswordChangeSchema } from "@shared/schema";
+import { storage } from "./storage.js";
+import { ecountApi } from "./ecountApi.js";
+import { ProductMapping } from "./productMapping.js";
+import { insertUserSchema, loginSchema, insertOrderSchema, supabaseSignUpSchema, adminSessions as adminSessionsTable, adminPasswordChangeSchema } from "../shared/schema.js";
 import { eq, lt } from "drizzle-orm";
 import { v2 as cloudinary } from 'cloudinary';
 import multer from 'multer';

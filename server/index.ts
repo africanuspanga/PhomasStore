@@ -1,5 +1,5 @@
-import { createServerApp } from "./app.ts";
-import { log } from "./logger.ts";
+import { createServerApp } from "./app.js";
+import { log } from "./logger.js";
 
 (async () => {
   const { server } = await createServerApp();

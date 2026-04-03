@@ -3,7 +3,7 @@ import {
   getUserFromAccessToken,
   hasSupabaseAuthConfig,
   isAdminUser,
-} from "./_shared.ts";
+} from "./_shared.js";
 
 export const EMERGENCY_ADMIN_SESSION_TOKEN = "phomas-emergency-admin-session-9f2df5ef-6958-47ea-92ed-ec0bdf4cc6f3";
 

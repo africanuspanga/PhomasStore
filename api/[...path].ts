@@ -1,4 +1,4 @@
-import { getVercelApp } from "../server/app.ts";
+import { getVercelApp } from "../server/app.js";
 
 // Let Express/multer read the raw request stream for multipart uploads on Vercel.
 export const config = {
