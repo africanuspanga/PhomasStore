@@ -12,7 +12,16 @@
     "api/admin/login.ts": {
       "maxDuration": 60
     },
+    "api/admin/cache-status.ts": {
+      "maxDuration": 60
+    },
     "api/admin/orders.ts": {
+      "maxDuration": 60
+    },
+    "api/admin/product-mapping/status.ts": {
+      "maxDuration": 60
+    },
+    "api/admin/product-mapping/upload.ts": {
       "maxDuration": 60
     },
     "api/admin/approve-user.ts": {
@@ -48,8 +57,20 @@
       "dest": "/api/admin/login.ts"
     },
     {
+      "src": "/api/admin/cache-status",
+      "dest": "/api/admin/cache-status.ts"
+    },
+    {
       "src": "/api/admin/orders",
       "dest": "/api/admin/orders.ts"
+    },
+    {
+      "src": "/api/admin/product-mapping/status",
+      "dest": "/api/admin/product-mapping/status.ts"
+    },
+    {
+      "src": "/api/admin/product-mapping/upload",
+      "dest": "/api/admin/product-mapping/upload.ts"
     },
     {
       "src": "/api/admin/approve-user",
