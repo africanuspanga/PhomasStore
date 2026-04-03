@@ -27,6 +27,7 @@ export function ShoppingCart({ isOpen, onClose }: ShoppingCartProps) {
   const sendToEcountMutation = useMutation({
     mutationFn: async () => {
       if (!user) throw new Error("User not authenticated");
+      const authUserId = user.userId || user.id;
       
       const orderItems: OrderItem[] = items.map(item => ({
         productId: item.productId,
@@ -37,7 +38,7 @@ export function ShoppingCart({ isOpen, onClose }: ShoppingCartProps) {
       }));
 
       return ecountService.placeOrder({
-        userId: user.id,
+        userId: authUserId,
         items: JSON.stringify(orderItems),
         subtotal: subtotal.toFixed(2),
         tax: tax.toFixed(2),

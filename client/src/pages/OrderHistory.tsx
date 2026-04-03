@@ -13,11 +13,12 @@ import type { Order, OrderItem } from "@shared/schema";
 export default function OrderHistory() {
   const { user } = useAuth();
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const authUserId = user?.userId || user?.id;
 
   const { data: orders = [], isLoading, error } = useQuery({
-    queryKey: ["/api/orders/user", user?.id],
-    queryFn: () => user ? ecountService.getOrdersByUserId(user.id) : Promise.resolve([]),
-    enabled: !!user,
+    queryKey: ["/api/orders/user", authUserId],
+    queryFn: () => authUserId ? ecountService.getOrdersByUserId(authUserId) : Promise.resolve([]),
+    enabled: !!authUserId,
   });
 
   const getStatusColor = (status: string) => {

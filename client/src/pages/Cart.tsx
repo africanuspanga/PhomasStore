@@ -70,7 +70,7 @@ export default function Cart() {
   const sendToEcountMutation = useMutation({
     mutationFn: async () => {
       // Allow guest checkout - userId will be set by backend
-      const userId = user?.id || 'guest-user';
+      const userId = user?.userId || user?.id || 'guest-user';
       
       const orderItems: OrderItem[] = items.map(item => ({
         productId: item.productId,

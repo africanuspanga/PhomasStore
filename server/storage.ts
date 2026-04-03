@@ -1,4 +1,4 @@
-import { type User, type InsertUser, type Product, type InsertProduct, type Inventory, type InsertInventory, type Order, type InsertOrder, type ProductWithInventory, type OrderItem, type ProductImage, type InsertProductImage, type AdminCredential, productImages, orders as ordersTable, users as usersTable, adminCredentials as adminCredentialsTable } from "../shared/schema.js";
+import { type User, type InsertUser, type Product, type InsertProduct, type Inventory, type InsertInventory, type Order, type InsertOrder, type ProductWithInventory, type OrderItem, type ProductImage, type InsertProductImage, type AdminCredential, productImages, orders as ordersTable, users as usersTable, adminCredentials as adminCredentialsTable, profiles as profilesTable } from "../shared/schema.js";
 import { randomUUID } from "crypto";
 import * as fs from "fs";
 import * as path from "path";
@@ -810,12 +810,29 @@ export class DatabaseStorage implements IStorage {
   async getOrdersByUserId(userId: string): Promise<Order[]> {
     if (this.db) {
       try {
+        const candidateUserIds = new Set([userId]);
+
+        try {
+          const legacyProfiles = await this.db
+            .select({ id: profilesTable.id })
+            .from(profilesTable)
+            .where(eq(profilesTable.userId, userId))
+            .limit(1);
+
+          const legacyProfileId = legacyProfiles[0]?.id;
+          if (legacyProfileId) {
+            candidateUserIds.add(legacyProfileId);
+          }
+        } catch (profileLookupError) {
+          console.warn(`⚠️ Failed to resolve legacy profile ID for ${userId}:`, profileLookupError);
+        }
+
         const userOrders = await this.db
           .select()
           .from(ordersTable)
-          .where(eq(ordersTable.userId, userId))
+          .where(inArray(ordersTable.userId, Array.from(candidateUserIds)))
           .orderBy(desc(ordersTable.createdAt));
-        console.log(`📦 Retrieved ${userOrders.length} orders for user ${userId} from database`);
+        console.log(`📦 Retrieved ${userOrders.length} orders for user ${userId} from database using IDs: ${Array.from(candidateUserIds).join(', ')}`);
         return userOrders;
       } catch (error) {
         console.error('❌ Database error getting orders:', error);

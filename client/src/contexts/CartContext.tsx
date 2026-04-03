@@ -28,7 +28,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   // Get current user identifier for cart storage
   const getCurrentUserId = () => {
     if (adminUser) return `admin-${adminUser.id}`;
-    if (user) return user.id || user.userId;
+    if (user) return user.userId || user.id;
     return 'guest';
   };
 

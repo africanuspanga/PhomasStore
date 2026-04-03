@@ -4,6 +4,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Upload, X, Image as ImageIcon, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest } from '@/lib/queryClient';
+import { syncCachedProductImage } from '@/hooks/useProductImages';
 
 interface ImageUploadProps {
   onImageUploaded?: (imageUrl: string) => void;
@@ -58,6 +59,9 @@ export function ImageUpload({ onImageUploaded, currentImage, productCode, classN
       }
 
       setPreviewUrl(imageUrl);
+      if (productCode) {
+        syncCachedProductImage(productCode, imageUrl);
+      }
       onImageUploaded?.(imageUrl);
       toast({
         title: "Image uploaded successfully",

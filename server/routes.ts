@@ -1105,6 +1105,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Order routes - now with CORRECTED eCount sales integration
   app.post("/api/orders", requireAuth, enforceSaveRateLimit, async (req, res) => {
     try {
+      const authenticatedUserId = (req as any).userId || req.body.userId || 'guest-user';
+
       // Construct user profile from request body or middleware defaults for eCount API
       const userProfile = {
         email: req.body.customerEmail || (req as any).userEmail || 'guest@phomas.com',
@@ -1114,6 +1116,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Use customer data from request body (sent from frontend with actual user info)
       const orderDataWithCustomer = {
         ...req.body,
+        userId: authenticatedUserId,
         // Prioritize data from frontend request body, fall back to middleware defaults
         customerName: req.body.customerName || (req as any).userEmail?.split('@')[0] || 'Guest Customer',
         customerEmail: req.body.customerEmail || (req as any).userEmail || 'guest@example.com',
@@ -1276,18 +1279,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(401).json({ message: 'Invalid or expired session. Please log in again.' });
         }
         
-        // User is authenticated - verify they're accessing their own orders
-        if (user.id !== req.params.userId) {
-          // Check if admin accessing another user's orders
-          const isAdmin = isSupabaseAdminUser(user);
-          if (!isAdmin) {
-            console.log(`🔐 User ${user.id} attempted to access orders for ${req.params.userId}`);
-            return res.status(403).json({ message: "You can only access your own orders" });
-          }
+        const isAdmin = isSupabaseAdminUser(user);
+        const requestedUserId = req.params.userId;
+        const effectiveUserId = isAdmin ? requestedUserId : user.id;
+
+        if (!isAdmin && user.id !== requestedUserId) {
+          console.log(`🔐 Normalizing order history request for ${user.email}: requested ${requestedUserId}, using authenticated user ${user.id}`);
         }
         
-        console.log(`📦 User ${user.email} fetching orders for ${req.params.userId}`);
-        const orders = await storage.getOrdersByUserId(req.params.userId);
+        console.log(`📦 User ${user.email} fetching orders for ${effectiveUserId}`);
+        const orders = await storage.getOrdersByUserId(effectiveUserId);
         res.json(orders);
         
       } catch (authError) {
@@ -2296,7 +2297,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         : [];
       const images = await storage.getProductImages(productCodes);
       
-      res.setHeader('Cache-Control', 'public, max-age=300'); // 5 minute cache
+      res.setHeader('Cache-Control', 'private, no-store, max-age=0, must-revalidate');
+      res.setHeader('Pragma', 'no-cache');
       res.json({ images });
     } catch (error) {
       console.error('Get images error:', error);
@@ -2314,7 +2316,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Image not found" });
       }
       
-      res.setHeader('Cache-Control', 'public, max-age=300'); // 5 minute cache
+      res.setHeader('Cache-Control', 'private, no-store, max-age=0, must-revalidate');
+      res.setHeader('Pragma', 'no-cache');
       res.json({ imageUrl });
     } catch (error) {
       console.error('Get single image error:', error);

@@ -5,6 +5,36 @@ export interface ProductImageData {
   [productCode: string]: string; // productCode -> imageUrl
 }
 
+function mergeProductImageData(
+  existing: unknown,
+  productCode: string,
+  imageUrl: string | null,
+): ProductImageData {
+  const nextData: ProductImageData =
+    existing && typeof existing === 'object' && !Array.isArray(existing)
+      ? { ...(existing as ProductImageData) }
+      : {};
+
+  if (imageUrl) {
+    nextData[productCode] = imageUrl;
+  } else {
+    delete nextData[productCode];
+  }
+
+  return nextData;
+}
+
+export function syncCachedProductImage(productCode: string, imageUrl: string | null) {
+  if (!productCode) {
+    return;
+  }
+
+  queryClient.setQueryData(['product-image', productCode], imageUrl);
+  queryClient.setQueriesData({ queryKey: ['product-images'] }, (existing) =>
+    mergeProductImageData(existing, productCode, imageUrl),
+  );
+}
+
 /**
  * Custom hook to fetch product images in batches
  * This replaces the old system where images were embedded in product data
@@ -22,7 +52,9 @@ export function useProductImages(productCodes: string[]) {
       const searchParams = new URLSearchParams({
         codes: normalizedCodes.join(','),
       });
-      const response = await fetch(`/api/images?${searchParams.toString()}`);
+      const response = await fetch(`/api/images?${searchParams.toString()}`, {
+        cache: 'no-store',
+      });
       
       if (!response.ok) {
         console.warn('Failed to fetch product images:', response.status);
@@ -45,7 +77,9 @@ export function useProductImage(productCode: string) {
   return useQuery({
     queryKey: ['product-image', productCode],
     queryFn: async (): Promise<string | null> => {
-      const response = await fetch(`/api/images/${encodeURIComponent(productCode)}`);
+      const response = await fetch(`/api/images/${encodeURIComponent(productCode)}`, {
+        cache: 'no-store',
+      });
       
       if (response.status === 404) {
         return null; // No image found
@@ -92,6 +126,7 @@ export function useUploadProductImage() {
       return response.json();
     },
     onSuccess: (data) => {
+      syncCachedProductImage(data.productCode, data.imageUrl || null);
       // Invalidate image queries for this product
       queryClient.invalidateQueries({ queryKey: ['product-image', data.productCode] });
       queryClient.invalidateQueries({ queryKey: ['product-images'] });
@@ -122,6 +157,7 @@ export function useSetProductImageUrl() {
       return response.json();
     },
     onSuccess: (data) => {
+      syncCachedProductImage(data.productCode, data.imageUrl || null);
       // Invalidate image queries for this product
       queryClient.invalidateQueries({ queryKey: ['product-image', data.productCode] });
       queryClient.invalidateQueries({ queryKey: ['product-images'] });
@@ -150,6 +186,7 @@ export function useDeleteProductImage() {
       return response.json();
     },
     onSuccess: (data) => {
+      syncCachedProductImage(data.productCode, null);
       // Invalidate image queries for this product
       queryClient.invalidateQueries({ queryKey: ['product-image', data.productCode] });
       queryClient.invalidateQueries({ queryKey: ['product-images'] });
