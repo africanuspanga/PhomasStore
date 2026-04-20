@@ -3,7 +3,22 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage.js";
 import { ecountApi } from "./ecountApi.js";
 import { ProductMapping } from "./productMapping.js";
-import { insertUserSchema, loginSchema, insertOrderSchema, supabaseSignUpSchema, adminSessions as adminSessionsTable, adminPasswordChangeSchema } from "../shared/schema.js";
+import {
+  adminPasswordChangeSchema,
+  adminSessions as adminSessionsTable,
+  deliveryAreaSchema,
+  insertOrderSchema,
+  insertUserSchema,
+  loginSchema,
+  orderItemsSchema,
+  supabaseSignUpSchema,
+} from "../shared/schema.js";
+import {
+  calculateOrderTotal,
+  getTransportCost,
+  inferDeliveryAreaFromAddress,
+  sumOrderItemsSubtotal,
+} from "../shared/orderPricing.js";
 import { eq, lt } from "drizzle-orm";
 import { v2 as cloudinary } from 'cloudinary';
 import multer from 'multer';
@@ -1106,6 +1121,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/orders", requireAuth, enforceSaveRateLimit, async (req, res) => {
     try {
       const authenticatedUserId = (req as any).userId || req.body.userId || 'guest-user';
+      const requestedDeliveryOption = req.body.deliveryOption || 'pickup';
+      const requestedCustomerAddress = req.body.customerAddress || '';
+      const parsedDeliveryArea = deliveryAreaSchema.safeParse(req.body.deliveryArea);
+      const deliveryArea =
+        requestedDeliveryOption === 'delivery'
+          ? parsedDeliveryArea.success
+            ? parsedDeliveryArea.data
+            : inferDeliveryAreaFromAddress(requestedCustomerAddress)
+          : undefined;
+
+      if (requestedDeliveryOption === 'delivery' && !deliveryArea) {
+        return res.status(400).json({
+          message: "Delivery area is required for delivery orders",
+        });
+      }
+
+      const rawOrderItems =
+        typeof req.body.items === "string" ? JSON.parse(req.body.items || "[]") : req.body.items || [];
+      const orderItems = orderItemsSchema.parse(rawOrderItems);
+      const subtotal = sumOrderItemsSubtotal(orderItems);
+      const tax = Number.parseFloat(req.body.tax || "0") || 0;
+      const transportCost = getTransportCost(requestedDeliveryOption, deliveryArea);
+      const total = calculateOrderTotal({
+        subtotal,
+        tax,
+        deliveryOption: requestedDeliveryOption,
+        deliveryArea,
+      });
 
       // Construct user profile from request body or middleware defaults for eCount API
       const userProfile = {
@@ -1117,14 +1160,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const orderDataWithCustomer = {
         ...req.body,
         userId: authenticatedUserId,
+        subtotal: subtotal.toFixed(2),
+        tax: tax.toFixed(2),
+        total: total.toFixed(2),
         // Prioritize data from frontend request body, fall back to middleware defaults
         paymentMethod: req.body.paymentMethod || 'cash',
-        deliveryOption: req.body.deliveryOption || 'pickup',
+        deliveryOption: requestedDeliveryOption,
+        deliveryArea,
+        transportCost: transportCost.toFixed(2),
         customerName: req.body.customerName || (req as any).userEmail?.split('@')[0] || 'Guest Customer',
         customerEmail: req.body.customerEmail || (req as any).userEmail || 'guest@example.com',
         customerPhone: req.body.customerPhone || '',
         customerCompany: req.body.customerCompany || (req as any).userEmail?.split('@')[0] || 'Guest',
-        customerAddress: req.body.customerAddress || '',
+        customerAddress: requestedCustomerAddress,
       };
       
       const orderData = insertOrderSchema.parse(orderDataWithCustomer);

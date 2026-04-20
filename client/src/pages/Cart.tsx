@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,7 +13,14 @@ import { Link, useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
+import {
+  calculateOrderTotal,
+  getDeliveryAreaLabel,
+  getTransportCost,
+  inferDeliveryAreaFromAddress,
+} from "@shared/orderPricing";
 import type {
+  DeliveryArea,
   DeliveryOption,
   OrderItem,
   PaymentMethod,
@@ -34,8 +41,10 @@ const getPaymentMethodLabel = (paymentMethod: PaymentMethod) =>
 const getDeliveryOptionLabel = (deliveryOption: DeliveryOption) =>
   deliveryOption === "delivery" ? "Delivery" : "Pickup";
 
+const formatTzs = (value: number) => Math.round(value).toLocaleString();
+
 export default function Cart() {
-  const { items, updateQuantity, removeItem, clearCart, subtotal, tax, total } = useCart();
+  const { items, updateQuantity, removeItem, clearCart, subtotal, tax } = useCart();
   const { user } = useAuth();
   const { toast } = useToast();
   const [, setLocation] = useLocation();
@@ -45,12 +54,25 @@ export default function Cart() {
   const [userEmail, setUserEmail] = useState<string>("");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
   const [deliveryOption, setDeliveryOption] = useState<DeliveryOption>("pickup");
+  const [deliveryArea, setDeliveryArea] = useState<DeliveryArea | "">("");
   const [onlinePaymentConfirmed, setOnlinePaymentConfirmed] = useState(false);
 
   const deliveryAddress = user?.address?.trim() || "";
+  const inferredDeliveryArea = useMemo(
+    () => inferDeliveryAreaFromAddress(deliveryAddress),
+    [deliveryAddress],
+  );
   const needsDeliveryAddress = deliveryOption === "delivery";
   const isMissingDeliveryAddress = needsDeliveryAddress && !deliveryAddress;
+  const isMissingDeliveryArea = needsDeliveryAddress && !deliveryArea;
   const requiresOnlinePaymentConfirmation = paymentMethod === "online_now";
+  const transportCost = getTransportCost(deliveryOption, deliveryArea || undefined);
+  const total = calculateOrderTotal({
+    subtotal,
+    tax,
+    deliveryOption,
+    deliveryArea: deliveryArea || undefined,
+  });
 
   // Fetch products to check stock limits
   const { data: products = [] } = useQuery<ProductWithInventory[]>({
@@ -99,6 +121,15 @@ export default function Cart() {
     getEmail();
   }, []);
 
+  useEffect(() => {
+    if (deliveryOption !== "delivery") {
+      setDeliveryArea("");
+      return;
+    }
+
+    setDeliveryArea((currentDeliveryArea) => currentDeliveryArea || inferredDeliveryArea || "");
+  }, [deliveryOption, inferredDeliveryArea]);
+
   const sendToEcountMutation = useMutation({
     mutationFn: async () => {
       // Allow guest checkout - userId will be set by backend
@@ -121,6 +152,8 @@ export default function Cart() {
         status: "processing",
         paymentMethod,
         deliveryOption,
+        deliveryArea: deliveryOption === "delivery" ? deliveryArea || undefined : undefined,
+        transportCost: transportCost.toFixed(2),
         customerName: user?.name || "Guest Customer",
         customerEmail: userEmail || "guest@example.com",
         customerPhone: user?.phone || "",
@@ -203,6 +236,15 @@ export default function Cart() {
       return;
     }
 
+    if (isMissingDeliveryArea) {
+      toast({
+        title: "Delivery area required",
+        description: "Please choose Dar es Salaam or outside Dar es Salaam to calculate transport cost.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     sendToEcountMutation.mutate();
   };
 
@@ -210,6 +252,7 @@ export default function Cart() {
     setShowSuccessModal(false);
     setPaymentMethod("cash");
     setDeliveryOption("pickup");
+    setDeliveryArea("");
     setOnlinePaymentConfirmed(false);
     setLocation("/");
   };
@@ -450,22 +493,78 @@ export default function Cart() {
 
                     <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
                       {deliveryOption === "delivery" ? (
-                        deliveryAddress ? (
-                          <>
-                            <p className="font-medium text-gray-900">Verified Delivery Address</p>
-                            <p className="text-sm text-gray-600 mt-1">{deliveryAddress}</p>
-                            <p className="text-xs text-gray-500 mt-2">
-                              This address will be sent to the admin dashboard with the order.
+                        <>
+                          {deliveryAddress ? (
+                            <>
+                              <p className="font-medium text-gray-900">Verified Delivery Address</p>
+                              <p className="text-sm text-gray-600 mt-1">{deliveryAddress}</p>
+                              <p className="text-xs text-gray-500 mt-2">
+                                This address will be sent to the admin dashboard with the order.
+                              </p>
+                            </>
+                          ) : (
+                            <>
+                              <p className="font-medium text-amber-700">Delivery address missing</p>
+                              <p className="text-sm text-amber-700 mt-1">
+                                We could not find a verified delivery address on this account.
+                              </p>
+                            </>
+                          )}
+
+                          <div className="mt-4 border-t border-gray-200 pt-4">
+                            <p className="font-medium text-gray-900">Delivery Area</p>
+                            <p className="text-sm text-gray-600 mt-1">
+                              Choose the transport zone for this delivery.
                             </p>
-                          </>
-                        ) : (
-                          <>
-                            <p className="font-medium text-amber-700">Delivery address missing</p>
-                            <p className="text-sm text-amber-700 mt-1">
-                              We could not find a verified delivery address on this account.
-                            </p>
-                          </>
-                        )
+
+                            <RadioGroup
+                              value={deliveryArea}
+                              onValueChange={(value) => setDeliveryArea(value as DeliveryArea)}
+                              className="mt-3 gap-3"
+                            >
+                              <label className="flex items-start gap-3 rounded-lg border border-gray-200 bg-white p-4 cursor-pointer">
+                                <RadioGroupItem
+                                  value="dar_es_salaam"
+                                  id="delivery-area-dar-es-salaam"
+                                  className="mt-1"
+                                />
+                                <div>
+                                  <span className="font-medium text-gray-900">Dar es Salaam</span>
+                                  <p className="text-sm text-gray-600 mt-1">
+                                    Transport cost: TZS 10,000
+                                  </p>
+                                </div>
+                              </label>
+
+                              <label className="flex items-start gap-3 rounded-lg border border-gray-200 bg-white p-4 cursor-pointer">
+                                <RadioGroupItem
+                                  value="outside_dar_es_salaam"
+                                  id="delivery-area-outside-dar-es-salaam"
+                                  className="mt-1"
+                                />
+                                <div>
+                                  <span className="font-medium text-gray-900">
+                                    Outside Dar es Salaam
+                                  </span>
+                                  <p className="text-sm text-gray-600 mt-1">
+                                    Transport cost: TZS 20,000
+                                  </p>
+                                </div>
+                              </label>
+                            </RadioGroup>
+
+                            {deliveryArea ? (
+                              <p className="text-xs text-gray-500 mt-3">
+                                Added transport cost: TZS {formatTzs(transportCost)} for{" "}
+                                {getDeliveryAreaLabel(deliveryArea)}.
+                              </p>
+                            ) : (
+                              <p className="text-xs text-amber-700 mt-3">
+                                Select a delivery area to calculate the full total.
+                              </p>
+                            )}
+                          </div>
+                        </>
                       ) : (
                         <>
                           <p className="font-medium text-gray-900">Pickup selected</p>
@@ -481,15 +580,24 @@ export default function Cart() {
                 <div className="space-y-2 mb-6">
                   <div className="flex justify-between">
                     <span className="text-gray-600">Subtotal:</span>
-                    <span className="font-medium">TZS {Math.round(subtotal).toLocaleString()}</span>
+                    <span className="font-medium">TZS {formatTzs(subtotal)}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-600">Tax (18%):</span>
-                    <span className="font-medium">TZS {Math.round(tax).toLocaleString()}</span>
+                    <span className="font-medium">TZS {formatTzs(tax)}</span>
                   </div>
+                  {deliveryOption === "delivery" && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">
+                        Transport Cost
+                        {deliveryArea ? ` (${getDeliveryAreaLabel(deliveryArea)})` : ""}:
+                      </span>
+                      <span className="font-medium">TZS {formatTzs(transportCost)}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between text-lg font-bold text-phomas-green">
                     <span>Total:</span>
-                    <span>TZS {Math.round(total).toLocaleString()}</span>
+                    <span>TZS {formatTzs(total)}</span>
                   </div>
                 </div>
 
@@ -505,12 +613,19 @@ export default function Cart() {
                   </p>
                 )}
 
+                {isMissingDeliveryArea && !isMissingDeliveryAddress && (
+                  <p className="mb-4 text-sm text-red-600">
+                    Select the delivery area so transport cost can be added to this order.
+                  </p>
+                )}
+
                 <Button
                   onClick={handleSendToEcount}
                   disabled={
                     sendToEcountMutation.isPending ||
                     (requiresOnlinePaymentConfirmation && !onlinePaymentConfirmed) ||
-                    isMissingDeliveryAddress
+                    isMissingDeliveryAddress ||
+                    isMissingDeliveryArea
                   }
                   className="w-full bg-phomas-green hover:bg-phomas-green/90 py-4 text-lg font-semibold"
                   data-testid="button-place-order"

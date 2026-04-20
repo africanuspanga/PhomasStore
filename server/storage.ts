@@ -422,6 +422,8 @@ export class MemStorage implements IStorage {
       status: insertOrder.status || "processing",
       paymentMethod: insertOrder.paymentMethod || "cash",
       deliveryOption: insertOrder.deliveryOption || "pickup",
+      deliveryArea: insertOrder.deliveryArea || null,
+      transportCost: insertOrder.transportCost || "0.00",
       customerName: insertOrder.customerName || 'Guest Customer',
       customerEmail: insertOrder.customerEmail || 'guest@example.com',
       customerPhone: insertOrder.customerPhone || '',
@@ -786,6 +788,8 @@ export class DatabaseStorage implements IStorage {
           orderNumber: `PH-${Date.now()}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`,
           paymentMethod: order.paymentMethod || "cash",
           deliveryOption: order.deliveryOption || "pickup",
+          deliveryArea: order.deliveryArea || null,
+          transportCost: order.transportCost || "0.00",
           customerAddress: order.customerAddress || '',
           createdAt: new Date(),
         }).returning();

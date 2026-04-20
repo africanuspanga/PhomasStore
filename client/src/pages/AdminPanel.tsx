@@ -19,6 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { getDeliveryAreaLabel } from "@shared/orderPricing";
 
 // Extended User type for admin panel (includes Supabase metadata fields)
 interface AdminPanelUser extends Omit<User, 'password'> {
@@ -113,6 +114,9 @@ function OrdersManagement() {
       <Badge className="bg-violet-100 text-violet-800 text-xs">Pickup</Badge>
     );
   };
+
+  const formatTzs = (value?: string | number | null) =>
+    Math.round(Number.parseFloat(String(value ?? 0))).toLocaleString();
 
   if (isLoading) {
     return (
@@ -397,6 +401,22 @@ function OrdersManagement() {
                         {getDeliveryOptionLabel(selectedOrder.deliveryOption)}
                       </p>
                     </div>
+                    {selectedOrder.deliveryOption === "delivery" && (
+                      <>
+                        <div>
+                          <p className="text-gray-500">Delivery Area</p>
+                          <p className="mt-2 font-medium text-gray-800">
+                            {getDeliveryAreaLabel(selectedOrder.deliveryArea)}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-gray-500">Transport Cost</p>
+                          <p className="mt-2 font-medium text-gray-800">
+                            TZS {formatTzs(selectedOrder.transportCost)}
+                          </p>
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
 
@@ -432,6 +452,17 @@ function OrdersManagement() {
                       <span className="text-gray-600">Tax (18% VAT)</span>
                       <span>TZS {Math.round(parseFloat(selectedOrder.tax)).toLocaleString()}</span>
                     </div>
+                    {selectedOrder.deliveryOption === "delivery" && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">
+                          Transport Cost
+                          {selectedOrder.deliveryArea
+                            ? ` (${getDeliveryAreaLabel(selectedOrder.deliveryArea)})`
+                            : ""}
+                        </span>
+                        <span>TZS {formatTzs(selectedOrder.transportCost)}</span>
+                      </div>
+                    )}
                     <div className="flex justify-between font-bold text-lg border-t pt-2">
                       <span>Total</span>
                       <span className="text-phomas-green">TZS {Math.round(parseFloat(selectedOrder.total)).toLocaleString()}</span>

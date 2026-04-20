@@ -8,12 +8,15 @@ import { useAuth } from "@/contexts/AuthContext";
 import { ecountService } from "@/services/ecountService";
 import { History, Package, Truck, Clock, X } from "lucide-react";
 import { format } from "date-fns";
+import { getDeliveryAreaLabel } from "@shared/orderPricing";
 import type { Order, OrderItem } from "@shared/schema";
 
 export default function OrderHistory() {
   const { user } = useAuth();
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const authUserId = user?.userId || user?.id;
+  const formatTzs = (value?: string | number | null) =>
+    Math.round(Number.parseFloat(String(value ?? 0))).toLocaleString();
 
   const { data: orders = [], isLoading, error } = useQuery({
     queryKey: ["/api/orders/user", authUserId],
@@ -247,6 +250,17 @@ export default function OrderHistory() {
                     <span className="text-gray-600">Tax (18% VAT)</span>
                     <span>TZS {Math.round(parseFloat(selectedOrder.tax)).toLocaleString()}</span>
                   </div>
+                  {selectedOrder.deliveryOption === "delivery" && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">
+                        Transport Cost
+                        {selectedOrder.deliveryArea
+                          ? ` (${getDeliveryAreaLabel(selectedOrder.deliveryArea)})`
+                          : ""}
+                      </span>
+                      <span>TZS {formatTzs(selectedOrder.transportCost)}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between font-bold text-lg border-t pt-2">
                     <span>Total</span>
                     <span className="text-phomas-green">TZS {Math.round(parseFloat(selectedOrder.total)).toLocaleString()}</span>

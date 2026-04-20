@@ -2,9 +2,11 @@ import { sql } from "drizzle-orm";
 import { pgTable, text, varchar, decimal, integer, timestamp, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
+import { DELIVERY_AREA_VALUES } from "./orderPricing.js";
 
 export const paymentMethodSchema = z.enum(["cash", "online_now"]);
 export const deliveryOptionSchema = z.enum(["pickup", "delivery"]);
+export const deliveryAreaSchema = z.enum(DELIVERY_AREA_VALUES);
 
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -44,12 +46,14 @@ export const orders = pgTable("orders", {
   status: text("status").notNull().default("processing"),
   paymentMethod: text("payment_method").notNull().default("cash"),
   deliveryOption: text("delivery_option").notNull().default("pickup"),
+  deliveryArea: text("delivery_area"),
+  transportCost: decimal("transport_cost", { precision: 10, scale: 2 }).notNull().default("0.00"),
   // Customer information (stored directly for admin visibility)
   customerName: text("customer_name").notNull(),
   customerEmail: text("customer_email").notNull(),
-  customerPhone: text("customer_phone").default(''),
-  customerCompany: text("customer_company").default(''),
-  customerAddress: text("customer_address").default(''),
+  customerPhone: text("customer_phone").default(""),
+  customerCompany: text("customer_company").default(""),
+  customerAddress: text("customer_address").default(""),
   // eCount ERP Integration fields
   erpDocNumber: text("erp_doc_number"), // DOC_NO from eCount SaveSale response
   erpIoDate: text("erp_io_date"), // IO_DATE from eCount SaveSale (YYYYMMDD format)
@@ -129,16 +133,18 @@ export const supabaseSignUpSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8, "Password must be at least 8 characters"),
   name: z.string().min(1, "Company name is required"),
-  phone: z.string().regex(/^(?:\+255|0)[67]\d{8}$/, "Please enter a valid Tanzania phone number (+255754231267 or 0754231267)"),
+  phone: z
+    .string()
+    .regex(/^(?:\+255|0)[67]\d{8}$/, "Please enter a valid Tanzania phone number (+255754231267 or 0754231267)"),
   address: z.string().min(1, "Address is required"),
   brela_number: z.string().min(1, "Company Registration Number (Brela) is required"),
   tin_number: z.string().min(1, "TIN Number is required"),
-  user_type: z.enum(['company', 'licensed_trader'])
+  user_type: z.enum(["company", "licensed_trader"]),
 });
 
 export const supabaseLoginSchema = z.object({
   email: z.string().email(),
-  password: z.string().min(1, "Password is required")
+  password: z.string().min(1, "Password is required"),
 });
 
 export const insertProductSchema = createInsertSchema(products).omit({
@@ -149,22 +155,26 @@ export const insertInventorySchema = createInsertSchema(inventory).omit({
   id: true,
 });
 
-export const insertOrderSchema = createInsertSchema(orders).omit({
-  id: true,
-  orderNumber: true,
-  createdAt: true,
-  erpDocNumber: true,
-  erpIoDate: true,
-}).extend({
-  paymentMethod: paymentMethodSchema.default("cash"),
-  deliveryOption: deliveryOptionSchema.default("pickup"),
-  // Customer fields are optional from frontend - backend auto-fills from user profile
-  customerName: z.string().optional(),
-  customerEmail: z.string().optional(),
-  customerPhone: z.string().optional(),
-  customerCompany: z.string().optional(),
-  customerAddress: z.string().optional(),
-});
+export const insertOrderSchema = createInsertSchema(orders)
+  .omit({
+    id: true,
+    orderNumber: true,
+    createdAt: true,
+    erpDocNumber: true,
+    erpIoDate: true,
+  })
+  .extend({
+    paymentMethod: paymentMethodSchema.default("cash"),
+    deliveryOption: deliveryOptionSchema.default("pickup"),
+    deliveryArea: deliveryAreaSchema.optional(),
+    transportCost: z.string().optional(),
+    // Customer fields are optional from frontend - backend auto-fills from user profile
+    customerName: z.string().optional(),
+    customerEmail: z.string().optional(),
+    customerPhone: z.string().optional(),
+    customerCompany: z.string().optional(),
+    customerAddress: z.string().optional(),
+  });
 
 export const insertProductImageSchema = createInsertSchema(productImages).omit({
   id: true,
@@ -188,6 +198,7 @@ export type InsertInventory = z.infer<typeof insertInventorySchema>;
 export type InsertOrder = z.infer<typeof insertOrderSchema>;
 export type PaymentMethod = z.infer<typeof paymentMethodSchema>;
 export type DeliveryOption = z.infer<typeof deliveryOptionSchema>;
+export type DeliveryArea = z.infer<typeof deliveryAreaSchema>;
 export type ProductImage = typeof productImages.$inferSelect;
 export type InsertProductImage = z.infer<typeof insertProductImageSchema>;
 export type AdminSession = typeof adminSessions.$inferSelect;
@@ -196,7 +207,8 @@ export type AdminCredential = typeof adminCredentials.$inferSelect;
 // Admin password change schema with validation (confirmPassword validated on frontend only)
 export const adminPasswordChangeSchema = z.object({
   oldPassword: z.string().min(1, "Current password is required"),
-  newPassword: z.string()
+  newPassword: z
+    .string()
     .min(8, "Password must be at least 8 characters")
     .regex(/[A-Z]/, "Password must contain at least one uppercase letter")
     .regex(/[a-z]/, "Password must contain at least one lowercase letter")
@@ -222,10 +234,14 @@ export type CartItem = {
   imageUrl?: string;
 };
 
-export type OrderItem = {
-  productId: string;
-  name: string;
-  price: string;
-  quantity: number;
-  referenceNumber: string;
-};
+export const orderItemSchema = z.object({
+  productId: z.string(),
+  name: z.string(),
+  price: z.string(),
+  quantity: z.number().int().positive(),
+  referenceNumber: z.string(),
+});
+
+export const orderItemsSchema = z.array(orderItemSchema);
+
+export type OrderItem = z.infer<typeof orderItemSchema>;
