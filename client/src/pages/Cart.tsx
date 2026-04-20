@@ -199,13 +199,26 @@ export default function Cart() {
   const handlePaymentMethodChange = (value: string) => {
     const nextPaymentMethod = value as PaymentMethod;
     setPaymentMethod(nextPaymentMethod);
+
+    // Cash payment forces pickup only (delivery not allowed)
+    if (nextPaymentMethod === "cash") {
+      setDeliveryOption("pickup");
+      setDeliveryArea("");
+    }
+
     if (nextPaymentMethod !== "online_now") {
       setOnlinePaymentConfirmed(false);
     }
   };
 
   const handleDeliveryOptionChange = (value: string) => {
-    setDeliveryOption(value as DeliveryOption);
+    const nextDeliveryOption = value as DeliveryOption;
+    setDeliveryOption(nextDeliveryOption);
+
+    // Delivery forces online payment (cash not allowed for delivery)
+    if (nextDeliveryOption === "delivery") {
+      setPaymentMethod("online_now");
+    }
   };
 
   const handleSendToEcount = () => {
@@ -480,13 +493,29 @@ export default function Cart() {
                         </div>
                       </label>
 
-                      <label className="flex items-start gap-3 rounded-lg border border-gray-200 p-4 cursor-pointer">
-                        <RadioGroupItem value="delivery" id="delivery-option" className="mt-1" />
+                      <label
+                        className={`flex items-start gap-3 rounded-lg border p-4 cursor-pointer ${
+                          paymentMethod === "cash"
+                            ? "border-gray-200 bg-gray-100 opacity-50 cursor-not-allowed"
+                            : "border-gray-200"
+                        }`}
+                      >
+                        <RadioGroupItem
+                          value="delivery"
+                          id="delivery-option"
+                          className="mt-1"
+                          disabled={paymentMethod === "cash"}
+                        />
                         <div>
                           <span className="font-medium text-gray-900">Delivery</span>
                           <p className="text-sm text-gray-600 mt-1">
                             Use your verified customer address for delivery.
                           </p>
+                          {paymentMethod === "cash" && (
+                            <p className="text-xs text-amber-600 mt-1">
+                              Delivery requires online payment.
+                            </p>
+                          )}
                         </div>
                       </label>
                     </RadioGroup>

@@ -1137,6 +1137,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
+      // Validate payment method / delivery option combination
+      // Cash payment is only allowed with pickup (not delivery)
+      const requestedPaymentMethod = req.body.paymentMethod || 'cash';
+      if (requestedPaymentMethod === 'cash' && requestedDeliveryOption === 'delivery') {
+        return res.status(400).json({
+          message: "Cash payment is only available for pickup orders. Please choose online payment for delivery.",
+        });
+      }
+
       const rawOrderItems =
         typeof req.body.items === "string" ? JSON.parse(req.body.items || "[]") : req.body.items || [];
       const orderItems = orderItemsSchema.parse(rawOrderItems);
