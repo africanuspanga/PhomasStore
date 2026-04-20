@@ -420,6 +420,8 @@ export class MemStorage implements IStorage {
       id,
       orderNumber,
       status: insertOrder.status || "processing",
+      paymentMethod: insertOrder.paymentMethod || "cash",
+      deliveryOption: insertOrder.deliveryOption || "pickup",
       customerName: insertOrder.customerName || 'Guest Customer',
       customerEmail: insertOrder.customerEmail || 'guest@example.com',
       customerPhone: insertOrder.customerPhone || '',
@@ -782,6 +784,9 @@ export class DatabaseStorage implements IStorage {
           ...order,
           id: randomUUID(),
           orderNumber: `PH-${Date.now()}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`,
+          paymentMethod: order.paymentMethod || "cash",
+          deliveryOption: order.deliveryOption || "pickup",
+          customerAddress: order.customerAddress || '',
           createdAt: new Date(),
         }).returning();
         console.log(`✅ Order ${createdOrder.orderNumber} saved to database`);

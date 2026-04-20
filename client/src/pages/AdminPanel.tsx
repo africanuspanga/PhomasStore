@@ -90,6 +90,30 @@ function OrdersManagement() {
     }
   };
 
+  const getPaymentMethodLabel = (paymentMethod?: string | null) => {
+    return paymentMethod === "online_now" ? "Online Now" : "Cash";
+  };
+
+  const getDeliveryOptionLabel = (deliveryOption?: string | null) => {
+    return deliveryOption === "delivery" ? "Delivery" : "Pickup";
+  };
+
+  const getPaymentBadge = (paymentMethod?: string | null) => {
+    return paymentMethod === "online_now" ? (
+      <Badge className="bg-emerald-100 text-emerald-800 text-xs">Online Now</Badge>
+    ) : (
+      <Badge className="bg-slate-100 text-slate-800 text-xs">Cash</Badge>
+    );
+  };
+
+  const getDeliveryBadge = (deliveryOption?: string | null) => {
+    return deliveryOption === "delivery" ? (
+      <Badge className="bg-sky-100 text-sky-800 text-xs">Delivery</Badge>
+    ) : (
+      <Badge className="bg-violet-100 text-violet-800 text-xs">Pickup</Badge>
+    );
+  };
+
   if (isLoading) {
     return (
       <Card>
@@ -145,6 +169,7 @@ function OrdersManagement() {
                 <th className="text-left py-3 px-4 font-semibold text-gray-700">Date</th>
                 <th className="text-left py-3 px-4 font-semibold text-gray-700">Items</th>
                 <th className="text-left py-3 px-4 font-semibold text-gray-700">Total</th>
+                <th className="text-left py-3 px-4 font-semibold text-gray-700">Checkout</th>
                 <th className="text-left py-3 px-4 font-semibold text-gray-700">Status</th>
                 <th className="text-left py-3 px-4 font-semibold text-gray-700">ERP</th>
                 <th className="text-left py-3 px-4 font-semibold text-gray-700">Action</th>
@@ -214,6 +239,12 @@ function OrdersManagement() {
                     </td>
                     <td className="py-4 px-4 font-semibold text-phomas-green">
                       TZS {Math.round(parseFloat(order.total)).toLocaleString()}
+                    </td>
+                    <td className="py-4 px-4">
+                      <div className="flex flex-col gap-2">
+                        {getPaymentBadge(order.paymentMethod)}
+                        {getDeliveryBadge(order.deliveryOption)}
+                      </div>
                     </td>
                     <td className="py-4 px-4">
                       <Badge className={`${getStatusColor(order.status)} text-xs capitalize`}>
@@ -320,6 +351,10 @@ function OrdersManagement() {
                       <p className="text-gray-500">Phone</p>
                       <p className="font-medium">{selectedOrder.customerPhone || 'N/A'}</p>
                     </div>
+                    <div className="col-span-2">
+                      <p className="text-gray-500">Address</p>
+                      <p className="font-medium">{selectedOrder.customerAddress || 'N/A'}</p>
+                    </div>
                   </div>
                 </div>
 
@@ -342,6 +377,26 @@ function OrdersManagement() {
                     <p className="text-xl font-bold text-phomas-green">
                       TZS {Math.round(parseFloat(selectedOrder.total)).toLocaleString()}
                     </p>
+                  </div>
+                </div>
+
+                <div className="p-4 bg-gray-50 rounded-lg">
+                  <h4 className="font-semibold text-gray-800 mb-3">Checkout Details</h4>
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <p className="text-gray-500">Payment Method</p>
+                      <div className="mt-1">{getPaymentBadge(selectedOrder.paymentMethod)}</div>
+                      <p className="mt-2 font-medium text-gray-800">
+                        {getPaymentMethodLabel(selectedOrder.paymentMethod)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500">Fulfillment</p>
+                      <div className="mt-1">{getDeliveryBadge(selectedOrder.deliveryOption)}</div>
+                      <p className="mt-2 font-medium text-gray-800">
+                        {getDeliveryOptionLabel(selectedOrder.deliveryOption)}
+                      </p>
+                    </div>
                   </div>
                 </div>
 

@@ -3,6 +3,9 @@ import { pgTable, text, varchar, decimal, integer, timestamp, boolean } from "dr
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
+export const paymentMethodSchema = z.enum(["cash", "online_now"]);
+export const deliveryOptionSchema = z.enum(["pickup", "delivery"]);
+
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   email: text("email").notNull().unique(),
@@ -39,6 +42,8 @@ export const orders = pgTable("orders", {
   tax: decimal("tax", { precision: 10, scale: 2 }).notNull(),
   total: decimal("total", { precision: 10, scale: 2 }).notNull(),
   status: text("status").notNull().default("processing"),
+  paymentMethod: text("payment_method").notNull().default("cash"),
+  deliveryOption: text("delivery_option").notNull().default("pickup"),
   // Customer information (stored directly for admin visibility)
   customerName: text("customer_name").notNull(),
   customerEmail: text("customer_email").notNull(),
@@ -151,6 +156,8 @@ export const insertOrderSchema = createInsertSchema(orders).omit({
   erpDocNumber: true,
   erpIoDate: true,
 }).extend({
+  paymentMethod: paymentMethodSchema.default("cash"),
+  deliveryOption: deliveryOptionSchema.default("pickup"),
   // Customer fields are optional from frontend - backend auto-fills from user profile
   customerName: z.string().optional(),
   customerEmail: z.string().optional(),
@@ -179,6 +186,8 @@ export type SupabaseLogin = z.infer<typeof supabaseLoginSchema>;
 export type Profile = typeof profiles.$inferSelect;
 export type InsertInventory = z.infer<typeof insertInventorySchema>;
 export type InsertOrder = z.infer<typeof insertOrderSchema>;
+export type PaymentMethod = z.infer<typeof paymentMethodSchema>;
+export type DeliveryOption = z.infer<typeof deliveryOptionSchema>;
 export type ProductImage = typeof productImages.$inferSelect;
 export type InsertProductImage = z.infer<typeof insertProductImageSchema>;
 export type AdminSession = typeof adminSessions.$inferSelect;

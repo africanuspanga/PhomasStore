@@ -43,6 +43,8 @@ export function ShoppingCart({ isOpen, onClose }: ShoppingCartProps) {
         subtotal: subtotal.toFixed(2),
         tax: tax.toFixed(2),
         total: total.toFixed(2),
+        paymentMethod: "cash",
+        deliveryOption: "pickup",
         status: "processing",
       });
     },

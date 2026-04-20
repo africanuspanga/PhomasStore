@@ -24,6 +24,8 @@ function normalizeOrder(row: any) {
     tax: row.tax?.toString?.() || "0",
     total: row.total?.toString?.() || "0",
     status: row.status || "processing",
+    paymentMethod: row.payment_method || "cash",
+    deliveryOption: row.delivery_option || "pickup",
     customerName: row.customer_name || "",
     customerEmail: row.customer_email || "",
     customerPhone: row.customer_phone || "",

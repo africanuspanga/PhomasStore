@@ -1118,6 +1118,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ...req.body,
         userId: authenticatedUserId,
         // Prioritize data from frontend request body, fall back to middleware defaults
+        paymentMethod: req.body.paymentMethod || 'cash',
+        deliveryOption: req.body.deliveryOption || 'pickup',
         customerName: req.body.customerName || (req as any).userEmail?.split('@')[0] || 'Guest Customer',
         customerEmail: req.body.customerEmail || (req as any).userEmail || 'guest@example.com',
         customerPhone: req.body.customerPhone || '',
@@ -1305,6 +1307,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const orders = await storage.getAllOrders();
       console.log(`📦 Admin fetched ${orders.length} orders with customer information`);
+      res.json(orders);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch all orders", error });
+    }
+  });
+
+  app.get("/api/admin/orders", requireAdminAuth, async (req, res) => {
+    try {
+      const orders = await storage.getAllOrders();
+      console.log(`📦 Admin fetched ${orders.length} orders from /api/admin/orders`);
       res.json(orders);
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch all orders", error });
