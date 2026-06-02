@@ -221,7 +221,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             address: userData.address,
             brela_number: userData.brela_number,
             tin_number: userData.tin_number,
-            user_type: userData.user_type
+            user_type: userData.user_type,
+            approved: false
           }
         }
       });
@@ -251,6 +252,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             });
         } catch (profileError) {
           console.log('Profile creation skipped - table not available:', profileError);
+        }
+
+        try {
+          await fetch("/api/auth/pending-approval-notification", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              email: userData.email,
+              name: userData.name,
+              phone: userData.phone,
+              address: userData.address,
+              brela_number: userData.brela_number,
+              tin_number: userData.tin_number,
+              user_type: userData.user_type,
+            }),
+            keepalive: true,
+          });
+        } catch (notificationError) {
+          console.warn("Pending approval notification failed:", notificationError);
         }
 
         // Load the user (fallback to metadata if profile table not available)

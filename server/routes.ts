@@ -695,6 +695,61 @@ const sendOrderNotificationSafely = async (order: any) => {
   }
 };
 
+const buildPendingApprovalNotificationHtml = (registration: any) => {
+  return `
+    <div style="font-family:Arial,sans-serif;color:#111827;line-height:1.5;">
+      <h2 style="margin:0 0 12px;color:#0f7a4d;">New account pending approval</h2>
+      <p style="margin:0 0 16px;">A new Phomas Diagnostics store account was created and is waiting for admin approval.</p>
+      <table style="border-collapse:collapse;width:100%;max-width:680px;margin-bottom:18px;">
+        <tr><td style="padding:6px 0;color:#6b7280;">Company / Name</td><td style="padding:6px 0;font-weight:600;">${escapeHtml(registration.name || "N/A")}</td></tr>
+        <tr><td style="padding:6px 0;color:#6b7280;">Email</td><td style="padding:6px 0;">${escapeHtml(registration.email || "N/A")}</td></tr>
+        <tr><td style="padding:6px 0;color:#6b7280;">Phone</td><td style="padding:6px 0;">${escapeHtml(registration.phone || "N/A")}</td></tr>
+        <tr><td style="padding:6px 0;color:#6b7280;">Address</td><td style="padding:6px 0;">${escapeHtml(registration.address || "N/A")}</td></tr>
+        <tr><td style="padding:6px 0;color:#6b7280;">User type</td><td style="padding:6px 0;">${escapeHtml(registration.userType || "N/A")}</td></tr>
+        <tr><td style="padding:6px 0;color:#6b7280;">BRELA</td><td style="padding:6px 0;">${escapeHtml(registration.brelaNumber || "N/A")}</td></tr>
+        <tr><td style="padding:6px 0;color:#6b7280;">TIN</td><td style="padding:6px 0;">${escapeHtml(registration.tinNumber || "N/A")}</td></tr>
+      </table>
+      <p style="margin:0;color:#6b7280;">Open the admin panel and review Pending Approvals.</p>
+    </div>
+  `;
+};
+
+const sendPendingApprovalNotification = async (registration: any) => {
+  if (!RESEND_API_KEY) {
+    console.log(`📧 Pending approval notification skipped for ${registration.email}: RESEND_API_KEY not configured`);
+    return;
+  }
+
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${RESEND_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from: ORDER_NOTIFICATION_FROM,
+      to: [ORDER_NOTIFICATION_EMAIL],
+      subject: `New Phomas account pending approval: ${registration.name || registration.email || "New user"}`,
+      html: buildPendingApprovalNotificationHtml(registration),
+    }),
+  });
+
+  if (!response.ok) {
+    const errorBody = await response.text().catch(() => response.statusText);
+    throw new Error(`Resend pending approval notification failed (${response.status}): ${errorBody}`);
+  }
+
+  console.log(`📧 Pending approval notification sent to ${ORDER_NOTIFICATION_EMAIL} for ${registration.email}`);
+};
+
+const sendPendingApprovalNotificationSafely = async (registration: any) => {
+  try {
+    await sendPendingApprovalNotification(registration);
+  } catch (error) {
+    console.error(`📧 Failed to send pending approval notification for ${registration.email}:`, error);
+  }
+};
+
 const withTimeout = async <T,>(promise: Promise<T>, timeoutMs: number): Promise<T | { timedOut: true }> => {
   let timeout: NodeJS.Timeout | null = null;
 
@@ -819,7 +874,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log('🔐 Registration request received:', req.body);
       
       const validatedData = supabaseSignUpSchema.parse(req.body);
-      const { email, password, name, phone, address, user_type } = validatedData;
+      const { email, password, name, phone, address, user_type, brela_number, tin_number } = validatedData;
 
       // Create user in Supabase Auth (unapproved by default)
       const { data: authData, error: authError } = await supabase.auth.signUp({
@@ -830,6 +885,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             name,
             phone,
             address,
+            brela_number,
+            tin_number,
             user_type,
             approved: false // Requires admin approval
           }
@@ -854,6 +911,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log('🔐 Skipping profile creation - will be handled client-side');
 
       console.log('🔐 Registration successful:', { email, name, user_type });
+
+      await withTimeout(sendPendingApprovalNotificationSafely({
+        userId: authData.user.id,
+        email,
+        name,
+        phone,
+        address,
+        userType: user_type,
+        brelaNumber: brela_number,
+        tinNumber: tin_number,
+      }), 3000);
       
       res.json({ 
         success: true, 
@@ -870,6 +938,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(400).json({ 
         message: "Registration failed", 
         error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
+  app.post("/api/auth/pending-approval-notification", async (req, res) => {
+    try {
+      const validatedData = supabaseSignUpSchema.omit({ password: true }).parse(req.body);
+
+      await withTimeout(sendPendingApprovalNotificationSafely({
+        email: validatedData.email,
+        name: validatedData.name,
+        phone: validatedData.phone,
+        address: validatedData.address,
+        userType: validatedData.user_type,
+        brelaNumber: validatedData.brela_number,
+        tinNumber: validatedData.tin_number,
+      }), 3000);
+
+      res.json({
+        success: true,
+        message: "Pending approval notification queued",
+      });
+    } catch (error) {
+      console.error('📧 Pending approval notification endpoint error:', error);
+      res.status(400).json({
+        message: "Failed to send pending approval notification",
+        error: error instanceof Error ? error.message : 'Unknown error',
       });
     }
   });

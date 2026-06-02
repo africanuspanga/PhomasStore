@@ -961,11 +961,11 @@ export default function AdminPanel() {
           <p className="text-gray-600 mt-2">Manage users, products, and inventory</p>
         </div>
 
-        <Tabs defaultValue="overview" className="w-full">
+        <Tabs defaultValue="orders" className="w-full">
           <TabsList className="mb-6">
+            <TabsTrigger value="orders">Orders</TabsTrigger>
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="approvals">Pending Approvals</TabsTrigger>
-            <TabsTrigger value="orders">Orders</TabsTrigger>
             <TabsTrigger value="products">Product Management</TabsTrigger>
             <TabsTrigger value="sync">Bulk Sync</TabsTrigger>
             <TabsTrigger value="security">Security</TabsTrigger>
