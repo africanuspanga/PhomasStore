@@ -48,6 +48,8 @@ export const orders = pgTable("orders", {
   deliveryOption: text("delivery_option").notNull().default("pickup"),
   deliveryArea: text("delivery_area"),
   transportCost: decimal("transport_cost", { precision: 10, scale: 2 }).notNull().default("0.00"),
+  icePackRequired: boolean("ice_pack_required").notNull().default(false),
+  icePackCost: decimal("ice_pack_cost", { precision: 10, scale: 2 }).notNull().default("0.00"),
   // Customer information (stored directly for admin visibility)
   customerName: text("customer_name").notNull(),
   customerEmail: text("customer_email").notNull(),
@@ -168,6 +170,8 @@ export const insertOrderSchema = createInsertSchema(orders)
     deliveryOption: deliveryOptionSchema.default("pickup"),
     deliveryArea: deliveryAreaSchema.optional(),
     transportCost: z.string().optional(),
+    icePackRequired: z.boolean().default(false),
+    icePackCost: z.string().optional(),
     // Customer fields are optional from frontend - backend auto-fills from user profile
     customerName: z.string().optional(),
     customerEmail: z.string().optional(),

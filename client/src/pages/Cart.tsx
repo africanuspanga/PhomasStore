@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,16 +8,15 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useCart } from "@/contexts/CartContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { ecountService } from "@/services/ecountService";
-import { ShoppingCart, ArrowLeft, Plus, Minus, Trash2, Send, AlertTriangle } from "lucide-react";
+import { ShoppingCart, ArrowLeft, Plus, Minus, Trash2, Send, AlertTriangle, Snowflake } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
-import { supabase } from "@/lib/supabase";
 import {
   calculateOrderTotal,
+  getIcePackCost,
   getDeliveryAreaLabel,
   getTransportCost,
-  inferDeliveryAreaFromAddress,
 } from "@shared/orderPricing";
 import type {
   DeliveryArea,
@@ -51,27 +50,37 @@ export default function Cart() {
   const queryClient = useQueryClient();
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [orderNumber, setOrderNumber] = useState("");
-  const [userEmail, setUserEmail] = useState<string>("");
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
-  const [deliveryOption, setDeliveryOption] = useState<DeliveryOption>("pickup");
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | "">("");
+  const [deliveryOption, setDeliveryOption] = useState<DeliveryOption | "">("");
   const [deliveryArea, setDeliveryArea] = useState<DeliveryArea | "">("");
   const [onlinePaymentConfirmed, setOnlinePaymentConfirmed] = useState(false);
+  const [icePackRequired, setIcePackRequired] = useState(false);
+  const [checkoutDetails, setCheckoutDetails] = useState({
+    customerName: "",
+    customerCompany: "",
+    customerEmail: "",
+    customerPhone: "",
+    customerAddress: "",
+  });
 
-  const deliveryAddress = user?.address?.trim() || "";
-  const inferredDeliveryArea = useMemo(
-    () => inferDeliveryAreaFromAddress(deliveryAddress),
-    [deliveryAddress],
-  );
+  const deliveryAddress = checkoutDetails.customerAddress.trim();
   const needsDeliveryAddress = deliveryOption === "delivery";
+  const isMissingPaymentMethod = !paymentMethod;
+  const isMissingDeliveryOption = !deliveryOption;
+  const isMissingCustomerName = !checkoutDetails.customerName.trim();
+  const isMissingCustomerEmail = !checkoutDetails.customerEmail.trim();
+  const isMissingCustomerPhone = !checkoutDetails.customerPhone.trim();
   const isMissingDeliveryAddress = needsDeliveryAddress && !deliveryAddress;
   const isMissingDeliveryArea = needsDeliveryAddress && !deliveryArea;
   const requiresOnlinePaymentConfirmation = paymentMethod === "online_now";
   const transportCost = getTransportCost(deliveryOption, deliveryArea || undefined);
+  const icePackCost = getIcePackCost(icePackRequired);
   const total = calculateOrderTotal({
     subtotal,
     tax,
     deliveryOption,
     deliveryArea: deliveryArea || undefined,
+    icePackRequired,
   });
 
   // Fetch products to check stock limits
@@ -108,30 +117,12 @@ export default function Cart() {
     updateQuantity(productId, newQuantity);
   };
 
-  // Get user email from Supabase session
-  useEffect(() => {
-    const getEmail = async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (session?.user?.email) {
-        setUserEmail(session.user.email);
-      }
-    };
-    getEmail();
-  }, []);
-
-  useEffect(() => {
-    if (deliveryOption !== "delivery") {
-      setDeliveryArea("");
-      return;
-    }
-
-    setDeliveryArea((currentDeliveryArea) => currentDeliveryArea || inferredDeliveryArea || "");
-  }, [deliveryOption, inferredDeliveryArea]);
-
   const sendToEcountMutation = useMutation({
     mutationFn: async () => {
+      if (!paymentMethod || !deliveryOption) {
+        throw new Error("Payment method and fulfillment option are required.");
+      }
+
       // Allow guest checkout - userId will be set by backend
       const userId = user?.userId || user?.id || "guest-user";
 
@@ -154,11 +145,13 @@ export default function Cart() {
         deliveryOption,
         deliveryArea: deliveryOption === "delivery" ? deliveryArea || undefined : undefined,
         transportCost: transportCost.toFixed(2),
-        customerName: user?.name || "Guest Customer",
-        customerEmail: userEmail || "guest@example.com",
-        customerPhone: user?.phone || "",
-        customerCompany: user?.name || "",
-        customerAddress: deliveryOption === "delivery" ? deliveryAddress : "",
+        icePackRequired,
+        icePackCost: icePackCost.toFixed(2),
+        customerName: checkoutDetails.customerName.trim(),
+        customerEmail: checkoutDetails.customerEmail.trim(),
+        customerPhone: checkoutDetails.customerPhone.trim(),
+        customerCompany: checkoutDetails.customerCompany.trim(),
+        customerAddress: deliveryOption === "delivery" ? deliveryAddress : checkoutDetails.customerAddress.trim(),
       });
     },
     onSuccess: (data) => {
@@ -200,9 +193,8 @@ export default function Cart() {
     const nextPaymentMethod = value as PaymentMethod;
     setPaymentMethod(nextPaymentMethod);
 
-    // Cash payment forces pickup only (delivery not allowed)
-    if (nextPaymentMethod === "cash") {
-      setDeliveryOption("pickup");
+    if (nextPaymentMethod === "cash" && deliveryOption === "delivery") {
+      setDeliveryOption("");
       setDeliveryArea("");
     }
 
@@ -215,9 +207,13 @@ export default function Cart() {
     const nextDeliveryOption = value as DeliveryOption;
     setDeliveryOption(nextDeliveryOption);
 
-    // Delivery forces online payment (cash not allowed for delivery)
-    if (nextDeliveryOption === "delivery") {
-      setPaymentMethod("online_now");
+    if (nextDeliveryOption !== "delivery") {
+      setDeliveryArea("");
+    }
+
+    if (nextDeliveryOption === "delivery" && paymentMethod === "cash") {
+      setPaymentMethod("");
+      setOnlinePaymentConfirmed(false);
     }
   };
 
@@ -226,6 +222,33 @@ export default function Cart() {
       toast({
         title: "Cart is empty",
         description: "Please add items to your cart before placing an order.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (isMissingCustomerName || isMissingCustomerEmail || isMissingCustomerPhone) {
+      toast({
+        title: "Checkout details required",
+        description: "Please enter your name, email, and phone number before placing this order.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (isMissingPaymentMethod) {
+      toast({
+        title: "Payment method required",
+        description: "Please choose Cash or Pay Online Now.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (isMissingDeliveryOption) {
+      toast({
+        title: "Fulfillment option required",
+        description: "Please choose Pickup or Delivery.",
         variant: "destructive",
       });
       return;
@@ -263,10 +286,18 @@ export default function Cart() {
 
   const handleCloseSuccessModal = () => {
     setShowSuccessModal(false);
-    setPaymentMethod("cash");
-    setDeliveryOption("pickup");
+    setPaymentMethod("");
+    setDeliveryOption("");
     setDeliveryArea("");
     setOnlinePaymentConfirmed(false);
+    setIcePackRequired(false);
+    setCheckoutDetails({
+      customerName: "",
+      customerCompany: "",
+      customerEmail: "",
+      customerPhone: "",
+      customerAddress: "",
+    });
     setLocation("/");
   };
 
@@ -401,8 +432,93 @@ export default function Cart() {
                 <div className="mb-6">
                   <h3 className="text-lg font-semibold text-gray-900">Checkout Details</h3>
                   <p className="text-sm text-gray-600 mt-1">
-                    Choose how you want to pay and whether you will collect the order or receive delivery.
+                    Enter the details for this order, then choose payment, fulfillment, and cold-chain support.
                   </p>
+                </div>
+
+                <div className="mb-6 rounded-lg border border-gray-200 bg-gray-50 p-4">
+                  <h4 className="font-semibold text-gray-900">Customer Details</h4>
+                  <div className="mt-4 grid gap-4 md:grid-cols-2">
+                    <div>
+                      <Label htmlFor="checkout-customer-name">Name</Label>
+                      <Input
+                        id="checkout-customer-name"
+                        value={checkoutDetails.customerName}
+                        onChange={(event) =>
+                          setCheckoutDetails((details) => ({
+                            ...details,
+                            customerName: event.target.value,
+                          }))
+                        }
+                        placeholder="Your full name"
+                        data-testid="input-checkout-customer-name"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="checkout-customer-company">Company</Label>
+                      <Input
+                        id="checkout-customer-company"
+                        value={checkoutDetails.customerCompany}
+                        onChange={(event) =>
+                          setCheckoutDetails((details) => ({
+                            ...details,
+                            customerCompany: event.target.value,
+                          }))
+                        }
+                        placeholder="Company or clinic name"
+                        data-testid="input-checkout-customer-company"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="checkout-customer-email">Email</Label>
+                      <Input
+                        id="checkout-customer-email"
+                        type="email"
+                        value={checkoutDetails.customerEmail}
+                        onChange={(event) =>
+                          setCheckoutDetails((details) => ({
+                            ...details,
+                            customerEmail: event.target.value,
+                          }))
+                        }
+                        placeholder="orders@example.com"
+                        data-testid="input-checkout-customer-email"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="checkout-customer-phone">Phone</Label>
+                      <Input
+                        id="checkout-customer-phone"
+                        type="tel"
+                        value={checkoutDetails.customerPhone}
+                        onChange={(event) =>
+                          setCheckoutDetails((details) => ({
+                            ...details,
+                            customerPhone: event.target.value,
+                          }))
+                        }
+                        placeholder="+255..."
+                        data-testid="input-checkout-customer-phone"
+                      />
+                    </div>
+                    <div className="md:col-span-2">
+                      <Label htmlFor="checkout-customer-address">
+                        {deliveryOption === "delivery" ? "Delivery Address" : "Address"}
+                      </Label>
+                      <Input
+                        id="checkout-customer-address"
+                        value={checkoutDetails.customerAddress}
+                        onChange={(event) =>
+                          setCheckoutDetails((details) => ({
+                            ...details,
+                            customerAddress: event.target.value,
+                          }))
+                        }
+                        placeholder="Street, city, region"
+                        data-testid="input-checkout-customer-address"
+                      />
+                    </div>
+                  </div>
                 </div>
 
                 <div className="grid gap-6 mb-6 md:grid-cols-2">
@@ -417,11 +533,27 @@ export default function Cart() {
                       onValueChange={handlePaymentMethodChange}
                       className="gap-3"
                     >
-                      <label className="flex items-start gap-3 rounded-lg border border-gray-200 p-4 cursor-pointer">
-                        <RadioGroupItem value="cash" id="payment-cash" className="mt-1" />
+                      <label
+                        className={`flex items-start gap-3 rounded-lg border p-4 ${
+                          deliveryOption === "delivery"
+                            ? "border-gray-200 bg-gray-100 opacity-50 cursor-not-allowed"
+                            : "border-gray-200 cursor-pointer"
+                        }`}
+                      >
+                        <RadioGroupItem
+                          value="cash"
+                          id="payment-cash"
+                          className="mt-1"
+                          disabled={deliveryOption === "delivery"}
+                        />
                         <div>
                           <span className="font-medium text-gray-900">Cash</span>
                           <p className="text-sm text-gray-600 mt-1">Pay when the order is processed.</p>
+                          {deliveryOption === "delivery" && (
+                            <p className="text-xs text-amber-600 mt-1">
+                              Delivery requires online payment.
+                            </p>
+                          )}
                         </div>
                       </label>
 
@@ -509,7 +641,7 @@ export default function Cart() {
                         <div>
                           <span className="font-medium text-gray-900">Delivery</span>
                           <p className="text-sm text-gray-600 mt-1">
-                            Use your verified customer address for delivery.
+                            Enter a delivery address for this order.
                           </p>
                           {paymentMethod === "cash" && (
                             <p className="text-xs text-amber-600 mt-1">
@@ -525,7 +657,7 @@ export default function Cart() {
                         <>
                           {deliveryAddress ? (
                             <>
-                              <p className="font-medium text-gray-900">Verified Delivery Address</p>
+                              <p className="font-medium text-gray-900">Delivery Address</p>
                               <p className="text-sm text-gray-600 mt-1">{deliveryAddress}</p>
                               <p className="text-xs text-gray-500 mt-2">
                                 This address will be sent to the admin dashboard with the order.
@@ -535,7 +667,7 @@ export default function Cart() {
                             <>
                               <p className="font-medium text-amber-700">Delivery address missing</p>
                               <p className="text-sm text-amber-700 mt-1">
-                                We could not find a verified delivery address on this account.
+                                Enter a delivery address in customer details.
                               </p>
                             </>
                           )}
@@ -606,6 +738,29 @@ export default function Cart() {
                   </div>
                 </div>
 
+                <div className="mb-6 rounded-lg border border-blue-100 bg-blue-50 p-4">
+                  <div className="flex items-start gap-3">
+                    <Checkbox
+                      id="ice-pack-required"
+                      checked={icePackRequired}
+                      onCheckedChange={(checked) => setIcePackRequired(checked === true)}
+                      data-testid="checkbox-ice-pack-required"
+                    />
+                    <div className="space-y-1">
+                      <Label
+                        htmlFor="ice-pack-required"
+                        className="flex items-center gap-2 text-base font-semibold text-gray-900"
+                      >
+                        <Snowflake className="h-4 w-4 text-blue-600" />
+                        Add ice pack
+                      </Label>
+                      <p className="text-sm text-gray-600">
+                        Request cold-chain support for medicines that need temperature control.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
                 <div className="space-y-2 mb-6">
                   <div className="flex justify-between">
                     <span className="text-gray-600">Subtotal:</span>
@@ -624,6 +779,12 @@ export default function Cart() {
                       <span className="font-medium">TZS {formatTzs(transportCost)}</span>
                     </div>
                   )}
+                  {icePackRequired && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Ice Pack:</span>
+                      <span className="font-medium">TZS {formatTzs(icePackCost)}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between text-lg font-bold text-phomas-green">
                     <span>Total:</span>
                     <span>TZS {formatTzs(total)}</span>
@@ -633,6 +794,24 @@ export default function Cart() {
                 {requiresOnlinePaymentConfirmation && !onlinePaymentConfirmed && (
                   <p className="mb-4 text-sm text-amber-700">
                     Confirm online payment before placing this order.
+                  </p>
+                )}
+
+                {(isMissingCustomerName || isMissingCustomerEmail || isMissingCustomerPhone) && (
+                  <p className="mb-4 text-sm text-red-600">
+                    Enter customer name, email, and phone number before placing this order.
+                  </p>
+                )}
+
+                {isMissingPaymentMethod && (
+                  <p className="mb-4 text-sm text-red-600">
+                    Choose a payment method before placing this order.
+                  </p>
+                )}
+
+                {isMissingDeliveryOption && (
+                  <p className="mb-4 text-sm text-red-600">
+                    Choose pickup or delivery before placing this order.
                   </p>
                 )}
 
@@ -652,6 +831,11 @@ export default function Cart() {
                   onClick={handleSendToEcount}
                   disabled={
                     sendToEcountMutation.isPending ||
+                    isMissingCustomerName ||
+                    isMissingCustomerEmail ||
+                    isMissingCustomerPhone ||
+                    isMissingPaymentMethod ||
+                    isMissingDeliveryOption ||
                     (requiresOnlinePaymentConfirmation && !onlinePaymentConfirmed) ||
                     isMissingDeliveryAddress ||
                     isMissingDeliveryArea
@@ -688,8 +872,9 @@ export default function Cart() {
                 Your order has been sent to Phomas for processing.
               </p>
               <p className="text-sm text-gray-500 mb-4">
-                Payment: {getPaymentMethodLabel(paymentMethod)} | Fulfillment:{" "}
-                {getDeliveryOptionLabel(deliveryOption)}
+                Payment: {paymentMethod ? getPaymentMethodLabel(paymentMethod) : "Not set"} | Fulfillment:{" "}
+                {deliveryOption ? getDeliveryOptionLabel(deliveryOption) : "Not set"}
+                {icePackRequired ? " | Ice pack requested" : ""}
               </p>
               <p className="text-sm text-gray-500 mb-6">
                 Order Number: <span className="font-medium text-phomas-green">{orderNumber}</span>

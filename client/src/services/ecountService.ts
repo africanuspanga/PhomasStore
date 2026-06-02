@@ -54,6 +54,11 @@ export const ecountService = {
     return await response.json();
   },
 
+  async updateOrderStatus(orderId: string, status: string): Promise<{ success: boolean; order: Order }> {
+    const response = await apiRequest("PATCH", `/api/admin/orders/${orderId}/status`, { status });
+    return await response.json();
+  },
+
   async getInventoryAlerts(): Promise<any[]> {
     const response = await apiRequest("GET", "/api/admin/inventory");
     return await response.json();

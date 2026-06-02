@@ -7,6 +7,8 @@ export const TRANSPORT_COSTS: Record<DeliveryAreaValue, number> = {
   outside_dar_es_salaam: 20000,
 };
 
+export const ICE_PACK_COST = 0;
+
 const DAR_ES_SALAAM_PATTERNS = [
   "dar es salaam",
   "dar-es-salaam",
@@ -58,6 +60,10 @@ export function getTransportCost(
   return TRANSPORT_COSTS[deliveryArea as DeliveryAreaValue];
 }
 
+export function getIcePackCost(icePackRequired?: boolean | null): number {
+  return icePackRequired ? ICE_PACK_COST : 0;
+}
+
 export function sumOrderItemsSubtotal(
   items: Array<{ price: string | number; quantity: number }>,
 ): number {
@@ -74,11 +80,13 @@ export function calculateOrderTotal({
   tax,
   deliveryOption,
   deliveryArea,
+  icePackRequired,
 }: {
   subtotal: number;
   tax: number;
   deliveryOption?: string | null;
   deliveryArea?: string | null;
+  icePackRequired?: boolean | null;
 }): number {
-  return subtotal + tax + getTransportCost(deliveryOption, deliveryArea);
+  return subtotal + tax + getTransportCost(deliveryOption, deliveryArea) + getIcePackCost(icePackRequired);
 }

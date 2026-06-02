@@ -43,6 +43,7 @@ export interface IStorage {
   getAllOrders(): Promise<Order[]>;
   getFailedOrders(): Promise<Order[]>;
   deleteOrder(orderId: string): Promise<boolean>;
+  updateOrderStatus(orderId: string, status: string): Promise<Order>;
   updateOrderErpInfo(orderId: string, erpInfo: {
     erpDocNumber?: string;
     erpIoDate?: string;
@@ -424,6 +425,8 @@ export class MemStorage implements IStorage {
       deliveryOption: insertOrder.deliveryOption || "pickup",
       deliveryArea: insertOrder.deliveryArea || null,
       transportCost: insertOrder.transportCost || "0.00",
+      icePackRequired: insertOrder.icePackRequired || false,
+      icePackCost: insertOrder.icePackCost || "0.00",
       customerName: insertOrder.customerName || 'Guest Customer',
       customerEmail: insertOrder.customerEmail || 'guest@example.com',
       customerPhone: insertOrder.customerPhone || '',
@@ -477,6 +480,21 @@ export class MemStorage implements IStorage {
       return true;
     }
     return false;
+  }
+
+  async updateOrderStatus(orderId: string, status: string): Promise<Order> {
+    const order = this.orders.get(orderId);
+    if (!order) {
+      throw new Error(`Order with ID ${orderId} not found`);
+    }
+
+    const updatedOrder: Order = {
+      ...order,
+      status,
+    };
+
+    this.orders.set(orderId, updatedOrder);
+    return updatedOrder;
   }
 
   async updateOrderErpInfo(orderId: string, erpInfo: {
@@ -790,6 +808,8 @@ export class DatabaseStorage implements IStorage {
           deliveryOption: order.deliveryOption || "pickup",
           deliveryArea: order.deliveryArea || null,
           transportCost: order.transportCost || "0.00",
+          icePackRequired: order.icePackRequired || false,
+          icePackCost: order.icePackCost || "0.00",
           customerAddress: order.customerAddress || '',
           createdAt: new Date(),
         }).returning();
@@ -904,6 +924,30 @@ export class DatabaseStorage implements IStorage {
       }
     }
     return this.memStorage.deleteOrder(orderId);
+  }
+
+  async updateOrderStatus(orderId: string, status: string): Promise<Order> {
+    if (this.db) {
+      try {
+        const [updatedOrder] = await this.db
+          .update(ordersTable)
+          .set({ status })
+          .where(eq(ordersTable.id, orderId))
+          .returning();
+
+        if (!updatedOrder) {
+          throw new Error(`Order with ID ${orderId} not found`);
+        }
+
+        console.log(`✅ Updated order ${updatedOrder.orderNumber} status to ${status}`);
+        return updatedOrder;
+      } catch (error) {
+        console.error('❌ Database error updating order status:', error);
+        throw error;
+      }
+    }
+
+    return this.memStorage.updateOrderStatus(orderId, status);
   }
 
   async getPendingUsers(): Promise<User[]> {

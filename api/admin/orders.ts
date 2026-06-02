@@ -28,6 +28,8 @@ function normalizeOrder(row: any) {
     deliveryOption: row.delivery_option || "pickup",
     deliveryArea: row.delivery_area || null,
     transportCost: row.transport_cost?.toString?.() || "0",
+    icePackRequired: row.ice_pack_required === true,
+    icePackCost: row.ice_pack_cost?.toString?.() || "0",
     customerName: row.customer_name || "",
     customerEmail: row.customer_email || "",
     customerPhone: row.customer_phone || "",

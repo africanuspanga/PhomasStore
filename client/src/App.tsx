@@ -15,6 +15,7 @@ import AdminRecovery from "@/pages/AdminRecovery";
 import Cart from "@/pages/Cart";
 import OrderHistory from "@/pages/OrderHistory";
 import AdminPanel from "@/pages/AdminPanel";
+import Account from "@/pages/Account";
 import NotFound from "@/pages/not-found";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -64,6 +65,11 @@ function Router() {
       <Route path="/orders">
         <ProtectedRoute>
           <OrderHistory />
+        </ProtectedRoute>
+      </Route>
+      <Route path="/account">
+        <ProtectedRoute>
+          <Account />
         </ProtectedRoute>
       </Route>
       <Route path="/admin">

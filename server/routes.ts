@@ -15,6 +15,7 @@ import {
 } from "../shared/schema.js";
 import {
   calculateOrderTotal,
+  getIcePackCost,
   getTransportCost,
   inferDeliveryAreaFromAddress,
   sumOrderItemsSubtotal,
@@ -40,6 +41,11 @@ const resolvedSupabaseServiceKey =
   process.env.SUPABASE_SERVICE_KEY ||
   process.env.SUPABASE_SERVICE_ROLE ||
   process.env.SUPABASE_SECRET_KEY;
+const ORDER_NOTIFICATION_EMAIL = process.env.ORDER_NOTIFICATION_EMAIL || "orders@phomasdiagnosticstz.com";
+const ORDER_NOTIFICATION_FROM = process.env.ORDER_NOTIFICATION_FROM || "Phomas Diagnostics <onboarding@resend.dev>";
+const ORDER_SYNC_TIMEOUT_MS = Number.parseInt(process.env.ORDER_SYNC_TIMEOUT_MS || "12000", 10);
+const RESEND_API_KEY = process.env.RESEND_API_KEY;
+const ORDER_STATUS_VALUES = ["processing", "shipped", "delivered", "completed", "cancelled"] as const;
 
 const resolveCloudinaryCredentials = () => {
   const cloudinaryUrl = process.env.CLOUDINARY_URL;
@@ -574,6 +580,133 @@ const enforceSaveRateLimit = (req: Request, res: Response, next: NextFunction) =
   
   saveOperationRateLimit.set(key, now);
   next();
+};
+
+const normalizeOrderStatus = (status: unknown) => {
+  if (typeof status !== "string") {
+    return null;
+  }
+
+  const normalizedStatus = status.trim().toLowerCase();
+  return (ORDER_STATUS_VALUES as readonly string[]).includes(normalizedStatus)
+    ? normalizedStatus
+    : null;
+};
+
+const formatCurrency = (value?: string | number | null) =>
+  `TZS ${Math.round(Number.parseFloat(String(value ?? 0))).toLocaleString()}`;
+
+const parseOrderItemsForNotification = (items: string) => {
+  try {
+    const parsed = JSON.parse(items);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
+
+const escapeHtml = (value: unknown) =>
+  String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+
+const buildOrderNotificationHtml = (order: any) => {
+  const items = parseOrderItemsForNotification(order.items);
+  const itemRows = items
+    .map((item: any) => {
+      const lineTotal = Number.parseFloat(item.price || "0") * Number(item.quantity || 0);
+      return `
+        <tr>
+          <td style="padding:8px;border-bottom:1px solid #e5e7eb;">${escapeHtml(item.name || item.productId || "Item")}</td>
+          <td style="padding:8px;border-bottom:1px solid #e5e7eb;">${escapeHtml(item.referenceNumber || "")}</td>
+          <td style="padding:8px;border-bottom:1px solid #e5e7eb;text-align:right;">${item.quantity || 0}</td>
+          <td style="padding:8px;border-bottom:1px solid #e5e7eb;text-align:right;">${formatCurrency(lineTotal)}</td>
+        </tr>
+      `;
+    })
+    .join("");
+
+  return `
+    <div style="font-family:Arial,sans-serif;color:#111827;line-height:1.5;">
+      <h2 style="margin:0 0 12px;color:#0f7a4d;">New order placed: ${escapeHtml(order.orderNumber)}</h2>
+      <p style="margin:0 0 16px;">A customer submitted a new Phomas Diagnostics store order.</p>
+      <table style="border-collapse:collapse;width:100%;max-width:680px;margin-bottom:18px;">
+        <tr><td style="padding:6px 0;color:#6b7280;">Customer</td><td style="padding:6px 0;font-weight:600;">${escapeHtml(order.customerName || "N/A")}</td></tr>
+        <tr><td style="padding:6px 0;color:#6b7280;">Company</td><td style="padding:6px 0;">${escapeHtml(order.customerCompany || "N/A")}</td></tr>
+        <tr><td style="padding:6px 0;color:#6b7280;">Email</td><td style="padding:6px 0;">${escapeHtml(order.customerEmail || "N/A")}</td></tr>
+        <tr><td style="padding:6px 0;color:#6b7280;">Phone</td><td style="padding:6px 0;">${escapeHtml(order.customerPhone || "N/A")}</td></tr>
+        <tr><td style="padding:6px 0;color:#6b7280;">Fulfillment</td><td style="padding:6px 0;">${escapeHtml(order.deliveryOption || "pickup")}</td></tr>
+        <tr><td style="padding:6px 0;color:#6b7280;">Ice pack</td><td style="padding:6px 0;">${order.icePackRequired ? "Requested" : "Not requested"}</td></tr>
+        <tr><td style="padding:6px 0;color:#6b7280;">Total</td><td style="padding:6px 0;font-weight:700;">${formatCurrency(order.total)}</td></tr>
+      </table>
+      <table style="border-collapse:collapse;width:100%;max-width:680px;">
+        <thead>
+          <tr style="background:#f3f4f6;">
+            <th style="padding:8px;text-align:left;">Item</th>
+            <th style="padding:8px;text-align:left;">Ref</th>
+            <th style="padding:8px;text-align:right;">Qty</th>
+            <th style="padding:8px;text-align:right;">Line total</th>
+          </tr>
+        </thead>
+        <tbody>${itemRows}</tbody>
+      </table>
+    </div>
+  `;
+};
+
+const sendOrderNotification = async (order: any) => {
+  if (!RESEND_API_KEY) {
+    console.log(`📧 Order notification skipped for ${order.orderNumber}: RESEND_API_KEY not configured`);
+    return;
+  }
+
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${RESEND_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from: ORDER_NOTIFICATION_FROM,
+      to: [ORDER_NOTIFICATION_EMAIL],
+      subject: `New Phomas order ${order.orderNumber}`,
+      html: buildOrderNotificationHtml(order),
+    }),
+  });
+
+  if (!response.ok) {
+    const errorBody = await response.text().catch(() => response.statusText);
+    throw new Error(`Resend notification failed (${response.status}): ${errorBody}`);
+  }
+
+  console.log(`📧 Order notification sent to ${ORDER_NOTIFICATION_EMAIL} for ${order.orderNumber}`);
+};
+
+const sendOrderNotificationSafely = async (order: any) => {
+  try {
+    await sendOrderNotification(order);
+  } catch (error) {
+    console.error(`📧 Failed to send order notification for ${order.orderNumber}:`, error);
+  }
+};
+
+const withTimeout = async <T,>(promise: Promise<T>, timeoutMs: number): Promise<T | { timedOut: true }> => {
+  let timeout: NodeJS.Timeout | null = null;
+
+  const timeoutPromise = new Promise<{ timedOut: true }>((resolve) => {
+    timeout = setTimeout(() => resolve({ timedOut: true }), timeoutMs);
+  });
+
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timeout) {
+      clearTimeout(timeout);
+    }
+  }
 };
 
 // Helper functions for product transformation
@@ -1152,11 +1285,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const subtotal = sumOrderItemsSubtotal(orderItems);
       const tax = Number.parseFloat(req.body.tax || "0") || 0;
       const transportCost = getTransportCost(requestedDeliveryOption, deliveryArea);
+      const icePackRequired = req.body.icePackRequired === true;
+      const icePackCost = getIcePackCost(icePackRequired);
       const total = calculateOrderTotal({
         subtotal,
         tax,
         deliveryOption: requestedDeliveryOption,
         deliveryArea,
+        icePackRequired,
       });
 
       // Construct user profile from request body or middleware defaults for eCount API
@@ -1177,6 +1313,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         deliveryOption: requestedDeliveryOption,
         deliveryArea,
         transportCost: transportCost.toFixed(2),
+        icePackRequired,
+        icePackCost: icePackCost.toFixed(2),
         customerName: req.body.customerName || (req as any).userEmail?.split('@')[0] || 'Guest Customer',
         customerEmail: req.body.customerEmail || (req as any).userEmail || 'guest@example.com',
         customerPhone: req.body.customerPhone || '',
@@ -1188,9 +1326,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Create order in local storage first
       const order = await storage.createOrder(orderData);
+      await withTimeout(sendOrderNotificationSafely(order), 3000);
       
-      // Submit to eCount ERP using CORRECTED endpoint and proper error handling
-      try {
+      const syncOrderToEcount = async () => {
         const erpResult = await ecountApi.submitSaleOrder(order, userProfile);
         
         // Update order with ERP reference numbers using correct schema fields
@@ -1202,35 +1340,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         console.log(`✅ Order ${order.orderNumber} successfully synced to eCount ERP`);
         console.log(`📄 ERP Doc: ${erpResult.docNo}, Date: ${erpResult.ioDate}`);
-        
-        res.json({ 
-          success: true, 
+
+        return {
+          success: true as const,
           order: updatedOrder,
           erp: {
             docNumber: erpResult.docNo,
             ioDate: erpResult.ioDate,
             syncStatus: 'synced'
           }
-        });
-      } catch (ecountError) {
+        };
+      };
+
+      const erpSyncPromise = syncOrderToEcount().catch(async (ecountError) => {
         console.error('❌ Failed to sync order to eCount ERP:', ecountError);
         
         // Update order with error status
-        await storage.updateOrderErpInfo(order.id, {
+        const failedOrder = await storage.updateOrderErpInfo(order.id, {
           erpSyncStatus: 'failed',
           erpSyncError: ecountError instanceof Error ? ecountError.message : 'Unknown ERP error'
         });
-        
-        // Return 502 Bad Gateway when ERP sync fails - order saved locally but not in ERP
-        res.status(502).json({ 
-          success: false,
+
+        return {
+          success: true as const,
+          localOrderSaved: true,
+          order: failedOrder,
+          message: "Order saved. eCount sync failed and is visible to admin for retry.",
+          erpError: ecountError instanceof Error ? ecountError.message : 'Unknown ERP error',
+          erp: {
+            syncStatus: 'failed'
+          }
+        };
+      });
+
+      const erpSyncResult = await withTimeout(erpSyncPromise, ORDER_SYNC_TIMEOUT_MS);
+
+      if ("timedOut" in erpSyncResult) {
+        console.log(`⏱️ eCount sync still running for ${order.orderNumber}; returning saved order to customer`);
+        return res.status(202).json({
+          success: true,
           localOrderSaved: true,
           order,
-          error: "Order saved locally but failed to sync with eCount ERP system",
-          erpError: ecountError instanceof Error ? ecountError.message : 'Unknown ERP error',
-          action: "Order will be retried automatically. Contact support if this persists."
+          message: "Order saved. eCount sync is still processing in the background.",
+          erp: {
+            syncStatus: order.erpSyncStatus || 'pending'
+          }
         });
       }
+
+      res.status(erpSyncResult.erp.syncStatus === 'synced' ? 200 : 202).json(erpSyncResult);
     } catch (error) {
       console.error('❌ Failed to create order:', error);
       res.status(400).json({ 
@@ -1641,6 +1799,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('❌ Delete order error:', error);
       res.status(500).json({ message: "Failed to delete order", error: error instanceof Error ? error.message : 'Unknown error' });
+    }
+  });
+
+  app.patch("/api/admin/orders/:orderId/status", requireAdminAuth, async (req, res) => {
+    try {
+      const { orderId } = req.params;
+      const status = normalizeOrderStatus(req.body?.status);
+
+      if (!status) {
+        return res.status(400).json({
+          message: `Invalid order status. Use one of: ${ORDER_STATUS_VALUES.join(", ")}`
+        });
+      }
+
+      const updatedOrder = await storage.updateOrderStatus(orderId, status);
+
+      res.json({
+        success: true,
+        message: `Order marked as ${status}`,
+        order: updatedOrder,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      const statusCode = message.includes('not found') ? 404 : 500;
+      console.error('❌ Update order status error:', error);
+      res.status(statusCode).json({ message: "Failed to update order status", error: message });
     }
   });
 

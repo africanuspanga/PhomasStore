@@ -45,6 +45,7 @@ export function ShoppingCart({ isOpen, onClose }: ShoppingCartProps) {
         total: total.toFixed(2),
         paymentMethod: "cash",
         deliveryOption: "pickup",
+        icePackRequired: false,
         status: "processing",
       });
     },

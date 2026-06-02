@@ -12,6 +12,8 @@ import { useLocation } from "wouter";
 import { z } from "zod";
 import { Eye, EyeOff } from "lucide-react";
 import logoImage from "@assets/Screenshot 2025-07-31 at 21.36.28_1753988684264.png";
+import { sendPasswordResetEmail } from "@/lib/passwordReset";
+import { useToast } from "@/hooks/use-toast";
 
 const registerFormSchema = supabaseSignUpSchema.extend({
   terms: z.boolean().refine((val) => val === true, {
@@ -26,7 +28,9 @@ export default function Login() {
   const [isLogin, setIsLogin] = useState(true);
   const [showLoginPassword, setShowLoginPassword] = useState(false);
   const [showRegisterPassword, setShowRegisterPassword] = useState(false);
+  const [isSendingReset, setIsSendingReset] = useState(false);
   const { login, register, isLoading } = useAuth();
+  const { toast } = useToast();
   const [, setLocation] = useLocation();
 
   const loginForm = useForm<LoginFormData>({
@@ -54,6 +58,35 @@ export default function Login() {
     const success = await login(data);
     if (success) {
       setLocation("/");
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    const email = loginForm.getValues("email")?.trim();
+
+    if (!email) {
+      loginForm.setError("email", {
+        type: "manual",
+        message: "Enter your email before requesting a reset link",
+      });
+      return;
+    }
+
+    setIsSendingReset(true);
+    try {
+      await sendPasswordResetEmail(email);
+      toast({
+        title: "Reset email sent",
+        description: "Check your inbox for the password reset link.",
+      });
+    } catch (error) {
+      toast({
+        title: "Reset failed",
+        description: error instanceof Error ? error.message : "Unable to send password reset email.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSendingReset(false);
     }
   };
 
@@ -149,6 +182,17 @@ export default function Login() {
                   disabled={isLoading}
                 >
                   {isLoading ? "Signing In..." : "Sign In"}
+                </Button>
+
+                <Button
+                  type="button"
+                  variant="link"
+                  className="w-full text-phomas-blue"
+                  onClick={handleForgotPassword}
+                  disabled={isSendingReset}
+                  data-testid="button-forgot-password"
+                >
+                  {isSendingReset ? "Sending reset link..." : "Forgot password?"}
                 </Button>
               </form>
             </Form>

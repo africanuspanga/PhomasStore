@@ -1,21 +1,29 @@
-import { useEffect, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { supabase } from "@/lib/supabase";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import logoImage from "@assets/Screenshot 2025-07-31 at 21.36.28_1753988684264.png";
+import { useToast } from "@/hooks/use-toast";
 
 export default function AuthConfirm() {
   const [, setLocation] = useLocation();
-  const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
+  const { toast } = useToast();
+  const [status, setStatus] = useState<'loading' | 'success' | 'error' | 'recovery'>('loading');
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
   
   useEffect(() => {
     const handleAuthConfirmation = async () => {
       try {
         // Extract the access token from URL hash
         const hashParams = new URLSearchParams(window.location.hash.substring(1));
+        const queryParams = new URLSearchParams(window.location.search);
         const accessToken = hashParams.get('access_token');
         const refreshToken = hashParams.get('refresh_token');
+        const authType = hashParams.get('type') || queryParams.get('type');
         
         if (accessToken && refreshToken) {
           console.log('🔐 Setting Supabase session from confirmation URL');
@@ -31,6 +39,10 @@ export default function AuthConfirm() {
             setStatus('error');
           } else {
             console.log('🔐 Session set successfully:', data);
+            if (authType === "recovery") {
+              setStatus('recovery');
+              return;
+            }
             setStatus('success');
             // Redirect to home after successful confirmation
             setTimeout(() => setLocation('/'), 2000);
@@ -48,6 +60,51 @@ export default function AuthConfirm() {
     handleAuthConfirmation();
   }, [setLocation]);
 
+  const handleUpdatePassword = async (event: FormEvent) => {
+    event.preventDefault();
+
+    if (password.length < 8) {
+      toast({
+        title: "Password too short",
+        description: "Password must be at least 8 characters.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      toast({
+        title: "Passwords do not match",
+        description: "Please confirm the same password.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsUpdatingPassword(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ password });
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      await supabase.auth.signOut();
+      toast({
+        title: "Password updated",
+        description: "Sign in with your new password.",
+      });
+      setLocation("/login");
+    } catch (error) {
+      toast({
+        title: "Password update failed",
+        description: error instanceof Error ? error.message : "Please request a new reset link.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUpdatingPassword(false);
+    }
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-100 p-4">
       <Card className="w-full max-w-md">
@@ -61,8 +118,9 @@ export default function AuthConfirm() {
           </div>
           <CardTitle className="text-xl">
             {status === 'loading' && 'Confirming Your Account...'}
-            {status === 'success' && '✅ Account Confirmed!'}
-            {status === 'error' && '❌ Confirmation Failed'}
+            {status === 'success' && 'Account Confirmed'}
+            {status === 'recovery' && 'Reset Password'}
+            {status === 'error' && 'Confirmation Failed'}
           </CardTitle>
         </CardHeader>
 
@@ -84,6 +142,45 @@ export default function AuthConfirm() {
               <p className="text-green-600 mb-4">Your email has been confirmed successfully!</p>
               <p className="text-gray-600 mb-4">Redirecting you to the application...</p>
             </div>
+          )}
+
+          {status === 'recovery' && (
+            <form onSubmit={handleUpdatePassword} className="space-y-4 text-left">
+              <div>
+                <label htmlFor="new-password" className="text-sm font-medium text-gray-700">
+                  New password
+                </label>
+                <Input
+                  id="new-password"
+                  type="password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  className="mt-1"
+                  data-testid="input-new-recovery-password"
+                />
+              </div>
+              <div>
+                <label htmlFor="confirm-new-password" className="text-sm font-medium text-gray-700">
+                  Confirm new password
+                </label>
+                <Input
+                  id="confirm-new-password"
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(event) => setConfirmPassword(event.target.value)}
+                  className="mt-1"
+                  data-testid="input-confirm-recovery-password"
+                />
+              </div>
+              <Button
+                type="submit"
+                disabled={isUpdatingPassword}
+                className="w-full bg-phomas-green hover:bg-phomas-green/90"
+                data-testid="button-update-recovery-password"
+              >
+                {isUpdatingPassword ? "Updating..." : "Update Password"}
+              </Button>
+            </form>
           )}
 
           {status === 'error' && (

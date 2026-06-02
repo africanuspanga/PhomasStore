@@ -7,13 +7,14 @@ import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { Sidebar } from "./Sidebar";
 import logoImage from "@assets/Screenshot 2025-07-31 at 21.36.28_1753988684264.png";
+import { CustomerAssistance } from "./CustomerAssistance";
 
 interface LayoutProps {
   children: React.ReactNode;
 }
 
 export function Layout({ children }: LayoutProps) {
-  const { user, logout } = useAuth();
+  const { user, logout, isAdmin } = useAuth();
   const { itemCount } = useCart();
   const [location] = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -79,6 +80,7 @@ export function Layout({ children }: LayoutProps) {
 
         {/* Main Content */}
         <main className="flex-1 md:ml-64 mt-0">
+          {!isAdmin && <CustomerAssistance />}
           {children}
         </main>
       </div>

@@ -3,6 +3,7 @@ import type { SupabaseSignUp, SupabaseLogin, Profile } from "@shared/schema";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
 import type { User as SupabaseUser } from "@supabase/supabase-js";
+import { getPhomasWhatsAppUrl, PHOMAS_WHATSAPP_DISPLAY } from "@/lib/contact";
 
 interface AdminUser {
   id: string;
@@ -163,9 +164,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           await supabase.auth.signOut();
           
           // Show pending approval message with WhatsApp option
-          const whatsappNumber = "255755378111";
-          const whatsappMessage = encodeURIComponent(`Hello Phomas Diagnostics, I would like to request approval for my account: ${credentials.email}`);
-          const whatsappUrl = `https://wa.me/${whatsappNumber}?text=${whatsappMessage}`;
+          const whatsappUrl = getPhomasWhatsAppUrl(`Hello Phomas Diagnostics, I would like to request approval for my account: ${credentials.email}`);
           
           toast({
             title: "Account Pending Approval",
@@ -176,7 +175,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                   onClick={() => window.open(whatsappUrl, '_blank')}
                   className="text-green-600 hover:underline font-medium"
                 >
-                  Contact us on WhatsApp (+255 755 378 111)
+                  Contact us on WhatsApp ({PHOMAS_WHATSAPP_DISPLAY})
                 </button>
               </div>
             ) as any,

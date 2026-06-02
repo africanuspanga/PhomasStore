@@ -26,6 +26,7 @@ export default function OrderHistory() {
 
   const getStatusColor = (status: string) => {
     switch (status.toLowerCase()) {
+      case "completed":
       case "delivered":
         return "bg-green-100 text-green-800";
       case "shipped":
@@ -39,6 +40,7 @@ export default function OrderHistory() {
 
   const getStatusIcon = (status: string) => {
     switch (status.toLowerCase()) {
+      case "completed":
       case "delivered":
         return <Package className="w-4 h-4" />;
       case "shipped":
@@ -259,6 +261,12 @@ export default function OrderHistory() {
                           : ""}
                       </span>
                       <span>TZS {formatTzs(selectedOrder.transportCost)}</span>
+                    </div>
+                  )}
+                  {selectedOrder.icePackRequired && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Ice Pack</span>
+                      <span>TZS {formatTzs(selectedOrder.icePackCost)}</span>
                     </div>
                   )}
                   <div className="flex justify-between font-bold text-lg border-t pt-2">

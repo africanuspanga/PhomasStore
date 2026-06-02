@@ -11,6 +11,7 @@ import { useLocation } from "wouter";
 import { z } from "zod";
 import logoImage from "@assets/Screenshot 2025-07-31 at 21.36.28_1753988684264.png";
 import { MessageCircle, CheckCircle } from "lucide-react";
+import { getPhomasWhatsAppUrl, PHOMAS_WHATSAPP_DISPLAY } from "@/lib/contact";
 
 const registerFormSchema = supabaseSignUpSchema.extend({
   terms: z.boolean().refine((val) => val === true, {
@@ -51,9 +52,7 @@ export default function Registration() {
     }
   };
 
-  const whatsappNumber = "255755378111";
-  const whatsappMessage = encodeURIComponent(`Hello Phomas Diagnostics, I just registered a new account with email: ${userEmail}. Please approve my account so I can start ordering medical supplies.`);
-  const whatsappUrl = `https://wa.me/${whatsappNumber}?text=${whatsappMessage}`;
+  const whatsappUrl = getPhomasWhatsAppUrl(`Hello Phomas Diagnostics, I just registered a new account with email: ${userEmail}. Please approve my account so I can start ordering medical supplies.`);
 
   // Show pending approval message if registration is complete
   if (registrationComplete) {
@@ -100,7 +99,7 @@ export default function Registration() {
               </Button>
 
               <p className="text-xs text-gray-500 text-center">
-                {whatsappNumber}
+                {PHOMAS_WHATSAPP_DISPLAY}
               </p>
             </div>
 

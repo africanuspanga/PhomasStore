@@ -13,7 +13,8 @@ import {
   AlertTriangle, 
   Settings,
   LogOut,
-  X
+  X,
+  UserRound
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 
@@ -42,6 +43,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
       active: location === "/cart"
     },
     { href: "/orders", icon: History, label: "Orders History", active: location === "/orders" },
+    { href: "/account", icon: UserRound, label: "Account", active: location === "/account" },
     { href: "#", icon: FileText, label: "Invoices", disabled: true },
     { href: "#", icon: Truck, label: "Delivery Notes", disabled: true },
     { href: "#", icon: List, label: "Packing List", disabled: true },

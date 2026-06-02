@@ -65,8 +65,36 @@ function OrdersManagement() {
     },
   });
 
+  const updateOrderStatusMutation = useMutation({
+    mutationFn: async ({ orderId, status }: { orderId: string; status: string }) => {
+      return ecountService.updateOrderStatus(orderId, status);
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/orders"] });
+      setSelectedOrder((currentOrder) =>
+        currentOrder?.id === data.order.id ? data.order : currentOrder
+      );
+      toast({
+        title: "Order Updated",
+        description: `Order ${data.order.orderNumber} is now ${data.order.status}`,
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Status Update Failed",
+        description: error instanceof Error ? error.message : "Failed to update order status",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const markOrderCompleted = (order: Order) => {
+    updateOrderStatusMutation.mutate({ orderId: order.id, status: "completed" });
+  };
+
   const getStatusColor = (status: string) => {
     switch (status.toLowerCase()) {
+      case "completed":
       case "delivered":
         return "bg-green-100 text-green-800";
       case "shipped":
@@ -248,6 +276,9 @@ function OrdersManagement() {
                       <div className="flex flex-col gap-2">
                         {getPaymentBadge(order.paymentMethod)}
                         {getDeliveryBadge(order.deliveryOption)}
+                        {order.icePackRequired && (
+                          <Badge className="bg-blue-100 text-blue-800 text-xs">Ice Pack</Badge>
+                        )}
                       </div>
                     </td>
                     <td className="py-4 px-4">
@@ -268,6 +299,19 @@ function OrdersManagement() {
                         >
                           View Details
                         </Button>
+                        {order.status !== "completed" && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-green-700 hover:bg-green-50 hover:text-green-800 p-1 h-7"
+                            onClick={() => markOrderCompleted(order)}
+                            disabled={updateOrderStatusMutation.isPending}
+                            data-testid={`button-complete-order-${order.id}`}
+                          >
+                            <CheckCircle className="w-4 h-4 mr-1" />
+                            Complete
+                          </Button>
+                        )}
                         <Button 
                           variant="ghost" 
                           size="sm"
@@ -417,6 +461,20 @@ function OrdersManagement() {
                         </div>
                       </>
                     )}
+                    <div>
+                      <p className="text-gray-500">Ice Pack</p>
+                      <p className="mt-2 font-medium text-gray-800">
+                        {selectedOrder.icePackRequired ? "Requested" : "Not requested"}
+                      </p>
+                    </div>
+                    {selectedOrder.icePackRequired && (
+                      <div>
+                        <p className="text-gray-500">Ice Pack Cost</p>
+                        <p className="mt-2 font-medium text-gray-800">
+                          TZS {formatTzs(selectedOrder.icePackCost)}
+                        </p>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -463,6 +521,12 @@ function OrdersManagement() {
                         <span>TZS {formatTzs(selectedOrder.transportCost)}</span>
                       </div>
                     )}
+                    {selectedOrder.icePackRequired && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Ice Pack</span>
+                        <span>TZS {formatTzs(selectedOrder.icePackCost)}</span>
+                      </div>
+                    )}
                     <div className="flex justify-between font-bold text-lg border-t pt-2">
                       <span>Total</span>
                       <span className="text-phomas-green">TZS {Math.round(parseFloat(selectedOrder.total)).toLocaleString()}</span>
@@ -493,7 +557,18 @@ function OrdersManagement() {
                 </div>
 
                 {/* Close Button */}
-                <div className="flex justify-end pt-2">
+                <div className="flex justify-end gap-2 pt-2">
+                  {selectedOrder.status !== "completed" && (
+                    <Button
+                      onClick={() => markOrderCompleted(selectedOrder)}
+                      variant="outline"
+                      disabled={updateOrderStatusMutation.isPending}
+                      data-testid="button-complete-selected-order"
+                    >
+                      <CheckCircle className="w-4 h-4 mr-2" />
+                      {updateOrderStatusMutation.isPending ? "Updating..." : "Mark Completed"}
+                    </Button>
+                  )}
                   <Button 
                     onClick={() => setSelectedOrder(null)}
                     className="bg-phomas-green hover:bg-phomas-green/90"
