@@ -2,11 +2,12 @@ import { sql } from "drizzle-orm";
 import { pgTable, text, varchar, decimal, integer, timestamp, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
-import { DELIVERY_AREA_VALUES } from "./orderPricing.js";
+import { DELIVERY_AREA_VALUES, ICE_PACK_SIZE_VALUES } from "./orderPricing.js";
 
 export const paymentMethodSchema = z.enum(["cash", "online_now"]);
 export const deliveryOptionSchema = z.enum(["pickup", "delivery"]);
 export const deliveryAreaSchema = z.enum(DELIVERY_AREA_VALUES);
+export const icePackSizeSchema = z.enum(ICE_PACK_SIZE_VALUES);
 
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -49,6 +50,8 @@ export const orders = pgTable("orders", {
   deliveryArea: text("delivery_area"),
   transportCost: decimal("transport_cost", { precision: 10, scale: 2 }).notNull().default("0.00"),
   icePackRequired: boolean("ice_pack_required").notNull().default(false),
+  icePackSize: text("ice_pack_size"),
+  icePackQuantity: integer("ice_pack_quantity").notNull().default(0),
   icePackCost: decimal("ice_pack_cost", { precision: 10, scale: 2 }).notNull().default("0.00"),
   // Customer information (stored directly for admin visibility)
   customerName: text("customer_name").notNull(),
@@ -170,7 +173,9 @@ export const insertOrderSchema = createInsertSchema(orders)
     deliveryOption: deliveryOptionSchema.default("pickup"),
     deliveryArea: deliveryAreaSchema.optional(),
     transportCost: z.string().optional(),
-    icePackRequired: z.boolean().default(false),
+    icePackRequired: z.boolean().optional(),
+    icePackSize: icePackSizeSchema.optional(),
+    icePackQuantity: z.number().int().nonnegative().optional(),
     icePackCost: z.string().optional(),
     // Customer fields are optional from frontend - backend auto-fills from user profile
     customerName: z.string().optional(),
@@ -203,6 +208,7 @@ export type InsertOrder = z.infer<typeof insertOrderSchema>;
 export type PaymentMethod = z.infer<typeof paymentMethodSchema>;
 export type DeliveryOption = z.infer<typeof deliveryOptionSchema>;
 export type DeliveryArea = z.infer<typeof deliveryAreaSchema>;
+export type IcePackSize = z.infer<typeof icePackSizeSchema>;
 export type ProductImage = typeof productImages.$inferSelect;
 export type InsertProductImage = z.infer<typeof insertProductImageSchema>;
 export type AdminSession = typeof adminSessions.$inferSelect;

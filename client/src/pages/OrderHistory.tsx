@@ -8,7 +8,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { ecountService } from "@/services/ecountService";
 import { History, Package, Truck, Clock, X } from "lucide-react";
 import { format } from "date-fns";
-import { getDeliveryAreaLabel } from "@shared/orderPricing";
+import { getDeliveryAreaLabel, getIcePackSizeLabel } from "@shared/orderPricing";
 import type { Order, OrderItem } from "@shared/schema";
 
 export default function OrderHistory() {
@@ -265,7 +265,9 @@ export default function OrderHistory() {
                   )}
                   {selectedOrder.icePackRequired && (
                     <div className="flex justify-between">
-                      <span className="text-gray-600">Ice Pack</span>
+                      <span className="text-gray-600">
+                        Ice Pack ({getIcePackSizeLabel(selectedOrder.icePackSize)} x {selectedOrder.icePackQuantity || 1})
+                      </span>
                       <span>TZS {formatTzs(selectedOrder.icePackCost)}</span>
                     </div>
                   )}

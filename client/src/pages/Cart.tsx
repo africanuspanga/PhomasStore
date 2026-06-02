@@ -14,13 +14,16 @@ import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import {
   calculateOrderTotal,
+  ICE_PACK_PRICES,
   getIcePackCost,
+  getIcePackSizeLabel,
   getDeliveryAreaLabel,
   getTransportCost,
 } from "@shared/orderPricing";
 import type {
   DeliveryArea,
   DeliveryOption,
+  IcePackSize,
   OrderItem,
   PaymentMethod,
   ProductWithInventory,
@@ -55,6 +58,8 @@ export default function Cart() {
   const [deliveryArea, setDeliveryArea] = useState<DeliveryArea | "">("");
   const [onlinePaymentConfirmed, setOnlinePaymentConfirmed] = useState(false);
   const [icePackRequired, setIcePackRequired] = useState(false);
+  const [icePackSize, setIcePackSize] = useState<IcePackSize>("small");
+  const [icePackQuantity, setIcePackQuantity] = useState(1);
   const [checkoutDetails, setCheckoutDetails] = useState({
     customerName: "",
     customerCompany: "",
@@ -74,13 +79,16 @@ export default function Cart() {
   const isMissingDeliveryArea = needsDeliveryAddress && !deliveryArea;
   const requiresOnlinePaymentConfirmation = paymentMethod === "online_now";
   const transportCost = getTransportCost(deliveryOption, deliveryArea || undefined);
-  const icePackCost = getIcePackCost(icePackRequired);
+  const normalizedIcePackQuantity = Math.max(1, icePackQuantity || 1);
+  const icePackCost = getIcePackCost(icePackRequired, icePackSize, normalizedIcePackQuantity);
   const total = calculateOrderTotal({
     subtotal,
     tax,
     deliveryOption,
     deliveryArea: deliveryArea || undefined,
     icePackRequired,
+    icePackSize,
+    icePackQuantity: normalizedIcePackQuantity,
   });
 
   // Fetch products to check stock limits
@@ -146,6 +154,8 @@ export default function Cart() {
         deliveryArea: deliveryOption === "delivery" ? deliveryArea || undefined : undefined,
         transportCost: transportCost.toFixed(2),
         icePackRequired,
+        icePackSize: icePackRequired ? icePackSize : undefined,
+        icePackQuantity: icePackRequired ? normalizedIcePackQuantity : 0,
         icePackCost: icePackCost.toFixed(2),
         customerName: checkoutDetails.customerName.trim(),
         customerEmail: checkoutDetails.customerEmail.trim(),
@@ -291,6 +301,8 @@ export default function Cart() {
     setDeliveryArea("");
     setOnlinePaymentConfirmed(false);
     setIcePackRequired(false);
+    setIcePackSize("small");
+    setIcePackQuantity(1);
     setCheckoutDetails({
       customerName: "",
       customerCompany: "",
@@ -743,7 +755,14 @@ export default function Cart() {
                     <Checkbox
                       id="ice-pack-required"
                       checked={icePackRequired}
-                      onCheckedChange={(checked) => setIcePackRequired(checked === true)}
+                      onCheckedChange={(checked) => {
+                        const nextChecked = checked === true;
+                        setIcePackRequired(nextChecked);
+                        if (!nextChecked) {
+                          setIcePackSize("small");
+                          setIcePackQuantity(1);
+                        }
+                      }}
                       data-testid="checkbox-ice-pack-required"
                     />
                     <div className="space-y-1">
@@ -759,6 +778,53 @@ export default function Cart() {
                       </p>
                     </div>
                   </div>
+
+                  {icePackRequired && (
+                    <div className="mt-4 border-t border-blue-100 pt-4">
+                      <div>
+                        <Label className="text-sm font-semibold text-gray-900">Ice Pack Size</Label>
+                        <RadioGroup
+                          value={icePackSize}
+                          onValueChange={(value) => setIcePackSize(value as IcePackSize)}
+                          className="mt-3 grid gap-3 sm:grid-cols-2"
+                        >
+                          {(["small", "large"] as IcePackSize[]).map((size) => (
+                            <label
+                              key={size}
+                              className="flex items-start gap-3 rounded-lg border border-blue-100 bg-white p-4 cursor-pointer"
+                            >
+                              <RadioGroupItem value={size} id={`ice-pack-size-${size}`} className="mt-1" />
+                              <div>
+                                <span className="font-medium text-gray-900">
+                                  {getIcePackSizeLabel(size)}
+                                </span>
+                                <p className="text-sm text-gray-600 mt-1">
+                                  TZS {formatTzs(ICE_PACK_PRICES[size])} each
+                                </p>
+                              </div>
+                            </label>
+                          ))}
+                        </RadioGroup>
+                      </div>
+
+                      <div className="mt-4 max-w-xs">
+                        <Label htmlFor="ice-pack-quantity">Quantity</Label>
+                        <Input
+                          id="ice-pack-quantity"
+                          type="number"
+                          min="1"
+                          value={icePackQuantity}
+                          onChange={(event) =>
+                            setIcePackQuantity(Math.max(1, Number.parseInt(event.target.value, 10) || 1))
+                          }
+                          data-testid="input-ice-pack-quantity"
+                        />
+                        <p className="mt-2 text-xs text-gray-600">
+                          Ice pack total: TZS {formatTzs(icePackCost)}
+                        </p>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-2 mb-6">
@@ -781,7 +847,9 @@ export default function Cart() {
                   )}
                   {icePackRequired && (
                     <div className="flex justify-between">
-                      <span className="text-gray-600">Ice Pack:</span>
+                      <span className="text-gray-600">
+                        Ice Pack ({getIcePackSizeLabel(icePackSize)} x {normalizedIcePackQuantity}):
+                      </span>
                       <span className="font-medium">TZS {formatTzs(icePackCost)}</span>
                     </div>
                   )}
@@ -874,7 +942,7 @@ export default function Cart() {
               <p className="text-sm text-gray-500 mb-4">
                 Payment: {paymentMethod ? getPaymentMethodLabel(paymentMethod) : "Not set"} | Fulfillment:{" "}
                 {deliveryOption ? getDeliveryOptionLabel(deliveryOption) : "Not set"}
-                {icePackRequired ? " | Ice pack requested" : ""}
+                {icePackRequired ? ` | Ice pack: ${getIcePackSizeLabel(icePackSize)} x ${normalizedIcePackQuantity}` : ""}
               </p>
               <p className="text-sm text-gray-500 mb-6">
                 Order Number: <span className="font-medium text-phomas-green">{orderNumber}</span>

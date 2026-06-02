@@ -29,6 +29,8 @@ function normalizeOrder(row: any) {
     deliveryArea: row.delivery_area || null,
     transportCost: row.transport_cost?.toString?.() || "0",
     icePackRequired: row.ice_pack_required === true,
+    icePackSize: row.ice_pack_size || null,
+    icePackQuantity: Number(row.ice_pack_quantity || 0),
     icePackCost: row.ice_pack_cost?.toString?.() || "0",
     customerName: row.customer_name || "",
     customerEmail: row.customer_email || "",

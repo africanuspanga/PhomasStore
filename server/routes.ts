@@ -7,6 +7,7 @@ import {
   adminPasswordChangeSchema,
   adminSessions as adminSessionsTable,
   deliveryAreaSchema,
+  icePackSizeSchema,
   insertOrderSchema,
   insertUserSchema,
   loginSchema,
@@ -16,6 +17,7 @@ import {
 import {
   calculateOrderTotal,
   getIcePackCost,
+  getIcePackSizeLabel,
   getTransportCost,
   inferDeliveryAreaFromAddress,
   sumOrderItemsSubtotal,
@@ -639,7 +641,7 @@ const buildOrderNotificationHtml = (order: any) => {
         <tr><td style="padding:6px 0;color:#6b7280;">Email</td><td style="padding:6px 0;">${escapeHtml(order.customerEmail || "N/A")}</td></tr>
         <tr><td style="padding:6px 0;color:#6b7280;">Phone</td><td style="padding:6px 0;">${escapeHtml(order.customerPhone || "N/A")}</td></tr>
         <tr><td style="padding:6px 0;color:#6b7280;">Fulfillment</td><td style="padding:6px 0;">${escapeHtml(order.deliveryOption || "pickup")}</td></tr>
-        <tr><td style="padding:6px 0;color:#6b7280;">Ice pack</td><td style="padding:6px 0;">${order.icePackRequired ? "Requested" : "Not requested"}</td></tr>
+        <tr><td style="padding:6px 0;color:#6b7280;">Ice pack</td><td style="padding:6px 0;">${order.icePackRequired ? `${escapeHtml(getIcePackSizeLabel(order.icePackSize))} x ${order.icePackQuantity || 1}` : "Not requested"}</td></tr>
         <tr><td style="padding:6px 0;color:#6b7280;">Total</td><td style="padding:6px 0;font-weight:700;">${formatCurrency(order.total)}</td></tr>
       </table>
       <table style="border-collapse:collapse;width:100%;max-width:680px;">
@@ -1286,13 +1288,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const tax = Number.parseFloat(req.body.tax || "0") || 0;
       const transportCost = getTransportCost(requestedDeliveryOption, deliveryArea);
       const icePackRequired = req.body.icePackRequired === true;
-      const icePackCost = getIcePackCost(icePackRequired);
+      const parsedIcePackSize = icePackSizeSchema.safeParse(req.body.icePackSize);
+      const rawIcePackQuantity = Number.parseInt(String(req.body.icePackQuantity ?? "1"), 10);
+      const icePackQuantity = icePackRequired ? Math.max(1, rawIcePackQuantity || 1) : 0;
+
+      if (icePackRequired && !parsedIcePackSize.success) {
+        return res.status(400).json({
+          message: "Ice pack size is required when ice pack is selected",
+        });
+      }
+
+      const icePackSize = icePackRequired ? parsedIcePackSize.data : undefined;
+      const icePackCost = getIcePackCost(icePackRequired, icePackSize, icePackQuantity);
       const total = calculateOrderTotal({
         subtotal,
         tax,
         deliveryOption: requestedDeliveryOption,
         deliveryArea,
         icePackRequired,
+        icePackSize,
+        icePackQuantity,
       });
 
       // Construct user profile from request body or middleware defaults for eCount API
@@ -1314,6 +1329,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         deliveryArea,
         transportCost: transportCost.toFixed(2),
         icePackRequired,
+        icePackSize,
+        icePackQuantity,
         icePackCost: icePackCost.toFixed(2),
         customerName: req.body.customerName || (req as any).userEmail?.split('@')[0] || 'Guest Customer',
         customerEmail: req.body.customerEmail || (req as any).userEmail || 'guest@example.com',

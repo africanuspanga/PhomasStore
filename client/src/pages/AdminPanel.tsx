@@ -19,7 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { getDeliveryAreaLabel } from "@shared/orderPricing";
+import { getDeliveryAreaLabel, getIcePackSizeLabel } from "@shared/orderPricing";
 
 // Extended User type for admin panel (includes Supabase metadata fields)
 interface AdminPanelUser extends Omit<User, 'password'> {
@@ -277,7 +277,9 @@ function OrdersManagement() {
                         {getPaymentBadge(order.paymentMethod)}
                         {getDeliveryBadge(order.deliveryOption)}
                         {order.icePackRequired && (
-                          <Badge className="bg-blue-100 text-blue-800 text-xs">Ice Pack</Badge>
+                          <Badge className="bg-blue-100 text-blue-800 text-xs">
+                            {getIcePackSizeLabel(order.icePackSize)} Ice x {order.icePackQuantity || 1}
+                          </Badge>
                         )}
                       </div>
                     </td>
@@ -464,7 +466,9 @@ function OrdersManagement() {
                     <div>
                       <p className="text-gray-500">Ice Pack</p>
                       <p className="mt-2 font-medium text-gray-800">
-                        {selectedOrder.icePackRequired ? "Requested" : "Not requested"}
+                        {selectedOrder.icePackRequired
+                          ? `${getIcePackSizeLabel(selectedOrder.icePackSize)} x ${selectedOrder.icePackQuantity || 1}`
+                          : "Not requested"}
                       </p>
                     </div>
                     {selectedOrder.icePackRequired && (
@@ -523,7 +527,9 @@ function OrdersManagement() {
                     )}
                     {selectedOrder.icePackRequired && (
                       <div className="flex justify-between">
-                        <span className="text-gray-600">Ice Pack</span>
+                        <span className="text-gray-600">
+                          Ice Pack ({getIcePackSizeLabel(selectedOrder.icePackSize)} x {selectedOrder.icePackQuantity || 1})
+                        </span>
                         <span>TZS {formatTzs(selectedOrder.icePackCost)}</span>
                       </div>
                     )}
