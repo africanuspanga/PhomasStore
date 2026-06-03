@@ -46,7 +46,7 @@ const getDeliveryOptionLabel = (deliveryOption: DeliveryOption) =>
 const formatTzs = (value: number) => Math.round(value).toLocaleString();
 
 export default function Cart() {
-  const { items, updateQuantity, removeItem, clearCart, subtotal, tax } = useCart();
+  const { items, updateQuantity, removeItem, clearCart, subtotal } = useCart();
   const { user } = useAuth();
   const { toast } = useToast();
   const [, setLocation] = useLocation();
@@ -60,15 +60,16 @@ export default function Cart() {
   const [icePackRequired, setIcePackRequired] = useState(false);
   const [icePackSize, setIcePackSize] = useState<IcePackSize>("small");
   const [icePackQuantity, setIcePackQuantity] = useState(1);
-  const [checkoutDetails, setCheckoutDetails] = useState({
-    customerName: "",
-    customerCompany: "",
-    customerEmail: "",
-    customerPhone: "",
-    customerAddress: "",
-  });
+  const tax = 0;
+  const checkoutDetails = {
+    customerName: user?.name?.trim() || user?.companyName?.trim() || "",
+    customerCompany: user?.companyName?.trim() || user?.name?.trim() || "",
+    customerEmail: user?.email?.trim() || "",
+    customerPhone: user?.phone?.trim() || "",
+    customerAddress: user?.address?.trim() || "",
+  };
 
-  const deliveryAddress = checkoutDetails.customerAddress.trim();
+  const deliveryAddress = checkoutDetails.customerAddress;
   const needsDeliveryAddress = deliveryOption === "delivery";
   const isMissingPaymentMethod = !paymentMethod;
   const isMissingDeliveryOption = !deliveryOption;
@@ -146,7 +147,7 @@ export default function Cart() {
         userId,
         items: JSON.stringify(orderItems),
         subtotal: subtotal.toFixed(2),
-        tax: tax.toFixed(2),
+        tax: "0.00",
         total: total.toFixed(2),
         status: "processing",
         paymentMethod,
@@ -303,13 +304,6 @@ export default function Cart() {
     setIcePackRequired(false);
     setIcePackSize("small");
     setIcePackQuantity(1);
-    setCheckoutDetails({
-      customerName: "",
-      customerCompany: "",
-      customerEmail: "",
-      customerPhone: "",
-      customerAddress: "",
-    });
     setLocation("/");
   };
 
@@ -444,93 +438,8 @@ export default function Cart() {
                 <div className="mb-6">
                   <h3 className="text-lg font-semibold text-gray-900">Checkout Details</h3>
                   <p className="text-sm text-gray-600 mt-1">
-                    Enter the details for this order, then choose payment, fulfillment, and cold-chain support.
+                    Choose payment, fulfillment, and cold-chain support for this order.
                   </p>
-                </div>
-
-                <div className="mb-6 rounded-lg border border-gray-200 bg-gray-50 p-4">
-                  <h4 className="font-semibold text-gray-900">Customer Details</h4>
-                  <div className="mt-4 grid gap-4 md:grid-cols-2">
-                    <div>
-                      <Label htmlFor="checkout-customer-name">Name</Label>
-                      <Input
-                        id="checkout-customer-name"
-                        value={checkoutDetails.customerName}
-                        onChange={(event) =>
-                          setCheckoutDetails((details) => ({
-                            ...details,
-                            customerName: event.target.value,
-                          }))
-                        }
-                        placeholder="Your full name"
-                        data-testid="input-checkout-customer-name"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="checkout-customer-company">Company</Label>
-                      <Input
-                        id="checkout-customer-company"
-                        value={checkoutDetails.customerCompany}
-                        onChange={(event) =>
-                          setCheckoutDetails((details) => ({
-                            ...details,
-                            customerCompany: event.target.value,
-                          }))
-                        }
-                        placeholder="Company or clinic name"
-                        data-testid="input-checkout-customer-company"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="checkout-customer-email">Email</Label>
-                      <Input
-                        id="checkout-customer-email"
-                        type="email"
-                        value={checkoutDetails.customerEmail}
-                        onChange={(event) =>
-                          setCheckoutDetails((details) => ({
-                            ...details,
-                            customerEmail: event.target.value,
-                          }))
-                        }
-                        placeholder="orders@example.com"
-                        data-testid="input-checkout-customer-email"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="checkout-customer-phone">Phone</Label>
-                      <Input
-                        id="checkout-customer-phone"
-                        type="tel"
-                        value={checkoutDetails.customerPhone}
-                        onChange={(event) =>
-                          setCheckoutDetails((details) => ({
-                            ...details,
-                            customerPhone: event.target.value,
-                          }))
-                        }
-                        placeholder="+255..."
-                        data-testid="input-checkout-customer-phone"
-                      />
-                    </div>
-                    <div className="md:col-span-2">
-                      <Label htmlFor="checkout-customer-address">
-                        {deliveryOption === "delivery" ? "Delivery Address" : "Address"}
-                      </Label>
-                      <Input
-                        id="checkout-customer-address"
-                        value={checkoutDetails.customerAddress}
-                        onChange={(event) =>
-                          setCheckoutDetails((details) => ({
-                            ...details,
-                            customerAddress: event.target.value,
-                          }))
-                        }
-                        placeholder="Street, city, region"
-                        data-testid="input-checkout-customer-address"
-                      />
-                    </div>
-                  </div>
                 </div>
 
                 <div className="grid gap-6 mb-6 md:grid-cols-2">
@@ -653,7 +562,7 @@ export default function Cart() {
                         <div>
                           <span className="font-medium text-gray-900">Delivery</span>
                           <p className="text-sm text-gray-600 mt-1">
-                            Enter a delivery address for this order.
+                            Use the registered delivery address from your approved account.
                           </p>
                           {paymentMethod === "cash" && (
                             <p className="text-xs text-amber-600 mt-1">
@@ -679,7 +588,7 @@ export default function Cart() {
                             <>
                               <p className="font-medium text-amber-700">Delivery address missing</p>
                               <p className="text-sm text-amber-700 mt-1">
-                                Enter a delivery address in customer details.
+                                Your approved account does not have a registered address.
                               </p>
                             </>
                           )}
@@ -751,32 +660,40 @@ export default function Cart() {
                 </div>
 
                 <div className="mb-6 rounded-lg border border-blue-100 bg-blue-50 p-4">
-                  <div className="flex items-start gap-3">
-                    <Checkbox
-                      id="ice-pack-required"
-                      checked={icePackRequired}
-                      onCheckedChange={(checked) => {
-                        const nextChecked = checked === true;
+                  <div className="space-y-3">
+                    <Label className="flex items-center gap-2 text-base font-semibold text-gray-900">
+                      <Snowflake className="h-4 w-4 text-blue-600" />
+                      Add Ice parks for reagents that need temperature control
+                    </Label>
+
+                    <RadioGroup
+                      value={icePackRequired ? "yes" : "no"}
+                      onValueChange={(value) => {
+                        const nextChecked = value === "yes";
                         setIcePackRequired(nextChecked);
                         if (!nextChecked) {
                           setIcePackSize("small");
                           setIcePackQuantity(1);
                         }
                       }}
-                      data-testid="checkbox-ice-pack-required"
-                    />
-                    <div className="space-y-1">
-                      <Label
-                        htmlFor="ice-pack-required"
-                        className="flex items-center gap-2 text-base font-semibold text-gray-900"
-                      >
-                        <Snowflake className="h-4 w-4 text-blue-600" />
-                        Add ice pack
-                      </Label>
-                      <p className="text-sm text-gray-600">
-                        Request cold-chain support for medicines that need temperature control.
-                      </p>
-                    </div>
+                      className="grid gap-3 sm:grid-cols-2"
+                    >
+                      <label className="flex items-start gap-3 rounded-lg border border-blue-100 bg-white p-4 cursor-pointer">
+                        <RadioGroupItem value="yes" id="ice-pack-required-yes" className="mt-1" />
+                        <div>
+                          <span className="font-medium text-gray-900">Yes</span>
+                          <p className="text-sm text-gray-600 mt-1">Add ice packs to this order.</p>
+                        </div>
+                      </label>
+
+                      <label className="flex items-start gap-3 rounded-lg border border-blue-100 bg-white p-4 cursor-pointer">
+                        <RadioGroupItem value="no" id="ice-pack-required-no" className="mt-1" />
+                        <div>
+                          <span className="font-medium text-gray-900">No</span>
+                          <p className="text-sm text-gray-600 mt-1">No ice packs needed.</p>
+                        </div>
+                      </label>
+                    </RadioGroup>
                   </div>
 
                   {icePackRequired && (
@@ -832,10 +749,6 @@ export default function Cart() {
                     <span className="text-gray-600">Subtotal:</span>
                     <span className="font-medium">TZS {formatTzs(subtotal)}</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Tax (18%):</span>
-                    <span className="font-medium">TZS {formatTzs(tax)}</span>
-                  </div>
                   {deliveryOption === "delivery" && (
                     <div className="flex justify-between">
                       <span className="text-gray-600">
@@ -867,7 +780,7 @@ export default function Cart() {
 
                 {(isMissingCustomerName || isMissingCustomerEmail || isMissingCustomerPhone) && (
                   <p className="mb-4 text-sm text-red-600">
-                    Enter customer name, email, and phone number before placing this order.
+                    Your approved account is missing name, email, or phone details.
                   </p>
                 )}
 

@@ -108,7 +108,6 @@ export function sumOrderItemsSubtotal(
 
 export function calculateOrderTotal({
   subtotal,
-  tax,
   deliveryOption,
   deliveryArea,
   icePackRequired,
@@ -116,12 +115,12 @@ export function calculateOrderTotal({
   icePackQuantity,
 }: {
   subtotal: number;
-  tax: number;
+  tax?: number;
   deliveryOption?: string | null;
   deliveryArea?: string | null;
   icePackRequired?: boolean | null;
   icePackSize?: string | null;
   icePackQuantity?: number | string | null;
 }): number {
-  return subtotal + tax + getTransportCost(deliveryOption, deliveryArea) + getIcePackCost(icePackRequired, icePackSize, icePackQuantity);
+  return subtotal + getTransportCost(deliveryOption, deliveryArea) + getIcePackCost(icePackRequired, icePackSize, icePackQuantity);
 }

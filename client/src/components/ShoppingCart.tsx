@@ -17,7 +17,7 @@ interface ShoppingCartProps {
 }
 
 export function ShoppingCart({ isOpen, onClose }: ShoppingCartProps) {
-  const { items, updateQuantity, removeItem, clearCart, subtotal, tax, total, itemCount } = useCart();
+  const { items, updateQuantity, removeItem, clearCart, subtotal, total, itemCount } = useCart();
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -41,7 +41,7 @@ export function ShoppingCart({ isOpen, onClose }: ShoppingCartProps) {
         userId: authUserId,
         items: JSON.stringify(orderItems),
         subtotal: subtotal.toFixed(2),
-        tax: tax.toFixed(2),
+        tax: "0.00",
         total: total.toFixed(2),
         paymentMethod: "cash",
         deliveryOption: "pickup",
@@ -189,10 +189,6 @@ export function ShoppingCart({ isOpen, onClose }: ShoppingCartProps) {
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-600">Subtotal:</span>
                       <span className="font-medium">TZS {Math.round(subtotal).toLocaleString()}</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">Tax (18%):</span>
-                      <span className="font-medium">TZS {Math.round(tax).toLocaleString()}</span>
                     </div>
                     <div className="flex justify-between text-base font-bold text-phomas-green">
                       <span>Total:</span>

@@ -482,6 +482,7 @@ const requireAuth = async (req: Request, res: Response, next: NextFunction) => {
       if (!error && user) {
         (req as any).userId = user.id;
         (req as any).userEmail = user.email || 'unknown@phomas.com';
+        (req as any).userMetadata = user.user_metadata || {};
         (req as any).userRole = user.user_metadata?.user_type === 'admin' ? 'admin' : 'client';
         console.log(`🔐 Auth: User ${user.email} (${user.id}) authenticated`);
         return next();
@@ -494,6 +495,7 @@ const requireAuth = async (req: Request, res: Response, next: NextFunction) => {
   // Fallback to guest user if no valid token
   (req as any).userId = 'guest-user';
   (req as any).userEmail = 'guest@phomas.com';
+  (req as any).userMetadata = {};
   (req as any).userRole = 'client';
   next();
 };
@@ -590,6 +592,10 @@ const normalizeOrderStatus = (status: unknown) => {
   }
 
   const normalizedStatus = status.trim().toLowerCase();
+  if (normalizedStatus === "complete") {
+    return "completed";
+  }
+
   return (ORDER_STATUS_VALUES as readonly string[]).includes(normalizedStatus)
     ? normalizedStatus
     : null;
@@ -1352,7 +1358,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const authenticatedUserId = (req as any).userId || req.body.userId || 'guest-user';
       const requestedDeliveryOption = req.body.deliveryOption || 'pickup';
-      const requestedCustomerAddress = req.body.customerAddress || '';
+      const userMetadata = (req as any).userMetadata || {};
+      const metadataName =
+        userMetadata.name ||
+        userMetadata.company_name ||
+        (req as any).userEmail?.split('@')[0] ||
+        'Guest Customer';
+      const customerName = String(req.body.customerName || metadataName).trim();
+      const customerEmail = String(req.body.customerEmail || (req as any).userEmail || 'guest@example.com').trim();
+      const customerPhone = String(req.body.customerPhone || userMetadata.phone || '').trim();
+      const customerCompany = String(req.body.customerCompany || userMetadata.company_name || userMetadata.name || metadataName).trim();
+      const requestedCustomerAddress = String(req.body.customerAddress || userMetadata.address || '').trim();
       const parsedDeliveryArea = deliveryAreaSchema.safeParse(req.body.deliveryArea);
       const deliveryArea =
         requestedDeliveryOption === 'delivery'
@@ -1380,7 +1396,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         typeof req.body.items === "string" ? JSON.parse(req.body.items || "[]") : req.body.items || [];
       const orderItems = orderItemsSchema.parse(rawOrderItems);
       const subtotal = sumOrderItemsSubtotal(orderItems);
-      const tax = Number.parseFloat(req.body.tax || "0") || 0;
+      const tax = 0;
       const transportCost = getTransportCost(requestedDeliveryOption, deliveryArea);
       const icePackRequired = req.body.icePackRequired === true;
       const parsedIcePackSize = icePackSizeSchema.safeParse(req.body.icePackSize);
@@ -1407,8 +1423,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Construct user profile from request body or middleware defaults for eCount API
       const userProfile = {
-        email: req.body.customerEmail || (req as any).userEmail || 'guest@phomas.com',
-        name: req.body.customerName || (req as any).userId || 'Guest Customer'
+        email: customerEmail,
+        name: customerName || customerCompany || authenticatedUserId,
+        phone: customerPhone,
       };
       
       // Use customer data from request body (sent from frontend with actual user info)
@@ -1427,10 +1444,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         icePackSize,
         icePackQuantity,
         icePackCost: icePackCost.toFixed(2),
-        customerName: req.body.customerName || (req as any).userEmail?.split('@')[0] || 'Guest Customer',
-        customerEmail: req.body.customerEmail || (req as any).userEmail || 'guest@example.com',
-        customerPhone: req.body.customerPhone || '',
-        customerCompany: req.body.customerCompany || (req as any).userEmail?.split('@')[0] || 'Guest',
+        customerName: customerName || 'Guest Customer',
+        customerEmail: customerEmail || 'guest@example.com',
+        customerPhone,
+        customerCompany: customerCompany || customerName || 'Guest',
         customerAddress: requestedCustomerAddress,
       };
       
@@ -1438,7 +1455,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Create order in local storage first
       const order = await storage.createOrder(orderData);
-      await withTimeout(sendOrderNotificationSafely(order), 3000);
+      void withTimeout(sendOrderNotificationSafely(order), 3000).catch((notificationError) => {
+        console.error(`📧 Background order notification failed for ${order.orderNumber}:`, notificationError);
+      });
       
       const syncOrderToEcount = async () => {
         const erpResult = await ecountApi.submitSaleOrder(order, userProfile);
@@ -1485,22 +1504,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         };
       });
 
-      const erpSyncResult = await withTimeout(erpSyncPromise, ORDER_SYNC_TIMEOUT_MS);
+      void erpSyncPromise;
 
-      if ("timedOut" in erpSyncResult) {
-        console.log(`⏱️ eCount sync still running for ${order.orderNumber}; returning saved order to customer`);
-        return res.status(202).json({
-          success: true,
-          localOrderSaved: true,
-          order,
-          message: "Order saved. eCount sync is still processing in the background.",
-          erp: {
-            syncStatus: order.erpSyncStatus || 'pending'
-          }
-        });
-      }
-
-      res.status(erpSyncResult.erp.syncStatus === 'synced' ? 200 : 202).json(erpSyncResult);
+      res.status(201).json({
+        success: true,
+        localOrderSaved: true,
+        order,
+        message: "Order saved. eCount sync will continue in the background.",
+        erp: {
+          syncStatus: order.erpSyncStatus || 'pending'
+        }
+      });
     } catch (error) {
       console.error('❌ Failed to create order:', error);
       res.status(400).json({ 

@@ -3,6 +3,8 @@ import { MessageCircle } from "lucide-react";
 import { getPhomasWhatsAppUrl, PHOMAS_WHATSAPP_DISPLAY } from "@/lib/contact";
 import { CustomerOnboarding } from "@/components/CustomerOnboarding";
 
+const WHATSAPP_FLOATING_ICON_SRC = "/whatsapp-floating.png";
+
 export function CustomerAssistance() {
   const whatsappUrl = getPhomasWhatsAppUrl();
 
@@ -34,11 +36,22 @@ export function CustomerAssistance() {
       <Button
         asChild
         size="icon"
-        className="fixed bottom-5 right-5 z-50 h-12 w-12 rounded-full bg-green-600 shadow-lg hover:bg-green-700"
+        className="fixed bottom-5 right-5 z-50 h-14 w-14 overflow-hidden rounded-full bg-transparent p-0 shadow-lg hover:bg-transparent focus-visible:ring-green-600"
         data-testid="button-whatsapp-assistance-floating"
       >
-        <a href={whatsappUrl} target="_blank" rel="noreferrer" aria-label="Contact Phomas Diagnostics on WhatsApp">
-          <MessageCircle className="h-6 w-6" />
+        <a
+          href={whatsappUrl}
+          target="_blank"
+          rel="noreferrer"
+          aria-label="Contact Phomas Diagnostics on WhatsApp"
+          title={`WhatsApp ${PHOMAS_WHATSAPP_DISPLAY}`}
+        >
+          <img
+            src={WHATSAPP_FLOATING_ICON_SRC}
+            alt=""
+            aria-hidden="true"
+            className="h-full w-full rounded-full object-cover"
+          />
         </a>
       </Button>
     </>

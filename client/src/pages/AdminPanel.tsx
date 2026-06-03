@@ -32,6 +32,8 @@ interface AdminPanelUser extends Omit<User, 'password'> {
   lastSignIn?: Date | null;
 }
 
+const ORDER_STATUS_OPTIONS = ["processing", "shipped", "delivered", "completed", "cancelled"] as const;
+
 // Orders Management Component - shows all orders with customer attribution
 function OrdersManagement() {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
@@ -76,7 +78,7 @@ function OrdersManagement() {
       );
       toast({
         title: "Order Updated",
-        description: `Order ${data.order.orderNumber} is now ${data.order.status}`,
+        description: `Order ${data.order.orderNumber} is now ${getStatusLabel(data.order.status)}`,
       });
     },
     onError: (error) => {
@@ -88,12 +90,34 @@ function OrdersManagement() {
     },
   });
 
-  const markOrderCompleted = (order: Order) => {
-    updateOrderStatusMutation.mutate({ orderId: order.id, status: "completed" });
+  function normalizeOrderStatus(status?: string | null) {
+    const normalizedStatus = (status || "").trim().toLowerCase();
+    return normalizedStatus === "complete" ? "completed" : normalizedStatus;
+  }
+
+  function getStatusLabel(status?: string | null) {
+    switch (normalizeOrderStatus(status)) {
+      case "completed":
+        return "Completed";
+      case "delivered":
+        return "Delivered";
+      case "shipped":
+        return "Shipped";
+      case "processing":
+        return "Processing";
+      case "cancelled":
+        return "Cancelled";
+      default:
+        return status || "Unknown";
+    }
+  }
+
+  const handleOrderStatusChange = (order: Order, status: string) => {
+    updateOrderStatusMutation.mutate({ orderId: order.id, status });
   };
 
   const getStatusColor = (status: string) => {
-    switch (status.toLowerCase()) {
+    switch (normalizeOrderStatus(status)) {
       case "completed":
       case "delivered":
         return "bg-green-100 text-green-800";
@@ -284,9 +308,22 @@ function OrdersManagement() {
                       </div>
                     </td>
                     <td className="py-4 px-4">
-                      <Badge className={`${getStatusColor(order.status)} text-xs capitalize`}>
-                        {order.status}
-                      </Badge>
+                      <Select
+                        value={normalizeOrderStatus(order.status)}
+                        onValueChange={(status) => handleOrderStatusChange(order, status)}
+                        disabled={updateOrderStatusMutation.isPending}
+                      >
+                        <SelectTrigger className={`h-8 w-36 border-0 text-xs font-medium ${getStatusColor(order.status)}`}>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {ORDER_STATUS_OPTIONS.map((status) => (
+                            <SelectItem key={status} value={status}>
+                              {getStatusLabel(status)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </td>
                     <td className="py-4 px-4">
                       {getErpSyncBadge(order.erpSyncStatus)}
@@ -301,19 +338,6 @@ function OrdersManagement() {
                         >
                           View Details
                         </Button>
-                        {order.status !== "completed" && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-green-700 hover:bg-green-50 hover:text-green-800 p-1 h-7"
-                            onClick={() => markOrderCompleted(order)}
-                            disabled={updateOrderStatusMutation.isPending}
-                            data-testid={`button-complete-order-${order.id}`}
-                          >
-                            <CheckCircle className="w-4 h-4 mr-1" />
-                            Complete
-                          </Button>
-                        )}
                         <Button 
                           variant="ghost" 
                           size="sm"
@@ -412,9 +436,22 @@ function OrdersManagement() {
                 <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
                   <div>
                     <p className="text-sm text-gray-500">Order Status</p>
-                    <Badge className={`mt-1 ${getStatusColor(selectedOrder.status)}`}>
-                      <span className="capitalize">{selectedOrder.status}</span>
-                    </Badge>
+                    <Select
+                      value={normalizeOrderStatus(selectedOrder.status)}
+                      onValueChange={(status) => handleOrderStatusChange(selectedOrder, status)}
+                      disabled={updateOrderStatusMutation.isPending}
+                    >
+                      <SelectTrigger className={`mt-1 h-8 w-36 border-0 text-xs font-medium ${getStatusColor(selectedOrder.status)}`}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {ORDER_STATUS_OPTIONS.map((status) => (
+                          <SelectItem key={status} value={status}>
+                            {getStatusLabel(status)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div>
                     <p className="text-sm text-gray-500">Date Placed</p>
@@ -510,10 +547,6 @@ function OrdersManagement() {
                       <span className="text-gray-600">Subtotal</span>
                       <span>TZS {Math.round(parseFloat(selectedOrder.subtotal)).toLocaleString()}</span>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Tax (18% VAT)</span>
-                      <span>TZS {Math.round(parseFloat(selectedOrder.tax)).toLocaleString()}</span>
-                    </div>
                     {selectedOrder.deliveryOption === "delivery" && (
                       <div className="flex justify-between">
                         <span className="text-gray-600">
@@ -564,17 +597,6 @@ function OrdersManagement() {
 
                 {/* Close Button */}
                 <div className="flex justify-end gap-2 pt-2">
-                  {selectedOrder.status !== "completed" && (
-                    <Button
-                      onClick={() => markOrderCompleted(selectedOrder)}
-                      variant="outline"
-                      disabled={updateOrderStatusMutation.isPending}
-                      data-testid="button-complete-selected-order"
-                    >
-                      <CheckCircle className="w-4 h-4 mr-2" />
-                      {updateOrderStatusMutation.isPending ? "Updating..." : "Mark Completed"}
-                    </Button>
-                  )}
                   <Button 
                     onClick={() => setSelectedOrder(null)}
                     className="bg-phomas-green hover:bg-phomas-green/90"

@@ -12,8 +12,14 @@ interface AdminUser {
   role: string;
 }
 
+export type AuthProfile = Profile & {
+  email?: string;
+  companyName?: string;
+  approved?: boolean;
+};
+
 interface AuthContextType {
-  user: Profile | null;
+  user: AuthProfile | null;
   adminUser: AdminUser | null;
   isLoading: boolean;
   login: (credentials: SupabaseLogin) => Promise<boolean>;
@@ -27,10 +33,33 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const ADMIN_EMAIL = "admin@phomas.com";
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<Profile | null>(null);
+  const [user, setUser] = useState<AuthProfile | null>(null);
   const [adminUser, setAdminUser] = useState<AdminUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
+
+  const buildAuthProfile = (authUser: SupabaseUser, profile?: any): AuthProfile => {
+    const metadata = authUser.user_metadata || {};
+    const isSupabaseAdmin = authUser.email === ADMIN_EMAIL ||
+      metadata.role === "admin" ||
+      metadata.user_type === "admin";
+    const name = profile?.name || metadata.name || metadata.company_name || authUser.email?.split('@')[0] || 'User';
+
+    return {
+      id: profile?.id || authUser.id,
+      userId: profile?.userId || profile?.user_id || authUser.id,
+      name,
+      phone: profile?.phone || metadata.phone || '',
+      address: profile?.address || metadata.address || '',
+      brelaNumber: profile?.brelaNumber || profile?.brela_number || metadata.brela_number || '',
+      tinNumber: profile?.tinNumber || profile?.tin_number || metadata.tin_number || '',
+      userType: profile?.userType || profile?.user_type || (isSupabaseAdmin ? 'admin' : metadata.user_type || 'company'),
+      createdAt: new Date(profile?.createdAt || profile?.created_at || authUser.created_at),
+      email: authUser.email || '',
+      companyName: profile?.companyName || profile?.company_name || metadata.company_name || name,
+      approved: metadata.approved === true,
+    };
+  };
 
   useEffect(() => {
     let mounted = true;
@@ -96,10 +125,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Get current user data for fallback
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-      const isSupabaseAdmin = user.email === ADMIN_EMAIL ||
-        user.user_metadata?.role === "admin" ||
-        user.user_metadata?.user_type === "admin";
-
       // Try to load profile from Supabase profiles table (if it exists)
       try {
         const { data: profile, error } = await supabase
@@ -109,7 +134,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           .single();
 
         if (!error && profile) {
-          setUser(profile);
+          setUser(buildAuthProfile(user, profile));
           return;
         }
       } catch (profileError) {
@@ -118,17 +143,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       // Fallback: create user object from auth metadata
-      setUser({
-        id: user.id,
-        userId: user.id,
-        name: user.user_metadata?.name || user.email?.split('@')[0] || 'User',
-        phone: user.user_metadata?.phone || '',
-        address: user.user_metadata?.address || '',
-        brelaNumber: user.user_metadata?.brela_number || '',
-        tinNumber: user.user_metadata?.tin_number || '',
-        userType: isSupabaseAdmin ? 'admin' : user.user_metadata?.user_type || 'company',
-        createdAt: new Date(user.created_at)
-      });
+      setUser(buildAuthProfile(user));
     } catch (error) {
       console.error('Error loading user profile:', error);
     }

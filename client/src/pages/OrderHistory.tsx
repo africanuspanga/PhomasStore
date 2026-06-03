@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { useAuth } from "@/contexts/AuthContext";
 import { ecountService } from "@/services/ecountService";
-import { History, Package, Truck, Clock, X } from "lucide-react";
+import { History, Package, Truck, Clock } from "lucide-react";
 import { format } from "date-fns";
 import { getDeliveryAreaLabel, getIcePackSizeLabel } from "@shared/orderPricing";
 import type { Order, OrderItem } from "@shared/schema";
@@ -18,6 +18,28 @@ export default function OrderHistory() {
   const formatTzs = (value?: string | number | null) =>
     Math.round(Number.parseFloat(String(value ?? 0))).toLocaleString();
 
+  const normalizeOrderStatus = (status?: string | null) => {
+    const normalizedStatus = (status || "").trim().toLowerCase();
+    return normalizedStatus === "complete" ? "completed" : normalizedStatus;
+  };
+
+  const getStatusLabel = (status?: string | null) => {
+    switch (normalizeOrderStatus(status)) {
+      case "completed":
+        return "Completed";
+      case "delivered":
+        return "Delivered";
+      case "shipped":
+        return "Shipped";
+      case "processing":
+        return "Processing";
+      case "cancelled":
+        return "Cancelled";
+      default:
+        return status || "Unknown";
+    }
+  };
+
   const { data: orders = [], isLoading, error } = useQuery({
     queryKey: ["/api/orders/user", authUserId],
     queryFn: () => authUserId ? ecountService.getOrdersByUserId(authUserId) : Promise.resolve([]),
@@ -25,7 +47,7 @@ export default function OrderHistory() {
   });
 
   const getStatusColor = (status: string) => {
-    switch (status.toLowerCase()) {
+    switch (normalizeOrderStatus(status)) {
       case "completed":
       case "delivered":
         return "bg-green-100 text-green-800";
@@ -39,7 +61,7 @@ export default function OrderHistory() {
   };
 
   const getStatusIcon = (status: string) => {
-    switch (status.toLowerCase()) {
+    switch (normalizeOrderStatus(status)) {
       case "completed":
       case "delivered":
         return <Package className="w-4 h-4" />;
@@ -166,7 +188,7 @@ export default function OrderHistory() {
                         <td className="py-4 px-4">
                           <Badge className={`flex items-center space-x-1 ${getStatusColor(order.status)}`}>
                             {getStatusIcon(order.status)}
-                            <span className="capitalize">{order.status}</span>
+                            <span>{getStatusLabel(order.status)}</span>
                           </Badge>
                         </td>
                         <td className="py-4 px-4">
@@ -176,7 +198,7 @@ export default function OrderHistory() {
                             onClick={() => setSelectedOrder(order)}
                             data-testid={`button-view-order-${order.id}`}
                           >
-                            {order.status === "shipped" ? "Track Order" : "View Details"}
+                            {normalizeOrderStatus(order.status) === "shipped" ? "Track Order" : "View Details"}
                           </Button>
                         </td>
                       </tr>
@@ -209,7 +231,7 @@ export default function OrderHistory() {
                   <p className="text-sm text-gray-500">Order Status</p>
                   <Badge className={`mt-1 ${getStatusColor(selectedOrder.status)}`}>
                     {getStatusIcon(selectedOrder.status)}
-                    <span className="ml-1 capitalize">{selectedOrder.status}</span>
+                    <span className="ml-1">{getStatusLabel(selectedOrder.status)}</span>
                   </Badge>
                 </div>
                 <div className="text-right">
@@ -247,10 +269,6 @@ export default function OrderHistory() {
                   <div className="flex justify-between">
                     <span className="text-gray-600">Subtotal</span>
                     <span>TZS {Math.round(parseFloat(selectedOrder.subtotal)).toLocaleString()}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Tax (18% VAT)</span>
-                    <span>TZS {Math.round(parseFloat(selectedOrder.tax)).toLocaleString()}</span>
                   </div>
                   {selectedOrder.deliveryOption === "delivery" && (
                     <div className="flex justify-between">

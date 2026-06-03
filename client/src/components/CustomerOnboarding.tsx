@@ -9,7 +9,7 @@ const STORAGE_KEY = "phomas_purchase_tour_seen";
 const steps = [
   {
     title: "Choose products",
-    text: "Browse the catalog and add the medicines or supplies you need.",
+    text: "Browse the catalog and add the medical supplies you need.",
   },
   {
     title: "Review cart",
