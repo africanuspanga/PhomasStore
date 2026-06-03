@@ -772,6 +772,21 @@ const withTimeout = async <T,>(promise: Promise<T>, timeoutMs: number): Promise<
   }
 };
 
+const runBackgroundTask = (label: string, task: () => Promise<void>) => {
+  const run = () => {
+    void task().catch((error) => {
+      console.error(`⚠️ Background task failed (${label}):`, error);
+    });
+  };
+
+  if (typeof setImmediate === "function") {
+    setImmediate(run);
+    return;
+  }
+
+  setTimeout(run, 0);
+};
+
 // Helper functions for product transformation
 function generateProductName(productCode: string): string {
   // Medical supply name patterns based on product codes
@@ -1460,9 +1475,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Create order in local storage first
       const order = await storage.createOrder(orderData);
-      void withTimeout(sendOrderNotificationSafely(order), 3000).catch((notificationError) => {
-        console.error(`📧 Background order notification failed for ${order.orderNumber}:`, notificationError);
-      });
       
       const syncOrderToEcount = async () => {
         const erpResult = await ecountApi.submitSaleOrder(order, userProfile);
@@ -1488,29 +1500,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         };
       };
 
-      const erpSyncPromise = syncOrderToEcount().catch(async (ecountError) => {
-        console.error('❌ Failed to sync order to eCount ERP:', ecountError);
-        
-        // Update order with error status
-        const failedOrder = await storage.updateOrderErpInfo(order.id, {
-          erpSyncStatus: 'failed',
-          erpSyncError: ecountError instanceof Error ? ecountError.message : 'Unknown ERP error'
-        });
-
-        return {
-          success: true as const,
-          localOrderSaved: true,
-          order: failedOrder,
-          message: "Order saved. eCount sync failed and is visible to admin for retry.",
-          erpError: ecountError instanceof Error ? ecountError.message : 'Unknown ERP error',
-          erp: {
-            syncStatus: 'failed'
-          }
-        };
-      });
-
-      void erpSyncPromise;
-
       res.status(201).json({
         success: true,
         localOrderSaved: true,
@@ -1518,6 +1507,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
         message: "Order saved. eCount sync will continue in the background.",
         erp: {
           syncStatus: order.erpSyncStatus || 'pending'
+        }
+      });
+
+      runBackgroundTask(`order notification ${order.orderNumber}`, async () => {
+        const notificationResult = await withTimeout(sendOrderNotificationSafely(order), 3000);
+        if ((notificationResult as { timedOut?: boolean }).timedOut) {
+          console.warn(`📧 Order notification timed out for ${order.orderNumber}; checkout response was already sent.`);
+        }
+      });
+
+      runBackgroundTask(`eCount sync ${order.orderNumber}`, async () => {
+        try {
+          await syncOrderToEcount();
+        } catch (ecountError) {
+          console.error('❌ Failed to sync order to eCount ERP:', ecountError);
+
+          await storage.updateOrderErpInfo(order.id, {
+            erpSyncStatus: 'failed',
+            erpSyncError: ecountError instanceof Error ? ecountError.message : 'Unknown ERP error'
+          });
         }
       });
     } catch (error) {
