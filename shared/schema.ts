@@ -177,7 +177,7 @@ export const insertOrderSchema = createInsertSchema(orders)
     icePackSize: icePackSizeSchema.optional(),
     icePackQuantity: z.number().int().nonnegative().optional(),
     icePackCost: z.string().optional(),
-    // Customer fields are collected during checkout for order-specific admin details.
+    // Customer identity comes from the approved account; address is order-specific for delivery.
     customerName: z.string().optional(),
     customerEmail: z.string().optional(),
     customerPhone: z.string().optional(),

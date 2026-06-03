@@ -1373,10 +1373,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const authenticatedUserId = (req as any).userId || req.body.userId || 'guest-user';
       const requestedDeliveryOption = req.body.deliveryOption || 'pickup';
-      const customerName = String(req.body.customerName || '').trim();
-      const customerEmail = String(req.body.customerEmail || '').trim();
-      const customerPhone = String(req.body.customerPhone || '').trim();
-      const customerCompany = String(req.body.customerCompany || '').trim();
+      const userMetadata = (req as any).userMetadata || {};
+      const metadataName =
+        userMetadata.name ||
+        userMetadata.company_name ||
+        (req as any).userEmail?.split('@')[0] ||
+        '';
+      const customerName = String(req.body.customerName || metadataName).trim();
+      const customerEmail = String(req.body.customerEmail || (req as any).userEmail || '').trim();
+      const customerPhone = String(req.body.customerPhone || userMetadata.phone || '').trim();
+      const customerCompany = String(req.body.customerCompany || userMetadata.company_name || userMetadata.name || '').trim();
       const requestedCustomerAddress = String(req.body.customerAddress || '').trim();
       const parsedDeliveryArea = deliveryAreaSchema.safeParse(req.body.deliveryArea);
       const deliveryArea =

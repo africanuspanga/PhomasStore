@@ -61,23 +61,21 @@ export default function Cart() {
   const [icePackSelection, setIcePackSelection] = useState<IcePackSelection>("");
   const [icePackSize, setIcePackSize] = useState<IcePackSize>("small");
   const [icePackQuantity, setIcePackQuantity] = useState(1);
-  const [checkoutDetails, setCheckoutDetails] = useState({
-    customerName: "",
-    customerCompany: "",
-    customerEmail: "",
-    customerPhone: "",
-    customerAddress: "",
-  });
+  const [deliveryAddressInput, setDeliveryAddressInput] = useState("");
   const tax = 0;
 
-  const deliveryAddress = checkoutDetails.customerAddress.trim();
+  const accountCustomerName = user?.name?.trim() || user?.companyName?.trim() || "";
+  const accountCustomerCompany = user?.companyName?.trim() || user?.name?.trim() || "";
+  const accountCustomerEmail = user?.email?.trim() || "";
+  const accountCustomerPhone = user?.phone?.trim() || "";
+  const deliveryAddress = deliveryAddressInput.trim();
   const icePackRequired = icePackSelection === "yes";
   const needsDeliveryAddress = deliveryOption === "delivery";
   const isMissingPaymentMethod = !paymentMethod;
   const isMissingDeliveryOption = !deliveryOption;
-  const isMissingCustomerName = !checkoutDetails.customerName.trim();
-  const isMissingCustomerEmail = !checkoutDetails.customerEmail.trim();
-  const isMissingCustomerPhone = !checkoutDetails.customerPhone.trim();
+  const isMissingCustomerName = !accountCustomerName;
+  const isMissingCustomerEmail = !accountCustomerEmail;
+  const isMissingCustomerPhone = !accountCustomerPhone;
   const isMissingDeliveryAddress = needsDeliveryAddress && !deliveryAddress;
   const isMissingDeliveryArea = needsDeliveryAddress && !deliveryArea;
   const requiresOnlinePaymentConfirmation = paymentMethod === "online_now";
@@ -160,11 +158,11 @@ export default function Cart() {
         icePackSize: icePackRequired ? icePackSize : undefined,
         icePackQuantity: icePackRequired ? normalizedIcePackQuantity : 0,
         icePackCost: icePackCost.toFixed(2),
-        customerName: checkoutDetails.customerName.trim(),
-        customerEmail: checkoutDetails.customerEmail.trim(),
-        customerPhone: checkoutDetails.customerPhone.trim(),
-        customerCompany: checkoutDetails.customerCompany.trim(),
-        customerAddress: deliveryOption === "delivery" ? deliveryAddress : checkoutDetails.customerAddress.trim(),
+        customerName: accountCustomerName,
+        customerEmail: accountCustomerEmail,
+        customerPhone: accountCustomerPhone,
+        customerCompany: accountCustomerCompany,
+        customerAddress: deliveryOption === "delivery" ? deliveryAddress : "",
       });
     },
     onSuccess: (data) => {
@@ -243,7 +241,7 @@ export default function Cart() {
     if (isMissingCustomerName || isMissingCustomerEmail || isMissingCustomerPhone) {
       toast({
         title: "Checkout details required",
-        description: "Please enter your name, email, and phone number before placing this order.",
+        description: "Your account is missing name, email, or phone details.",
         variant: "destructive",
       });
       return;
@@ -306,13 +304,7 @@ export default function Cart() {
     setIcePackSelection("");
     setIcePackSize("small");
     setIcePackQuantity(1);
-    setCheckoutDetails({
-      customerName: "",
-      customerCompany: "",
-      customerEmail: "",
-      customerPhone: "",
-      customerAddress: "",
-    });
+    setDeliveryAddressInput("");
     setLocation("/");
   };
 
@@ -447,7 +439,7 @@ export default function Cart() {
                 <div className="mb-6">
                   <h3 className="text-lg font-semibold text-gray-900">Checkout Details</h3>
                   <p className="text-sm text-gray-600 mt-1">
-                    Enter the details for this order, then choose payment, fulfillment, and cold-chain support.
+                    Review your account details, then choose payment, fulfillment, and cold-chain support.
                   </p>
                 </div>
 
@@ -455,83 +447,20 @@ export default function Cart() {
                   <h4 className="font-semibold text-gray-900">Customer Details</h4>
                   <div className="mt-4 grid gap-4 md:grid-cols-2">
                     <div>
-                      <Label htmlFor="checkout-customer-name">Name</Label>
-                      <Input
-                        id="checkout-customer-name"
-                        value={checkoutDetails.customerName}
-                        onChange={(event) =>
-                          setCheckoutDetails((details) => ({
-                            ...details,
-                            customerName: event.target.value,
-                          }))
-                        }
-                        placeholder="Your full name"
-                        data-testid="input-checkout-customer-name"
-                      />
+                      <p className="text-xs uppercase text-gray-500">Name</p>
+                      <p className="font-medium text-gray-900">{accountCustomerName || "Missing"}</p>
                     </div>
                     <div>
-                      <Label htmlFor="checkout-customer-company">Company</Label>
-                      <Input
-                        id="checkout-customer-company"
-                        value={checkoutDetails.customerCompany}
-                        onChange={(event) =>
-                          setCheckoutDetails((details) => ({
-                            ...details,
-                            customerCompany: event.target.value,
-                          }))
-                        }
-                        placeholder="Company or clinic name"
-                        data-testid="input-checkout-customer-company"
-                      />
+                      <p className="text-xs uppercase text-gray-500">Company</p>
+                      <p className="font-medium text-gray-900">{accountCustomerCompany || "Not provided"}</p>
                     </div>
                     <div>
-                      <Label htmlFor="checkout-customer-email">Email</Label>
-                      <Input
-                        id="checkout-customer-email"
-                        type="email"
-                        value={checkoutDetails.customerEmail}
-                        onChange={(event) =>
-                          setCheckoutDetails((details) => ({
-                            ...details,
-                            customerEmail: event.target.value,
-                          }))
-                        }
-                        placeholder="orders@example.com"
-                        data-testid="input-checkout-customer-email"
-                      />
+                      <p className="text-xs uppercase text-gray-500">Email</p>
+                      <p className="font-medium text-gray-900">{accountCustomerEmail || "Missing"}</p>
                     </div>
                     <div>
-                      <Label htmlFor="checkout-customer-phone">Phone</Label>
-                      <Input
-                        id="checkout-customer-phone"
-                        type="tel"
-                        value={checkoutDetails.customerPhone}
-                        onChange={(event) =>
-                          setCheckoutDetails((details) => ({
-                            ...details,
-                            customerPhone: event.target.value,
-                          }))
-                        }
-                        placeholder="+255..."
-                        data-testid="input-checkout-customer-phone"
-                      />
-                    </div>
-                    <div className="md:col-span-2">
-                      <Label htmlFor="checkout-customer-address">
-                        {deliveryOption === "delivery" ? "Delivery Address" : "Address"}
-                      </Label>
-                      <Input
-                        id="checkout-customer-address"
-                        value={checkoutDetails.customerAddress}
-                        onChange={(event) =>
-                          setCheckoutDetails((details) => ({
-                            ...details,
-                            customerAddress: event.target.value,
-                          }))
-                        }
-                        placeholder="Street, city, region"
-                        data-testid="input-checkout-customer-address"
-                      />
+                      <p className="text-xs uppercase text-gray-500">Phone</p>
+                      <p className="font-medium text-gray-900">{accountCustomerPhone || "Missing"}</p>
                     </div>
                   </div>
                 </div>
@@ -670,22 +599,26 @@ export default function Cart() {
                     <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
                       {deliveryOption === "delivery" ? (
                         <>
-                          {deliveryAddress ? (
-                            <>
-                              <p className="font-medium text-gray-900">Delivery Address</p>
-                              <p className="text-sm text-gray-600 mt-1">{deliveryAddress}</p>
+                          <div>
+                            <Label htmlFor="checkout-delivery-address">Delivery Address</Label>
+                            <Input
+                              id="checkout-delivery-address"
+                              value={deliveryAddressInput}
+                              onChange={(event) => setDeliveryAddressInput(event.target.value)}
+                              placeholder="Street, city, region"
+                              className="mt-2 bg-white"
+                              data-testid="input-checkout-delivery-address"
+                            />
+                            {deliveryAddress ? (
                               <p className="text-xs text-gray-500 mt-2">
                                 This address will be sent to the admin dashboard with the order.
                               </p>
-                            </>
-                          ) : (
-                            <>
-                              <p className="font-medium text-amber-700">Delivery address missing</p>
-                              <p className="text-sm text-amber-700 mt-1">
-                                Enter a delivery address in customer details.
+                            ) : (
+                              <p className="text-xs text-amber-700 mt-2">
+                                Enter a delivery address for this order.
                               </p>
-                            </>
-                          )}
+                            )}
+                          </div>
 
                           <div className="mt-4 border-t border-gray-200 pt-4">
                             <p className="font-medium text-gray-900">Delivery Area</p>
@@ -874,7 +807,7 @@ export default function Cart() {
 
                 {(isMissingCustomerName || isMissingCustomerEmail || isMissingCustomerPhone) && (
                   <p className="mb-4 text-sm text-red-600">
-                    Enter your name, email, and phone number before placing this order.
+                    Your account is missing name, email, or phone details.
                   </p>
                 )}
 
