@@ -1358,17 +1358,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const authenticatedUserId = (req as any).userId || req.body.userId || 'guest-user';
       const requestedDeliveryOption = req.body.deliveryOption || 'pickup';
-      const userMetadata = (req as any).userMetadata || {};
-      const metadataName =
-        userMetadata.name ||
-        userMetadata.company_name ||
-        (req as any).userEmail?.split('@')[0] ||
-        'Guest Customer';
-      const customerName = String(req.body.customerName || metadataName).trim();
-      const customerEmail = String(req.body.customerEmail || (req as any).userEmail || 'guest@example.com').trim();
-      const customerPhone = String(req.body.customerPhone || userMetadata.phone || '').trim();
-      const customerCompany = String(req.body.customerCompany || userMetadata.company_name || userMetadata.name || metadataName).trim();
-      const requestedCustomerAddress = String(req.body.customerAddress || userMetadata.address || '').trim();
+      const customerName = String(req.body.customerName || '').trim();
+      const customerEmail = String(req.body.customerEmail || '').trim();
+      const customerPhone = String(req.body.customerPhone || '').trim();
+      const customerCompany = String(req.body.customerCompany || '').trim();
+      const requestedCustomerAddress = String(req.body.customerAddress || '').trim();
       const parsedDeliveryArea = deliveryAreaSchema.safeParse(req.body.deliveryArea);
       const deliveryArea =
         requestedDeliveryOption === 'delivery'
@@ -1376,6 +1370,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
             ? parsedDeliveryArea.data
             : inferDeliveryAreaFromAddress(requestedCustomerAddress)
           : undefined;
+
+      if (!customerName || !customerEmail || !customerPhone) {
+        return res.status(400).json({
+          message: "Customer name, email, and phone number are required",
+        });
+      }
+
+      if (requestedDeliveryOption === 'delivery' && !requestedCustomerAddress) {
+        return res.status(400).json({
+          message: "Delivery address is required for delivery orders",
+        });
+      }
 
       if (requestedDeliveryOption === 'delivery' && !deliveryArea) {
         return res.status(400).json({
@@ -1421,21 +1427,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         icePackQuantity,
       });
 
-      // Construct user profile from request body or middleware defaults for eCount API
+      // Construct user profile from checkout details for eCount API.
       const userProfile = {
         email: customerEmail,
         name: customerName || customerCompany || authenticatedUserId,
         phone: customerPhone,
       };
       
-      // Use customer data from request body (sent from frontend with actual user info)
+      // Persist checkout customer data exactly as entered for this order.
       const orderDataWithCustomer = {
         ...req.body,
         userId: authenticatedUserId,
         subtotal: subtotal.toFixed(2),
         tax: tax.toFixed(2),
         total: total.toFixed(2),
-        // Prioritize data from frontend request body, fall back to middleware defaults
         paymentMethod: req.body.paymentMethod || 'cash',
         deliveryOption: requestedDeliveryOption,
         deliveryArea,
@@ -1444,10 +1449,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         icePackSize,
         icePackQuantity,
         icePackCost: icePackCost.toFixed(2),
-        customerName: customerName || 'Guest Customer',
-        customerEmail: customerEmail || 'guest@example.com',
+        customerName,
+        customerEmail,
         customerPhone,
-        customerCompany: customerCompany || customerName || 'Guest',
+        customerCompany,
         customerAddress: requestedCustomerAddress,
       };
       

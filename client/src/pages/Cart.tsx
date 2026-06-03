@@ -44,6 +44,7 @@ const getDeliveryOptionLabel = (deliveryOption: DeliveryOption) =>
   deliveryOption === "delivery" ? "Delivery" : "Pickup";
 
 const formatTzs = (value: number) => Math.round(value).toLocaleString();
+type IcePackSelection = "" | "yes" | "no";
 
 export default function Cart() {
   const { items, updateQuantity, removeItem, clearCart, subtotal } = useCart();
@@ -57,19 +58,20 @@ export default function Cart() {
   const [deliveryOption, setDeliveryOption] = useState<DeliveryOption | "">("");
   const [deliveryArea, setDeliveryArea] = useState<DeliveryArea | "">("");
   const [onlinePaymentConfirmed, setOnlinePaymentConfirmed] = useState(false);
-  const [icePackRequired, setIcePackRequired] = useState(false);
+  const [icePackSelection, setIcePackSelection] = useState<IcePackSelection>("");
   const [icePackSize, setIcePackSize] = useState<IcePackSize>("small");
   const [icePackQuantity, setIcePackQuantity] = useState(1);
+  const [checkoutDetails, setCheckoutDetails] = useState({
+    customerName: "",
+    customerCompany: "",
+    customerEmail: "",
+    customerPhone: "",
+    customerAddress: "",
+  });
   const tax = 0;
-  const checkoutDetails = {
-    customerName: user?.name?.trim() || user?.companyName?.trim() || "",
-    customerCompany: user?.companyName?.trim() || user?.name?.trim() || "",
-    customerEmail: user?.email?.trim() || "",
-    customerPhone: user?.phone?.trim() || "",
-    customerAddress: user?.address?.trim() || "",
-  };
 
-  const deliveryAddress = checkoutDetails.customerAddress;
+  const deliveryAddress = checkoutDetails.customerAddress.trim();
+  const icePackRequired = icePackSelection === "yes";
   const needsDeliveryAddress = deliveryOption === "delivery";
   const isMissingPaymentMethod = !paymentMethod;
   const isMissingDeliveryOption = !deliveryOption;
@@ -277,7 +279,7 @@ export default function Cart() {
     if (isMissingDeliveryAddress) {
       toast({
         title: "Delivery address missing",
-        description: "We could not find a verified delivery address for this account.",
+        description: "Please enter the delivery address for this order.",
         variant: "destructive",
       });
       return;
@@ -301,9 +303,16 @@ export default function Cart() {
     setDeliveryOption("");
     setDeliveryArea("");
     setOnlinePaymentConfirmed(false);
-    setIcePackRequired(false);
+    setIcePackSelection("");
     setIcePackSize("small");
     setIcePackQuantity(1);
+    setCheckoutDetails({
+      customerName: "",
+      customerCompany: "",
+      customerEmail: "",
+      customerPhone: "",
+      customerAddress: "",
+    });
     setLocation("/");
   };
 
@@ -438,8 +447,93 @@ export default function Cart() {
                 <div className="mb-6">
                   <h3 className="text-lg font-semibold text-gray-900">Checkout Details</h3>
                   <p className="text-sm text-gray-600 mt-1">
-                    Choose payment, fulfillment, and cold-chain support for this order.
+                    Enter the details for this order, then choose payment, fulfillment, and cold-chain support.
                   </p>
+                </div>
+
+                <div className="mb-6 rounded-lg border border-gray-200 bg-gray-50 p-4">
+                  <h4 className="font-semibold text-gray-900">Customer Details</h4>
+                  <div className="mt-4 grid gap-4 md:grid-cols-2">
+                    <div>
+                      <Label htmlFor="checkout-customer-name">Name</Label>
+                      <Input
+                        id="checkout-customer-name"
+                        value={checkoutDetails.customerName}
+                        onChange={(event) =>
+                          setCheckoutDetails((details) => ({
+                            ...details,
+                            customerName: event.target.value,
+                          }))
+                        }
+                        placeholder="Your full name"
+                        data-testid="input-checkout-customer-name"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="checkout-customer-company">Company</Label>
+                      <Input
+                        id="checkout-customer-company"
+                        value={checkoutDetails.customerCompany}
+                        onChange={(event) =>
+                          setCheckoutDetails((details) => ({
+                            ...details,
+                            customerCompany: event.target.value,
+                          }))
+                        }
+                        placeholder="Company or clinic name"
+                        data-testid="input-checkout-customer-company"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="checkout-customer-email">Email</Label>
+                      <Input
+                        id="checkout-customer-email"
+                        type="email"
+                        value={checkoutDetails.customerEmail}
+                        onChange={(event) =>
+                          setCheckoutDetails((details) => ({
+                            ...details,
+                            customerEmail: event.target.value,
+                          }))
+                        }
+                        placeholder="orders@example.com"
+                        data-testid="input-checkout-customer-email"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="checkout-customer-phone">Phone</Label>
+                      <Input
+                        id="checkout-customer-phone"
+                        type="tel"
+                        value={checkoutDetails.customerPhone}
+                        onChange={(event) =>
+                          setCheckoutDetails((details) => ({
+                            ...details,
+                            customerPhone: event.target.value,
+                          }))
+                        }
+                        placeholder="+255..."
+                        data-testid="input-checkout-customer-phone"
+                      />
+                    </div>
+                    <div className="md:col-span-2">
+                      <Label htmlFor="checkout-customer-address">
+                        {deliveryOption === "delivery" ? "Delivery Address" : "Address"}
+                      </Label>
+                      <Input
+                        id="checkout-customer-address"
+                        value={checkoutDetails.customerAddress}
+                        onChange={(event) =>
+                          setCheckoutDetails((details) => ({
+                            ...details,
+                            customerAddress: event.target.value,
+                          }))
+                        }
+                        placeholder="Street, city, region"
+                        data-testid="input-checkout-customer-address"
+                      />
+                    </div>
+                  </div>
                 </div>
 
                 <div className="grid gap-6 mb-6 md:grid-cols-2">
@@ -562,7 +656,7 @@ export default function Cart() {
                         <div>
                           <span className="font-medium text-gray-900">Delivery</span>
                           <p className="text-sm text-gray-600 mt-1">
-                            Use the registered delivery address from your approved account.
+                            Enter a delivery address for this order.
                           </p>
                           {paymentMethod === "cash" && (
                             <p className="text-xs text-amber-600 mt-1">
@@ -588,7 +682,7 @@ export default function Cart() {
                             <>
                               <p className="font-medium text-amber-700">Delivery address missing</p>
                               <p className="text-sm text-amber-700 mt-1">
-                                Your approved account does not have a registered address.
+                                Enter a delivery address in customer details.
                               </p>
                             </>
                           )}
@@ -667,11 +761,11 @@ export default function Cart() {
                     </Label>
 
                     <RadioGroup
-                      value={icePackRequired ? "yes" : "no"}
+                      value={icePackSelection}
                       onValueChange={(value) => {
-                        const nextChecked = value === "yes";
-                        setIcePackRequired(nextChecked);
-                        if (!nextChecked) {
+                        const nextSelection = value as IcePackSelection;
+                        setIcePackSelection(nextSelection);
+                        if (nextSelection !== "yes") {
                           setIcePackSize("small");
                           setIcePackQuantity(1);
                         }
@@ -780,7 +874,7 @@ export default function Cart() {
 
                 {(isMissingCustomerName || isMissingCustomerEmail || isMissingCustomerPhone) && (
                   <p className="mb-4 text-sm text-red-600">
-                    Your approved account is missing name, email, or phone details.
+                    Enter your name, email, and phone number before placing this order.
                   </p>
                 )}
 
@@ -798,7 +892,7 @@ export default function Cart() {
 
                 {isMissingDeliveryAddress && (
                   <p className="mb-4 text-sm text-red-600">
-                    Delivery needs a verified address before this order can be submitted.
+                    Enter the delivery address for this order before submitting.
                   </p>
                 )}
 
