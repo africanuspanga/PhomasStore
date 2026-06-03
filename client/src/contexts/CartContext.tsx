@@ -22,31 +22,26 @@ const TAX_RATE = 0; // Medical supplies are not charged additional tax.
 
 export function CartProvider({ children }: { children: React.ReactNode }) {
   const [items, setItems] = useState<CartItem[]>([]);
+  const [loadedCartKey, setLoadedCartKey] = useState<string | null>(null);
   const { toast } = useToast();
-  const { user, adminUser, isAuthenticated } = useAuth();
+  const { user, adminUser } = useAuth();
 
-  // Get current user identifier for cart storage
-  const getCurrentUserId = () => {
-    if (adminUser) return `admin-${adminUser.id}`;
-    if (user) return user.userId || user.id;
-    return 'guest';
-  };
-
-  const getCartKey = () => `phomas_cart_${getCurrentUserId()}`;
+  const currentCartOwnerId = adminUser ? `admin-${adminUser.id}` : user ? user.userId || user.id : null;
+  const cartKey = currentCartOwnerId ? `phomas_cart_${currentCartOwnerId}` : null;
 
   // Load cart from localStorage when user changes
   useEffect(() => {
-    if (!isAuthenticated) {
-      // Clear cart when not authenticated
+    if (!cartKey) {
       setItems([]);
+      setLoadedCartKey(null);
       return;
     }
 
-    const cartKey = getCartKey();
     const savedCart = localStorage.getItem(cartKey);
     if (savedCart) {
       try {
-        setItems(JSON.parse(savedCart));
+        const parsedCart = JSON.parse(savedCart);
+        setItems(Array.isArray(parsedCart) ? parsedCart : []);
       } catch (error) {
         localStorage.removeItem(cartKey);
         setItems([]);
@@ -54,15 +49,17 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     } else {
       setItems([]);
     }
-  }, [user, adminUser, isAuthenticated]);
+    setLoadedCartKey(cartKey);
+  }, [cartKey]);
 
-  // Save cart to localStorage whenever items change
+  // Save cart only after the current user's cart has been loaded.
   useEffect(() => {
-    if (isAuthenticated) {
-      const cartKey = getCartKey();
-      localStorage.setItem(cartKey, JSON.stringify(items));
+    if (!cartKey || loadedCartKey !== cartKey) {
+      return;
     }
-  }, [items, user, adminUser, isAuthenticated]);
+
+    localStorage.setItem(cartKey, JSON.stringify(items));
+  }, [items, cartKey, loadedCartKey]);
 
   const itemCount = items.reduce((total, item) => total + item.quantity, 0);
 
