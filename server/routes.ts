@@ -27,6 +27,7 @@ import { v2 as cloudinary } from 'cloudinary';
 import multer from 'multer';
 import { randomUUID } from "crypto";
 import { createClient } from '@supabase/supabase-js';
+import { waitUntil } from "@vercel/functions";
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -773,18 +774,11 @@ const withTimeout = async <T,>(promise: Promise<T>, timeoutMs: number): Promise<
 };
 
 const runBackgroundTask = (label: string, task: () => Promise<void>) => {
-  const run = () => {
-    void task().catch((error) => {
-      console.error(`⚠️ Background task failed (${label}):`, error);
-    });
-  };
+  const promise = task().catch((error) => {
+    console.error(`⚠️ Background task failed (${label}):`, error);
+  });
 
-  if (typeof setImmediate === "function") {
-    setImmediate(run);
-    return;
-  }
-
-  setTimeout(run, 0);
+  waitUntil(promise);
 };
 
 // Helper functions for product transformation
@@ -1506,22 +1500,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         };
       };
 
-      res.status(201).json({
-        success: true,
-        localOrderSaved: true,
-        order,
-        message: "Order saved. eCount sync will continue in the background.",
-        erp: {
-          syncStatus: order.erpSyncStatus || 'pending'
-        }
-      });
-
-      runBackgroundTask(`order notification ${order.orderNumber}`, async () => {
-        const notificationResult = await withTimeout(sendOrderNotificationSafely(order), 3000);
-        if ((notificationResult as { timedOut?: boolean }).timedOut) {
-          console.warn(`📧 Order notification timed out for ${order.orderNumber}; checkout response was already sent.`);
-        }
-      });
+      runBackgroundTask(`order notification ${order.orderNumber}`, () => sendOrderNotificationSafely(order));
 
       runBackgroundTask(`eCount sync ${order.orderNumber}`, async () => {
         try {
@@ -1533,6 +1512,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
             erpSyncStatus: 'failed',
             erpSyncError: ecountError instanceof Error ? ecountError.message : 'Unknown ERP error'
           });
+        }
+      });
+
+      res.status(201).json({
+        success: true,
+        localOrderSaved: true,
+        order,
+        message: "Order saved. eCount sync will continue in the background.",
+        erp: {
+          syncStatus: order.erpSyncStatus || 'pending'
         }
       });
     } catch (error) {
