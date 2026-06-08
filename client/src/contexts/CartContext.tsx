@@ -18,6 +18,7 @@ interface CartContextType {
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
+const CART_STORAGE_PREFIX = "phomas_cart_";
 const TAX_RATE = 0; // Medical supplies are not charged additional tax.
 
 export function CartProvider({ children }: { children: React.ReactNode }) {
@@ -26,8 +27,52 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const { toast } = useToast();
   const { user, adminUser } = useAuth();
 
-  const currentCartOwnerId = adminUser ? `admin-${adminUser.id}` : user ? user.userId || user.id : null;
-  const cartKey = currentCartOwnerId ? `phomas_cart_${currentCartOwnerId}` : null;
+  const cartOwnerIds = React.useMemo(() => {
+    const owners = adminUser
+      ? [`admin-${adminUser.id}`]
+      : user
+        ? [
+            user.userId,
+            user.id,
+            user.email ? `email-${user.email.toLowerCase()}` : null,
+          ]
+        : [];
+
+    return Array.from(new Set(owners.filter((owner): owner is string => !!owner)));
+  }, [adminUser?.id, user?.email, user?.id, user?.userId]);
+
+  const cartKeys = React.useMemo(
+    () => cartOwnerIds.map((ownerId) => `${CART_STORAGE_PREFIX}${ownerId}`),
+    [cartOwnerIds]
+  );
+  const cartKey = cartKeys[0] || null;
+  const cartKeysSignature = cartKeys.join("|");
+
+  const readStoredCart = (key: string): CartItem[] | null => {
+    const savedCart = localStorage.getItem(key);
+    if (savedCart === null) {
+      return null;
+    }
+
+    try {
+      const parsedCart = JSON.parse(savedCart);
+      return Array.isArray(parsedCart) ? parsedCart : [];
+    } catch (error) {
+      localStorage.removeItem(key);
+      return null;
+    }
+  };
+
+  const persistCart = (nextItems: CartItem[]) => {
+    if (!cartKey) {
+      return;
+    }
+
+    localStorage.setItem(cartKey, JSON.stringify(nextItems));
+    cartKeys
+      .filter((candidateKey) => candidateKey !== cartKey)
+      .forEach((candidateKey) => localStorage.removeItem(candidateKey));
+  };
 
   // Load cart from localStorage when user changes
   useEffect(() => {
@@ -37,20 +82,29 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    const savedCart = localStorage.getItem(cartKey);
-    if (savedCart) {
-      try {
-        const parsedCart = JSON.parse(savedCart);
-        setItems(Array.isArray(parsedCart) ? parsedCart : []);
-      } catch (error) {
-        localStorage.removeItem(cartKey);
-        setItems([]);
+    const primaryStoredItems = readStoredCart(cartKey);
+    let loadedItems: CartItem[] = primaryStoredItems ?? [];
+    let loadedFromKey: string | null = primaryStoredItems !== null ? cartKey : null;
+
+    for (const candidateKey of cartKeys.filter((key) => key !== cartKey)) {
+      const storedItems = readStoredCart(candidateKey);
+      if (storedItems !== null && (loadedFromKey === null || (loadedItems.length === 0 && storedItems.length > 0))) {
+        loadedItems = storedItems;
+        loadedFromKey = candidateKey;
+        if (storedItems.length > 0) {
+          break;
+        }
       }
-    } else {
-      setItems([]);
     }
+
+    if (loadedFromKey && loadedFromKey !== cartKey) {
+      localStorage.setItem(cartKey, JSON.stringify(loadedItems));
+      localStorage.removeItem(loadedFromKey);
+    }
+
+    setItems(loadedItems);
     setLoadedCartKey(cartKey);
-  }, [cartKey]);
+  }, [cartKey, cartKeysSignature]);
 
   // Save cart only after the current user's cart has been loaded.
   useEffect(() => {
@@ -88,11 +142,13 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     }
 
     if (existingItem) {
-      setItems(items.map(item =>
+      const nextItems = items.map(item =>
         item.productId === product.id
           ? { ...item, quantity: newQuantity }
           : item
-      ));
+      );
+      setItems(nextItems);
+      persistCart(nextItems);
     } else {
       const newItem: CartItem = {
         productId: product.id,
@@ -102,7 +158,9 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         referenceNumber: product.referenceNumber,
         imageUrl: product.imageUrl,
       };
-      setItems([...items, newItem]);
+      const nextItems = [...items, newItem];
+      setItems(nextItems);
+      persistCart(nextItems);
     }
 
     toast({
@@ -119,16 +177,20 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    setItems(items.map(item =>
+    const nextItems = items.map(item =>
       item.productId === productId
         ? { ...item, quantity }
         : item
-    ));
+    );
+    setItems(nextItems);
+    persistCart(nextItems);
   };
 
   const removeItem = (productId: string) => {
     const item = items.find(item => item.productId === productId);
-    setItems(items.filter(item => item.productId !== productId));
+    const nextItems = items.filter(item => item.productId !== productId);
+    setItems(nextItems);
+    persistCart(nextItems);
     
     if (item) {
       toast({
@@ -140,6 +202,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   const clearCart = () => {
     setItems([]);
+    persistCart([]);
     toast({
       title: "Cart cleared",
       description: "All items have been removed from your cart",

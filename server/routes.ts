@@ -774,11 +774,27 @@ const withTimeout = async <T,>(promise: Promise<T>, timeoutMs: number): Promise<
 };
 
 const runBackgroundTask = (label: string, task: () => Promise<void>) => {
-  const promise = task().catch((error) => {
-    console.error(`⚠️ Background task failed (${label}):`, error);
+  const promise = new Promise<void>((resolve) => {
+    const startTask = () => {
+      task()
+        .catch((error) => {
+          console.error(`⚠️ Background task failed (${label}):`, error);
+        })
+        .finally(resolve);
+    };
+
+    if (typeof setImmediate === "function") {
+      setImmediate(startTask);
+    } else {
+      setTimeout(startTask, 0);
+    }
   });
 
-  waitUntil(promise);
+  try {
+    waitUntil(promise);
+  } catch (error) {
+    console.warn(`⚠️ waitUntil unavailable for background task (${label}); task still scheduled locally.`);
+  }
 };
 
 // Helper functions for product transformation
@@ -1483,7 +1499,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const updatedOrder = await storage.updateOrderErpInfo(order.id, {
           erpDocNumber: erpResult.docNo,
           erpIoDate: erpResult.ioDate,
-          erpSyncStatus: 'synced'
+          erpSyncStatus: 'synced',
+          erpSyncError: null
         });
         
         console.log(`✅ Order ${order.orderNumber} successfully synced to eCount ERP`);
@@ -1500,6 +1517,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         };
       };
 
+      res.status(201).json({
+        success: true,
+        localOrderSaved: true,
+        order,
+        message: "Order saved. eCount sync will continue in the background.",
+        erp: {
+          syncStatus: order.erpSyncStatus || 'pending'
+        }
+      });
+
       runBackgroundTask(`order notification ${order.orderNumber}`, () => sendOrderNotificationSafely(order));
 
       runBackgroundTask(`eCount sync ${order.orderNumber}`, async () => {
@@ -1512,16 +1539,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
             erpSyncStatus: 'failed',
             erpSyncError: ecountError instanceof Error ? ecountError.message : 'Unknown ERP error'
           });
-        }
-      });
-
-      res.status(201).json({
-        success: true,
-        localOrderSaved: true,
-        order,
-        message: "Order saved. eCount sync will continue in the background.",
-        erp: {
-          syncStatus: order.erpSyncStatus || 'pending'
         }
       });
     } catch (error) {
