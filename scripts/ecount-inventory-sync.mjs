@@ -305,7 +305,7 @@ async function persistInventory(config, inventoryRows) {
         `;
         await transaction`
           INSERT INTO inventory (id, product_id, available_quantity, expiration_date)
-          VALUES (${randomUUID()}, ${item.productCode}, ${Math.max(0, Math.round(item.availableQuantity))}, NULL)
+          VALUES (${randomUUID()}, ${item.productCode}, ${Math.max(0, Math.floor(item.availableQuantity))}, NULL)
         `;
       }
     });
