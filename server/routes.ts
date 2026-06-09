@@ -431,8 +431,9 @@ async function testInventoryWithKey(params: {
         SESSION_ID: sessionId,
         API_CERT_KEY: apiKey,
         BASE_DATE: new Date().toISOString().slice(0, 10).replace(/-/g, ''),
-        WH_CD: '00001',
-        PROD_CD: itemCode,
+        CUST_CODE: '10839',
+        WH_CODE: '00001',
+        ITEM_CODE: itemCode,
         Page: '1',
         PageSize: '10'
       })
@@ -442,7 +443,15 @@ async function testInventoryWithKey(params: {
     
     if (inventoryData.Status === "200") {
       console.log(`   ✅ InventoryBalance SUCCESS!`);
-      const quantity = inventoryData.Data?.Datas?.[0]?.BAL_QTY || 0;
+      const rows = Array.isArray(inventoryData.Data?.Datas)
+        ? inventoryData.Data.Datas
+        : Array.isArray(inventoryData.Data?.Result)
+          ? inventoryData.Data.Result
+          : [];
+      const quantity = rows.reduce((sum: number, row: any) => {
+        const value = row.BAL_QTY ?? row.available_qty ?? row.qty ?? 0;
+        return sum + (Number.parseFloat(String(value).replace(/,/g, "")) || 0);
+      }, 0);
       return {
         success: true,
         step: 'inventory',
@@ -2119,7 +2128,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         success: true,
         message: 'Bulk product sync completed successfully',
         data: {
-          productsCount: result.Data?.Datas?.length || 0,
+          productsCount: result.Data?.Datas?.length || result.Data?.Result?.length || 0,
           status: result.Status,
           timestamp: new Date().toISOString()
         }
@@ -2143,7 +2152,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         success: true,
         message: 'Bulk inventory sync completed successfully',
         data: {
-          inventoryCount: result.Data?.Datas?.length || 0,
+          inventoryCount: result.Data?.Datas?.length || result.Data?.Result?.length || 0,
           status: result.Status,
           timestamp: new Date().toISOString()
         }
@@ -2479,7 +2488,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           console.log(`   📥 Response:`, JSON.stringify(result, null, 2));
           
           if (result.Status === "200" && result.Data) {
-            const quantity = result.Data[0]?.available_qty || result.Data[0]?.qty || 0;
+            const rows = Array.isArray(result.Data?.Datas)
+              ? result.Data.Datas
+              : Array.isArray(result.Data?.Result)
+                ? result.Data.Result
+                : [];
+            const quantity = rows.reduce((sum: number, row: any) => {
+              const value = row.BAL_QTY ?? row.available_qty ?? row.qty ?? 0;
+              return sum + (Number.parseFloat(String(value).replace(/,/g, "")) || 0);
+            }, 0);
             console.log(`   ✅ SUCCESS! Quantity: ${quantity}`);
             return {
               success: true,

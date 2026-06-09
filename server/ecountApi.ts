@@ -9,6 +9,7 @@ const ECOUNT_CONFIG = {
   userId: process.env.ECOUNT_USER_ID!,
   zone: process.env.ECOUNT_ZONE!,
   warehouseCode: process.env.ECOUNT_WAREHOUSE_CODE!,
+  customerCode: process.env.ECOUNT_CUSTOMER_CODE || "10839",
 };
 
 const authKeyLength = ECOUNT_CONFIG.authKey?.length ?? 0;
@@ -42,9 +43,12 @@ interface EcountProduct {
 }
 
 interface EcountInventory {
-  PROD_CD: string;
-  BAL_QTY: number;
-  WH_CD?: string;
+  PROD_CD?: string;
+  ITEM_CODE?: string;
+  ITEM_CD?: string;
+  PROD_CODE?: string;
+  BAL_QTY?: number | string;
+  [key: string]: any;
 }
 
 interface EcountApiResponse {
@@ -65,7 +69,7 @@ class EcountApiService {
   private session: EcountSession | null = null;
   private baseUrl: string;
   private inventoryCache = new Map<string, { data: any, timestamp: number }>();
-  private readonly CACHE_DURATION = 60 * 60 * 1000; // 1 hour in milliseconds
+  private readonly CACHE_DURATION = 20 * 60 * 1000; // eCount inventory limit: 1 call per 20 minutes
   private lastProductList: any[] = []; // Cache last fetched product list
   
   // CRITICAL: eCount rate limits (from API documentation)
@@ -499,6 +503,187 @@ class EcountApiService {
     }
   }
 
+  private isSuccessfulResponse(result: EcountApiResponse): boolean {
+    return String(result.Status) === "200";
+  }
+
+  private parseEcountRows(value: any): any[] {
+    if (!value) {
+      return [];
+    }
+
+    if (Array.isArray(value)) {
+      return value;
+    }
+
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      if (!trimmed) {
+        return [];
+      }
+
+      try {
+        const parsed = JSON.parse(trimmed);
+        return this.parseEcountRows(parsed);
+      } catch (error) {
+        console.warn('⚠️ Unable to parse eCount row payload string:', error);
+        return [];
+      }
+    }
+
+    if (typeof value === "object") {
+      for (const candidate of [value.Datas, value.Result, value.Rows, value.List]) {
+        const rows = this.parseEcountRows(candidate);
+        if (rows.length > 0) {
+          return rows;
+        }
+      }
+
+      return [value];
+    }
+
+    return [];
+  }
+
+  private getRowsFromResponse(result: EcountApiResponse): any[] {
+    return this.parseEcountRows(result.Data);
+  }
+
+  private parseEcountNumber(value: unknown): number | null {
+    if (value === null || value === undefined || value === "") {
+      return null;
+    }
+
+    if (typeof value === "number") {
+      return Number.isFinite(value) ? value : null;
+    }
+
+    const normalized = String(value).replace(/,/g, "").trim();
+    if (!normalized) {
+      return null;
+    }
+
+    const parsed = Number.parseFloat(normalized);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  private getInventoryProductCode(row: EcountInventory): string {
+    return String(
+      row.PROD_CD ||
+      row.ITEM_CODE ||
+      row.ITEM_CD ||
+      row.PROD_CODE ||
+      row.ItemCode ||
+      row.itemCode ||
+      ""
+    ).trim();
+  }
+
+  private getInventoryWarehouseCode(row: EcountInventory): string {
+    return String(
+      row.WH_CODE ||
+      row.WH_CD ||
+      row.WAREHOUSE_CODE ||
+      row.WAREHOUSE_CD ||
+      row.wh_code ||
+      row.wh_cd ||
+      ""
+    ).trim();
+  }
+
+  private getInventoryQuantity(row: EcountInventory): number {
+    const quantityKeys = [
+      "BAL_QTY",
+      "BALANCE_QTY",
+      "INV_QTY",
+      "STOCK_QTY",
+      "AVAILABLE_QTY",
+      "AVAIL_QTY",
+      "available_qty",
+      "stock_qty",
+      "balance_qty",
+      "qty",
+      "QTY",
+    ];
+
+    for (const key of quantityKeys) {
+      if (Object.prototype.hasOwnProperty.call(row, key)) {
+        const quantity = this.parseEcountNumber(row[key]);
+        if (quantity !== null) {
+          return quantity;
+        }
+      }
+    }
+
+    return 0;
+  }
+
+  private getInventoryRequestBody(itemCode = "") {
+    return {
+      BASE_DATE: new Date().toISOString().slice(0, 10).replace(/-/g, ''),
+      CUST_CODE: ECOUNT_CONFIG.customerCode,
+      WH_CODE: ECOUNT_CONFIG.warehouseCode,
+      ITEM_CODE: itemCode,
+    };
+  }
+
+  private normalizeInventoryRows(rows: any[]): EcountInventory[] {
+    const groupedInventory = new Map<string, { row: EcountInventory; quantity: number; sourceRows: number }>();
+    let skippedForWarehouse = 0;
+    let skippedWithoutCode = 0;
+
+    for (const rawRow of rows) {
+      const row = rawRow as EcountInventory;
+      const productCode = this.getInventoryProductCode(row);
+
+      if (!productCode) {
+        skippedWithoutCode++;
+        continue;
+      }
+
+      const warehouseCode = this.getInventoryWarehouseCode(row);
+      if (warehouseCode && ECOUNT_CONFIG.warehouseCode && warehouseCode !== ECOUNT_CONFIG.warehouseCode) {
+        skippedForWarehouse++;
+        continue;
+      }
+
+      const quantity = this.getInventoryQuantity(row);
+      const existing = groupedInventory.get(productCode);
+
+      if (existing) {
+        existing.quantity += quantity;
+        existing.sourceRows += 1;
+      } else {
+        groupedInventory.set(productCode, {
+          row: { ...row, PROD_CD: productCode },
+          quantity,
+          sourceRows: 1
+        });
+      }
+    }
+
+    const normalizedRows = Array.from(groupedInventory.values()).map(({ row, quantity, sourceRows }) => ({
+      ...row,
+      PROD_CD: this.getInventoryProductCode(row),
+      BAL_QTY: quantity,
+      availableQuantity: quantity,
+      sourceRows
+    }));
+
+    if (rows.length !== normalizedRows.length || skippedForWarehouse > 0 || skippedWithoutCode > 0) {
+      console.log('📊 Normalized inventory rows:', {
+        rawRows: rows.length,
+        products: normalizedRows.length,
+        duplicateRowsAggregated: rows.length - normalizedRows.length - skippedForWarehouse - skippedWithoutCode,
+        skippedForWarehouse,
+        skippedWithoutCode,
+        warehouse: ECOUNT_CONFIG.warehouseCode
+      });
+    }
+
+    return normalizedRows;
+  }
+
   /**
    * Get products from eCount using inventory balance approach (Pure eCount Integration)
    * No fallbacks - throws error if eCount API is unavailable
@@ -525,21 +710,16 @@ class EcountApiService {
       // Use the inventory endpoint with CORRECT parameter names (verified working in test)
       const result = await this.ecountRequest({
         endpoint: '/OAPI/V2/InventoryBalance/GetListInventoryBalanceStatus',
-        body: {
-          BASE_DATE: new Date().toISOString().slice(0, 10).replace(/-/g, ''),
-          CUST_CODE: "10839",  // Customer code (required per working test)
-          WH_CODE: ECOUNT_CONFIG.warehouseCode,  // WH_CODE not WH_CD!
-          ITEM_CODE: '',       // ITEM_CODE not PROD_CD! Empty = get all products
-        }
+        body: this.getInventoryRequestBody()
       });
 
       console.log('📊 InventoryBalance API status:', result.Status);
       
-      // FIX: Check for Data.Datas first, then Data.Result as fallback
-      const products = result.Data?.Datas || result.Data?.Result || [];
+      const rawProducts = this.getRowsFromResponse(result);
+      const products = this.normalizeInventoryRows(rawProducts);
       console.log('📊 InventoryBalance API data count:', products.length);
       
-      if (result.Status === "200" && products.length > 0) {
+      if (this.isSuccessfulResponse(result) && products.length > 0) {
         console.log('✅ Successfully retrieved products from InventoryBalance!');
         console.log(`🎉 REAL eCount data: ${products.length} products found!`);
         this.lastProductList = products; // Cache for rate limit scenarios
@@ -552,7 +732,11 @@ class EcountApiService {
           hasDatas: !!result.Data?.Datas,
           datasLength: result.Data?.Datas?.length,
           hasResult: !!result.Data?.Result,
-          resultLength: result.Data?.Result?.length
+          resultLength: Array.isArray(result.Data?.Result) || typeof result.Data?.Result === "string"
+            ? result.Data.Result.length
+            : undefined,
+          rawRows: rawProducts.length,
+          normalizedRows: products.length
         });
         // Return cached product list if available, otherwise empty
         return this.lastProductList;
@@ -572,20 +756,25 @@ class EcountApiService {
       
       if (productList && productList.length > 0) {
         // Transform eCount product data to our format (no images - handled separately)
-        const products = productList.map((product: any) => ({
-          id: product.PROD_CD,
-          name: this.generateProductName(product.PROD_CD),
-          packaging: 'Standard',
-          referenceNumber: product.PROD_CD,
-          price: '25000', // Will be updated from admin later
-          imageUrl: null, // Images handled by separate /api/images system
-          category: this.getCategoryFromCode(product.PROD_CD),
-          availableQuantity: parseInt(product.BAL_QTY || '0'),
-          isLowStock: parseInt(product.BAL_QTY || '0') < 10,
-          isExpiringSoon: false,
-          hasRealTimeData: true,
-          lastUpdated: new Date().toISOString()
-        }));
+        const products = productList.map((product: any) => {
+          const productCode = this.getInventoryProductCode(product);
+          const quantity = this.getInventoryQuantity(product);
+
+          return {
+            id: productCode,
+            name: this.generateProductName(productCode),
+            packaging: 'Standard',
+            referenceNumber: productCode,
+            price: '25000', // Will be updated from admin later
+            imageUrl: null, // Images handled by separate /api/images system
+            category: this.getCategoryFromCode(productCode),
+            availableQuantity: quantity,
+            isLowStock: quantity < 10,
+            isExpiringSoon: false,
+            hasRealTimeData: true,
+            lastUpdated: new Date().toISOString()
+          };
+        });
         
         console.log(`✅ Successfully got ${products.length} products from eCount GetProductList`);
         return products;
@@ -606,21 +795,20 @@ class EcountApiService {
     try {
       const result = await this.ecountRequest({
         endpoint: '/OAPI/V2/InventoryBalance/GetListInventoryBalanceStatus',
-        body: {
-          BASE_DATE: new Date().toISOString().slice(0, 10).replace(/-/g, ''), // YYYYMMDD - required parameter
-          WH_CD: ECOUNT_CONFIG.warehouseCode,
-          PROD_CD: "", // Get all products
-        }
+        body: this.getInventoryRequestBody()
       });
 
       console.log('Inventory API status:', result.Status);
-      console.log('Inventory API data count:', result.Data?.Datas?.length || 0);
+      const rawInventoryRows = this.getRowsFromResponse(result);
+      const normalizedInventoryRows = this.normalizeInventoryRows(rawInventoryRows);
+      console.log('Inventory API data count:', normalizedInventoryRows.length);
       const inventoryMap = new Map<string, number>();
 
-      if (result.Status === "200" && result.Data?.Datas) {
-        result.Data.Datas.forEach((item: EcountInventory) => {
-          const quantity = item.BAL_QTY || 0;
-          inventoryMap.set(item.PROD_CD, quantity);
+      if (this.isSuccessfulResponse(result) && normalizedInventoryRows.length > 0) {
+        normalizedInventoryRows.forEach((item: EcountInventory) => {
+          const productCode = this.getInventoryProductCode(item);
+          const quantity = this.getInventoryQuantity(item);
+          inventoryMap.set(productCode, quantity);
         });
         console.log(`Mapped ${inventoryMap.size} products to inventory`);
       } else {
@@ -1115,18 +1303,23 @@ class EcountApiService {
    * Transform eCount inventory data to product format (fallback)
    */
   private async transformInventoryToProducts(inventoryData: EcountInventory[]): Promise<ProductWithInventory[]> {
-    return inventoryData.map((item) => ({
-      id: item.PROD_CD,
-      name: this.generateProductName(item.PROD_CD),
-      packaging: 'Standard',
-      referenceNumber: item.PROD_CD,
-      price: '25000', // Default price, will be updated from admin later
-      imageUrl: null, // Images handled by separate /api/images system
-      category: this.getCategoryFromCode(item.PROD_CD),
-      availableQuantity: item.BAL_QTY || 0,
-      isLowStock: (item.BAL_QTY || 0) < 10,
-      isExpiringSoon: false
-    }));
+    return inventoryData.map((item) => {
+      const productCode = this.getInventoryProductCode(item);
+      const quantity = this.getInventoryQuantity(item);
+
+      return {
+        id: productCode,
+        name: this.generateProductName(productCode),
+        packaging: 'Standard',
+        referenceNumber: productCode,
+        price: '25000', // Default price, will be updated from admin later
+        imageUrl: null, // Images handled by separate /api/images system
+        category: this.getCategoryFromCode(productCode),
+        availableQuantity: quantity,
+        isLowStock: quantity < 10,
+        isExpiringSoon: false
+      };
+    });
   }
 
   /**
@@ -1279,22 +1472,18 @@ class EcountApiService {
       console.log('📊 Fetching ONLY live stock data (avoiding broken master data endpoints)...');
       const inventoryResult = await this.ecountRequest({
         endpoint: '/OAPI/V2/InventoryBalance/GetListInventoryBalanceStatus',
-        body: {
-          BASE_DATE: new Date().toISOString().slice(0, 10).replace(/-/g, ''),
-          CUST_CODE: "10839",  // Customer code (required per working test)
-          WH_CODE: ECOUNT_CONFIG.warehouseCode,  // WH_CODE not WH_CD!
-          ITEM_CODE: '',       // ITEM_CODE not PROD_CD! Empty = get all products
-        }
+        body: this.getInventoryRequestBody()
       });
 
       // Parse inventory data
-      const inventoryData = inventoryResult.Data?.Datas || inventoryResult.Data?.Result || [];
+      const inventoryData = this.normalizeInventoryRows(this.getRowsFromResponse(inventoryResult));
       console.log(`📊 Live stock data: ${inventoryData.length} products from eCount`);
       
-      if (inventoryResult.Status === "200" && inventoryData.length > 0) {
+      if (this.isSuccessfulResponse(inventoryResult) && inventoryData.length > 0) {
         // Build products using USER'S EXCEL DATA + live stock
         const products = inventoryData.map((product: any, index: number) => {
-          const productCode = product.PROD_CD;
+          const productCode = this.getInventoryProductCode(product);
+          const quantity = this.getInventoryQuantity(product);
           const excelProduct = ProductMapping.getProduct(productCode);
           
           // Log first product mapping to show it works
@@ -1311,8 +1500,8 @@ class EcountApiService {
             price: excelProduct?.price?.toString() || '25000', // USER'S REAL PRICES!
             imageUrl: null, // Images handled by separate /api/images system
             category: excelProduct?.category || this.getCategoryFromCode(productCode),
-            availableQuantity: parseInt(product.BAL_QTY || '0'), // LIVE stock from eCount
-            isLowStock: parseInt(product.BAL_QTY || '0') < 10,
+            availableQuantity: quantity, // LIVE stock from eCount
+            isLowStock: quantity < 10,
             isExpiringSoon: false,
             hasRealTimeData: true,
             lastUpdated: new Date().toISOString(),
@@ -1325,10 +1514,25 @@ class EcountApiService {
         const realNamesCount = products.filter((p: any) => !p.name.includes('Medical Product') && !p.name.includes('Medical Supply')).length;
         console.log(`🎉 USER'S REAL NAMES: ${realNamesCount}/${products.length} products have REAL names from Excel file!`);
         
+        const now = Date.now();
+        const inventoryMap = new Map<string, number>();
+        inventoryData.forEach((item) => {
+          const productCode = this.getInventoryProductCode(item);
+          if (productCode) {
+            inventoryMap.set(productCode, this.getInventoryQuantity(item));
+          }
+        });
+        this.lastProductList = inventoryData;
+        this.inventoryLastCall = now;
+        this.inventoryCache.set('inventory_data', {
+          data: inventoryMap,
+          timestamp: now
+        });
+
         // Cache the combined data (Excel names + live stock)
         this.inventoryCache.set('all_products', {
           data: products,
-          timestamp: Date.now()
+          timestamp: now
         });
         
         console.log(`✅ Bulk sync completed: ${products.length} products with ${realNamesCount} real names cached`);
@@ -1357,28 +1561,72 @@ class EcountApiService {
       // Use proper eCount request format with CORRECT parameter names (verified working)
       const result = await this.ecountRequest({
         endpoint: '/OAPI/V2/InventoryBalance/GetListInventoryBalanceStatus',
-        body: {
-          BASE_DATE: new Date().toISOString().slice(0, 10).replace(/-/g, ''), // YYYYMMDD
-          CUST_CODE: "10839",  // Customer code (required per working test)
-          WH_CODE: ECOUNT_CONFIG.warehouseCode,  // WH_CODE not WH_CD!
-          ITEM_CODE: "",       // ITEM_CODE not PROD_CD! Empty = get all products
-        }
+        body: this.getInventoryRequestBody()
       });
 
-      // FIX: Check for Data.Datas first, then Data.Result as fallback
-      const inventory = result.Data?.Datas || result.Data?.Result || [];
+      const rawInventory = this.getRowsFromResponse(result);
+      const inventory = this.normalizeInventoryRows(rawInventory);
       console.log(`📊 Bulk inventory data structure:`, {
         status: result.Status,
         hasDatas: !!result.Data?.Datas,
         datasLength: result.Data?.Datas?.length,
         hasResult: !!result.Data?.Result,
         resultLength: result.Data?.Result?.length,
+        rawInventory: rawInventory.length,
         totalInventory: inventory.length
       });
       
-      if (result.Status === "200") {
+      if (this.isSuccessfulResponse(result)) {
         console.log(`✅ Bulk inventory sync completed: ${inventory.length} inventory records retrieved`);
-        return result;
+        const now = Date.now();
+        const inventoryMap = new Map<string, number>();
+        inventory.forEach((item) => {
+          const productCode = this.getInventoryProductCode(item);
+          if (productCode) {
+            inventoryMap.set(productCode, this.getInventoryQuantity(item));
+          }
+        });
+
+        this.lastProductList = inventory;
+        this.inventoryLastCall = now;
+        this.inventoryCache.set('inventory_data', {
+          data: inventoryMap,
+          timestamp: now
+        });
+
+        const cachedProducts = this.inventoryCache.get('all_products');
+        if (cachedProducts && Array.isArray(cachedProducts.data)) {
+          const refreshedProducts = cachedProducts.data.map((product: any) => {
+            const productCode = product.id || product.referenceNumber;
+            if (!inventoryMap.has(productCode)) {
+              return product;
+            }
+
+            const quantity = inventoryMap.get(productCode) || 0;
+            return {
+              ...product,
+              availableQuantity: quantity,
+              isLowStock: quantity < 10,
+              hasRealTimeData: true,
+              lastUpdated: new Date(now).toISOString()
+            };
+          });
+
+          this.inventoryCache.set('all_products', {
+            data: refreshedProducts,
+            timestamp: now
+          });
+          console.log(`📦 Refreshed cached product quantities for ${inventoryMap.size} products`);
+        }
+
+        return {
+          ...result,
+          Data: {
+            ...result.Data,
+            Datas: inventory,
+            Result: inventory
+          }
+        };
       }
 
       throw new Error(`Bulk inventory sync failed: ${result.Error?.Message || 'Unknown error'}`);
@@ -1389,13 +1637,13 @@ class EcountApiService {
   }
 
   /**
-   * Get cached inventory data with 1-hour expiration
+   * Get cached inventory data with expiration aligned to the eCount inventory rate limit.
    */
   async getCachedInventoryData(): Promise<Map<string, number>> {
     const cacheKey = 'inventory_data';
     const cached = this.inventoryCache.get(cacheKey);
     
-    // Check if we have valid cached data (less than 1 hour old)
+    // Check if we have valid cached data.
     if (cached && (Date.now() - cached.timestamp) < this.CACHE_DURATION) {
       console.log('📦 Using cached inventory data (age: ' + Math.round((Date.now() - cached.timestamp) / 1000 / 60) + ' minutes)');
       return cached.data;
@@ -1435,15 +1683,16 @@ class EcountApiService {
     try {
       const result = await this.ecountRequest({
         endpoint: '/OAPI/V2/InventoryBalance/GetListInventoryBalanceStatus',
-        body: {
-          BASE_DATE: new Date().toISOString().slice(0, 10).replace(/-/g, ''), // YYYYMMDD
-          WH_CD: ECOUNT_CONFIG.warehouseCode,
-          PROD_CD: itemCode // Filter for specific item
-        }
+        body: this.getInventoryRequestBody(itemCode)
       });
 
-      if (result.Status === "200" && result.Data?.Datas?.length > 0) {
-        const quantity = result.Data.Datas[0]?.BAL_QTY || 0;
+      const inventoryRows = this.normalizeInventoryRows(this.getRowsFromResponse(result));
+      const matchingRows = inventoryRows.filter(row => this.getInventoryProductCode(row) === itemCode);
+      const quantity = matchingRows.length > 0
+        ? matchingRows.reduce((sum, row) => sum + this.getInventoryQuantity(row), 0)
+        : inventoryRows.reduce((sum, row) => sum + this.getInventoryQuantity(row), 0);
+
+      if (this.isSuccessfulResponse(result) && inventoryRows.length > 0) {
         console.log(`✅ Single item inventory for ${itemCode}: ${quantity} units`);
         
         // Update cache with this single item
@@ -1512,13 +1761,15 @@ class EcountApiService {
   clearInventoryCache(): void {
     console.log('🗑️ Clearing inventory cache');
     this.inventoryCache.clear();
+    this.lastProductList = [];
+    this.inventoryLastCall = 0;
   }
 
   /**
    * Get cache status for admin monitoring
    */
   getCacheStatus(): { size: number, lastUpdated: string | null, isExpired: boolean } {
-    const cached = this.inventoryCache.get('inventory_data');
+    const cached = this.inventoryCache.get('all_products') || this.inventoryCache.get('inventory_data');
     
     if (!cached) {
       return { size: 0, lastUpdated: null, isExpired: true };
@@ -1528,7 +1779,11 @@ class EcountApiService {
     const isExpired = ageMs > this.CACHE_DURATION;
     
     return {
-      size: cached.data instanceof Map ? cached.data.size : 0,
+      size: cached.data instanceof Map
+        ? cached.data.size
+        : Array.isArray(cached.data)
+          ? cached.data.length
+          : 0,
       lastUpdated: new Date(cached.timestamp).toISOString(),
       isExpired
     };
@@ -1549,7 +1804,7 @@ class EcountApiService {
     const cacheKey = 'all_products';
     const cached = this.inventoryCache.get(cacheKey);
     
-    // Check if we have valid cached data (less than 1 hour old)
+    // Check if we have valid cached data.
     if (cached && (Date.now() - cached.timestamp) < this.CACHE_DURATION) {
       const ageMinutes = Math.round((Date.now() - cached.timestamp) / 1000 / 60);
       console.log(`📦 Using cached products (age: ${ageMinutes} minutes, count: ${cached.data.length})`);
@@ -1578,8 +1833,8 @@ class EcountApiService {
         
         // Transform eCount data using REAL product names from USER'S EXCEL FILE + live stock
         products = productList.map((product: any, index: number) => {
-          const productCode = product.PROD_CD;
-          const quantity = parseInt(product.BAL_QTY || '0');
+          const productCode = this.getInventoryProductCode(product);
+          const quantity = this.getInventoryQuantity(product);
           
           // Get REAL product data from user's Excel file
           const excelProduct = ProductMapping.getProduct(productCode);
@@ -1614,8 +1869,15 @@ class EcountApiService {
         
         const allExcelProducts = ProductMapping.getAllMappedProducts();
         console.log(`📋 Found ${allExcelProducts.length} products in Excel file`);
+        const cachedInventory = this.inventoryCache.get('inventory_data');
+        const cachedInventoryMap = cachedInventory?.data instanceof Map
+          ? cachedInventory.data as Map<string, number>
+          : null;
         
         products = allExcelProducts.map((excelProduct: any, index: number) => {
+          const cachedQuantity = cachedInventoryMap?.get(excelProduct.code);
+          const fallbackQuantity = typeof cachedQuantity === "number" ? cachedQuantity : 0;
+
           return {
             id: excelProduct.code,
             name: excelProduct.name,
@@ -1624,10 +1886,10 @@ class EcountApiService {
             price: excelProduct.price?.toString() || '0',
             imageUrl: null, // Images handled by separate /api/images system
             category: excelProduct.category || this.getCategoryFromCode(excelProduct.code),
-            availableQuantity: 999, // Show as in-stock when real-time data unavailable (not 0 to avoid "out of stock" display)
-            isLowStock: false, // Hide stock indicators when using fallback
+            availableQuantity: fallbackQuantity,
+            isLowStock: fallbackQuantity < 10,
             isExpiringSoon: false,
-            hasRealTimeData: false, // Flag to indicate this is fallback data
+            hasRealTimeData: typeof cachedQuantity === "number",
             lastUpdated: new Date().toISOString(),
             description: excelProduct.name,
             specification: excelProduct.uom
@@ -1641,11 +1903,26 @@ class EcountApiService {
       const realNamesCount = products.filter(p => !p.name.includes('Medical Product') && !p.name.includes('Medical Supply')).length;
       console.log(`🎉 USER'S REAL NAMES: ${realNamesCount}/${products.length} products have REAL names from Excel file!`);
       
+      const now = Date.now();
+      if (productList.length > 0) {
+        const inventoryMap = new Map<string, number>();
+        productList.forEach((item) => {
+          const productCode = this.getInventoryProductCode(item);
+          if (productCode) {
+            inventoryMap.set(productCode, this.getInventoryQuantity(item));
+          }
+        });
+        this.inventoryCache.set('inventory_data', {
+          data: inventoryMap,
+          timestamp: now
+        });
+      }
+
       // Cache safety: Only cache if we have products (prevent overwriting good cache with empty results)
       if (products.length > 0) {
         this.inventoryCache.set(cacheKey, {
           data: products,
-          timestamp: Date.now()
+          timestamp: now
         });
         console.log(`✅ Cached ${products.length} products (realtime: ${productList.length > 0})`);
       } else {
@@ -2064,9 +2341,7 @@ class EcountApiService {
         COM_CODE: ECOUNT_CONFIG.companyCode,
         SESSION_ID: sessionId,
         API_CERT_KEY: ECOUNT_CONFIG.authKey,
-        BASE_DATE: new Date().toISOString().slice(0, 10).replace(/-/g, ''),
-        WH_CD: ECOUNT_CONFIG.warehouseCode,
-        PROD_CD: '', // Get all products
+        ...this.getInventoryRequestBody(),
         Page: '1',
         PageSize: '10' // Small sample for diagnostic
       };
@@ -2202,8 +2477,9 @@ class EcountApiService {
       '     "SESSION_ID": "STRING - Session ID from login",',
       '     "API_CERT_KEY": "STRING(34) - Production API Key",',
       '     "BASE_DATE": "STRING(8) - YYYYMMDD format",',
-      '     "WH_CD": "STRING(5) - Warehouse Code",',
-      '     "PROD_CD": "STRING - Product Code (empty = all products)",',
+      '     "CUST_CODE": "STRING - Customer Code",',
+      '     "WH_CODE": "STRING(5) - Warehouse Code",',
+      '     "ITEM_CODE": "STRING - Product Code (empty = all products)",',
       '     "Page": "STRING - Page number",',
       '     "PageSize": "STRING - Page size"',
       '   }',
@@ -2236,8 +2512,9 @@ class EcountApiService {
       '',
       '📝 REQUEST DETAILS:',
       `- BASE_DATE: ${new Date().toISOString().slice(0, 10).replace(/-/g, '')} (YYYYMMDD format)`,
-      `- WH_CD: ${ECOUNT_CONFIG.warehouseCode}`,
-      `- PROD_CD: "" (empty = all products)`,
+      `- CUST_CODE: ${ECOUNT_CONFIG.customerCode}`,
+      `- WH_CODE: ${ECOUNT_CONFIG.warehouseCode}`,
+      `- ITEM_CODE: "" (empty = all products)`,
       `- Page: 1`,
       `- PageSize: 10`,
       '',

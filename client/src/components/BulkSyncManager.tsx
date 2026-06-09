@@ -405,7 +405,7 @@ export function BulkSyncManager() {
           <div className="flex items-start space-x-3">
             <Info className="h-4 w-4 text-blue-600 mt-0.5" />
             <div className="text-sm text-gray-600">
-              Clear the inventory cache to force fresh data retrieval. The cache automatically expires after 1 hour.
+              Clear the inventory cache to force fresh data retrieval. The cache automatically expires after 20 minutes.
             </div>
           </div>
           
