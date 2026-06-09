@@ -101,7 +101,7 @@ export default function Cart() {
   // Get stock for a product
   const getProductStock = (productId: string): number => {
     const product = products.find((p) => p.id === productId);
-    return product?.availableQuantity ?? 0;
+    return product?.availableQuantity ?? 99;
   };
 
   // Validate and update quantity with stock check

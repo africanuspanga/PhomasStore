@@ -1876,7 +1876,7 @@ class EcountApiService {
         
         products = allExcelProducts.map((excelProduct: any, index: number) => {
           const cachedQuantity = cachedInventoryMap?.get(excelProduct.code);
-          const fallbackQuantity = typeof cachedQuantity === "number" ? cachedQuantity : 0;
+          const fallbackQuantity = typeof cachedQuantity === "number" ? cachedQuantity : 99;
 
           return {
             id: excelProduct.code,
