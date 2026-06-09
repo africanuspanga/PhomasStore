@@ -1869,38 +1869,66 @@ class EcountApiService {
           };
         });
       } else {
-        // FALLBACK: eCount API failed, generate products from Excel file
-        console.log('⚠️ eCount API returned no data - using Excel file as fallback');
-        console.log('📦 Generating products from Excel data for image upload workflow...');
+        // FALLBACK: eCount API failed, use the droplet-synced database inventory when available.
+        console.log('⚠️ eCount API returned no data - using database/Excel fallback');
+        console.log('📦 Generating products from synced inventory or Excel data for image upload workflow...');
         
-        const allExcelProducts = ProductMapping.getAllMappedProducts();
-        console.log(`📋 Found ${allExcelProducts.length} products in Excel file`);
+        const syncedInventory = await storage.getAllInventory();
         const cachedInventory = this.inventoryCache.get('inventory_data');
         const cachedInventoryMap = cachedInventory?.data instanceof Map
           ? cachedInventory.data as Map<string, number>
           : null;
-        
-        products = allExcelProducts.map((excelProduct: any, index: number) => {
-          const cachedQuantity = cachedInventoryMap?.get(excelProduct.code);
-          const fallbackQuantity = typeof cachedQuantity === "number" ? cachedQuantity : 99;
 
-          return {
-            id: excelProduct.code,
-            name: excelProduct.name,
-            packaging: excelProduct.uom,
-            referenceNumber: excelProduct.code,
-            price: excelProduct.price?.toString() || '0',
-            imageUrl: null, // Images handled by separate /api/images system
-            category: excelProduct.category || this.getCategoryFromCode(excelProduct.code),
-            availableQuantity: fallbackQuantity,
-            isLowStock: fallbackQuantity < 10,
-            isExpiringSoon: false,
-            hasRealTimeData: typeof cachedQuantity === "number",
-            lastUpdated: new Date().toISOString(),
-            description: excelProduct.name,
-            specification: excelProduct.uom
-          };
-        });
+        if (syncedInventory.length > 0) {
+          console.log(`📋 Found ${syncedInventory.length} products in synced database inventory`);
+          products = syncedInventory.map((inventoryItem: any) => {
+            const productCode = inventoryItem.productId;
+            const excelProduct = ProductMapping.getProduct(productCode);
+            const fallbackQuantity = inventoryItem.availableQuantity ?? 0;
+
+            return {
+              id: productCode,
+              name: excelProduct?.name || this.generateProductName(productCode),
+              packaging: excelProduct?.uom || 'Standard',
+              referenceNumber: productCode,
+              price: excelProduct?.price?.toString() || '0',
+              imageUrl: null,
+              category: excelProduct?.category || this.getCategoryFromCode(productCode),
+              availableQuantity: fallbackQuantity,
+              isLowStock: fallbackQuantity < 10,
+              isExpiringSoon: false,
+              hasRealTimeData: true,
+              lastUpdated: inventoryItem.expirationDate?.toISOString?.() || new Date().toISOString(),
+              description: excelProduct?.name || '',
+              specification: excelProduct?.uom || ''
+            };
+          });
+        } else {
+          const allExcelProducts = ProductMapping.getAllMappedProducts();
+          console.log(`📋 Found ${allExcelProducts.length} products in Excel file`);
+
+          products = allExcelProducts.map((excelProduct: any) => {
+            const cachedQuantity = cachedInventoryMap?.get(excelProduct.code);
+            const fallbackQuantity = typeof cachedQuantity === "number" ? cachedQuantity : 99;
+
+            return {
+              id: excelProduct.code,
+              name: excelProduct.name,
+              packaging: excelProduct.uom,
+              referenceNumber: excelProduct.code,
+              price: excelProduct.price?.toString() || '0',
+              imageUrl: null, // Images handled by separate /api/images system
+              category: excelProduct.category || this.getCategoryFromCode(excelProduct.code),
+              availableQuantity: fallbackQuantity,
+              isLowStock: fallbackQuantity < 10,
+              isExpiringSoon: false,
+              hasRealTimeData: typeof cachedQuantity === "number",
+              lastUpdated: new Date().toISOString(),
+              description: excelProduct.name,
+              specification: excelProduct.uom
+            };
+          });
+        }
         
         console.log(`✅ Generated ${products.length} products from Excel fallback`);
       }

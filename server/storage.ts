@@ -1,4 +1,4 @@
-import { type User, type InsertUser, type Product, type InsertProduct, type Inventory, type InsertInventory, type Order, type InsertOrder, type ProductWithInventory, type OrderItem, type ProductImage, type InsertProductImage, type AdminCredential, productImages, orders as ordersTable, users as usersTable, adminCredentials as adminCredentialsTable, profiles as profilesTable } from "../shared/schema.js";
+import { type User, type InsertUser, type Product, type InsertProduct, type Inventory, type InsertInventory, type Order, type InsertOrder, type ProductWithInventory, type OrderItem, type ProductImage, type InsertProductImage, type AdminCredential, productImages, orders as ordersTable, users as usersTable, adminCredentials as adminCredentialsTable, profiles as profilesTable, products as productsTable, inventory as inventoryTable } from "../shared/schema.js";
 import { randomUUID } from "crypto";
 import * as fs from "fs";
 import * as path from "path";
@@ -757,10 +757,27 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getInventoryByProductId(productId: string): Promise<Inventory | undefined> {
+    if (this.db) {
+      try {
+        const rows = await this.db.select().from(inventoryTable).where(eq(inventoryTable.productId, productId)).limit(1);
+        return rows[0];
+      } catch (error) {
+        console.error('❌ Database error fetching inventory by product:', error);
+      }
+    }
+
     return this.memStorage.getInventoryByProductId(productId);
   }
 
   async getAllInventory(): Promise<Inventory[]> {
+    if (this.db) {
+      try {
+        return await this.db.select().from(inventoryTable);
+      } catch (error) {
+        console.error('❌ Database error fetching inventory:', error);
+      }
+    }
+
     return this.memStorage.getAllInventory();
   }
 
@@ -772,19 +789,31 @@ export class DatabaseStorage implements IStorage {
     // Try to update in database first
     if (this.db) {
       try {
+        const existingProduct = await this.db.select().from(productsTable).where(eq(productsTable.id, productId)).limit(1);
+        if (existingProduct.length === 0) {
+          await this.db.insert(productsTable).values({
+            id: productId,
+            name: `eCount Product - ${productId}`,
+            packaging: 'Standard',
+            referenceNumber: productId,
+            price: '0',
+            imageUrl: null,
+            category: 'Medical Supplies'
+          }).onConflictDoNothing();
+        }
+
         // Check if inventory record exists
-        const inventoryTable = require('../shared/schema').inventory;
-        const existing = await this.db.select().from(inventoryTable).where(eq(inventoryTable.product_id, productId)).limit(1);
+        const existing = await this.db.select().from(inventoryTable).where(eq(inventoryTable.productId, productId)).limit(1);
         
         if (existing.length > 0) {
           // Update existing record
-          await this.db.update(inventoryTable).set({ available_quantity: quantity }).where(eq(inventoryTable.product_id, productId));
+          await this.db.update(inventoryTable).set({ availableQuantity: quantity }).where(eq(inventoryTable.productId, productId));
         } else {
           // Insert new record
           await this.db.insert(inventoryTable).values({
             id: randomUUID(),
-            product_id: productId,
-            available_quantity: quantity
+            productId,
+            availableQuantity: quantity
           });
         }
         console.log(`✅ Updated eCount inventory: ${productId} = ${quantity} units`);
