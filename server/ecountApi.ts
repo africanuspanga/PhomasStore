@@ -290,7 +290,7 @@ class EcountApiService {
         });
         
         // CRITICAL FIX: Detect "Please login" errors (often come back as 500)
-        const errorMessage = result.Error?.Message || result.Errors?.[0]?.Message || '';
+        const errorMessage = result.Error?.Message || result.Errors?.[0]?.Message || result.Data?.Message || '';
         const isLoginError = errorMessage.toLowerCase().includes('please login') || 
                            errorMessage.toLowerCase().includes('login');
         
@@ -496,7 +496,13 @@ class EcountApiService {
         return this.session.sessionId;
       }
 
-      throw new Error(`Login failed: ${result.Error?.Message || 'Unknown error'}`);
+      const loginErrorMessage =
+        result.Error?.Message ||
+        result.Errors?.[0]?.Message ||
+        result.Data?.Message ||
+        'Unknown error';
+      const loginErrorCode = result.Data?.Code ? ` (Code ${result.Data.Code})` : '';
+      throw new Error(`Login failed${loginErrorCode}: ${loginErrorMessage}`);
     } catch (error) {
       console.error('❌ eCount login error:', error);
       throw error;
