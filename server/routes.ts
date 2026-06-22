@@ -806,6 +806,42 @@ const runBackgroundTask = (label: string, task: () => Promise<void>) => {
   }
 };
 
+const buildOrderEcountUserProfile = (order: any) => ({
+  email: order.customerEmail || 'guest@phomas.com',
+  name: order.customerName || order.customerCompany || 'Online Store Sales',
+  phone: order.customerPhone || '',
+});
+
+const syncOrderToEcount = async (order: any) => {
+  const erpResult = await ecountApi.submitSaleOrder(order, buildOrderEcountUserProfile(order));
+
+  const updatedOrder = await storage.updateOrderErpInfo(order.id, {
+    erpDocNumber: erpResult.docNo,
+    erpIoDate: erpResult.ioDate,
+    erpSyncStatus: 'synced',
+    erpSyncError: null
+  });
+
+  console.log(`✅ Order ${order.orderNumber} successfully synced to eCount ERP`);
+  console.log(`📄 ERP Doc: ${erpResult.docNo}, Date: ${erpResult.ioDate}`);
+
+  return {
+    updatedOrder,
+    erp: {
+      docNumber: erpResult.docNo,
+      ioDate: erpResult.ioDate,
+      syncStatus: 'synced'
+    }
+  };
+};
+
+const markOrderEcountSyncFailed = async (orderId: string, error: unknown) => {
+  await storage.updateOrderErpInfo(orderId, {
+    erpSyncStatus: 'failed',
+    erpSyncError: error instanceof Error ? error.message : 'Unknown ERP error'
+  });
+};
+
 // Helper functions for product transformation
 function generateProductName(productCode: string): string {
   // Medical supply name patterns based on product codes
@@ -1467,13 +1503,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         icePackQuantity,
       });
 
-      // Construct user profile from checkout details for eCount API.
-      const userProfile = {
-        email: customerEmail,
-        name: customerName || customerCompany || authenticatedUserId,
-        phone: customerPhone,
-      };
-      
       // Persist checkout customer data exactly as entered for this order.
       const orderDataWithCustomer = {
         ...req.body,
@@ -1500,31 +1529,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Create order in local storage first
       const order = await storage.createOrder(orderData);
-      
-      const syncOrderToEcount = async () => {
-        const erpResult = await ecountApi.submitSaleOrder(order, userProfile);
-        
-        // Update order with ERP reference numbers using correct schema fields
-        const updatedOrder = await storage.updateOrderErpInfo(order.id, {
-          erpDocNumber: erpResult.docNo,
-          erpIoDate: erpResult.ioDate,
-          erpSyncStatus: 'synced',
-          erpSyncError: null
-        });
-        
-        console.log(`✅ Order ${order.orderNumber} successfully synced to eCount ERP`);
-        console.log(`📄 ERP Doc: ${erpResult.docNo}, Date: ${erpResult.ioDate}`);
-
-        return {
-          success: true as const,
-          order: updatedOrder,
-          erp: {
-            docNumber: erpResult.docNo,
-            ioDate: erpResult.ioDate,
-            syncStatus: 'synced'
-          }
-        };
-      };
 
       res.status(201).json({
         success: true,
@@ -1540,14 +1544,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       runBackgroundTask(`eCount sync ${order.orderNumber}`, async () => {
         try {
-          await syncOrderToEcount();
+          await syncOrderToEcount(order);
         } catch (ecountError) {
           console.error('❌ Failed to sync order to eCount ERP:', ecountError);
-
-          await storage.updateOrderErpInfo(order.id, {
-            erpSyncStatus: 'failed',
-            erpSyncError: ecountError instanceof Error ? ecountError.message : 'Unknown ERP error'
-          });
+          await markOrderEcountSyncFailed(order.id, ecountError);
         }
       });
     } catch (error) {
@@ -1574,12 +1574,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Order not found" });
       }
       
-      // Construct user profile from order data for eCount API
-      const userProfile = {
-        email: order.customerEmail || 'guest@phomas.com',
-        name: order.customerName || 'Guest Customer'
-      };
-      
       // Check if already synced
       if (order.erpSyncStatus === 'synced') {
         return res.json({
@@ -1593,28 +1587,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       
-      // Submit to eCount ERP
-      const erpResult = await ecountApi.submitSaleOrder(order, userProfile);
-      
-      // Update order with ERP reference numbers
-      const updatedOrder = await storage.updateOrderErpInfo(order.id, {
-        erpDocNumber: erpResult.docNo,
-        erpIoDate: erpResult.ioDate,
-        erpSyncStatus: 'synced',
-        erpSyncError: null // Clear any previous error
-      });
+      const syncResult = await syncOrderToEcount(order);
       
       console.log(`✅ Manual ERP sync successful for order ${order.orderNumber}`);
       
       res.json({
         success: true,
         message: "Order successfully synced to eCount ERP",
-        order: updatedOrder,
-        erp: {
-          docNumber: erpResult.docNo,
-          ioDate: erpResult.ioDate,
-          syncStatus: 'synced'
-        }
+        order: syncResult.updatedOrder,
+        erp: syncResult.erp
       });
     } catch (error) {
       console.error('❌ Manual ERP sync failed:', error);
@@ -1622,10 +1603,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Update order with error status if we have the order
       if (req.body.orderId) {
         try {
-          await storage.updateOrderErpInfo(req.body.orderId, {
-            erpSyncStatus: 'failed',
-            erpSyncError: error instanceof Error ? error.message : 'Unknown ERP error'
-          });
+          await markOrderEcountSyncFailed(req.body.orderId, error);
         } catch (updateError) {
           console.error('Failed to update order error status:', updateError);
         }
@@ -1696,6 +1674,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(orders);
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch all orders", error });
+    }
+  });
+
+  app.post("/api/admin/orders/:orderId/sync", requireAdminAuth, enforceSaveRateLimit, async (req, res) => {
+    try {
+      const { orderId } = req.params;
+      const order = await storage.getOrderById(orderId);
+
+      if (!order) {
+        return res.status(404).json({ message: "Order not found" });
+      }
+
+      if (order.erpSyncStatus === 'synced') {
+        return res.json({
+          success: true,
+          message: "Order already synced to eCount ERP",
+          order,
+          erp: {
+            docNumber: order.erpDocNumber,
+            ioDate: order.erpIoDate,
+            syncStatus: order.erpSyncStatus
+          }
+        });
+      }
+
+      const syncResult = await syncOrderToEcount(order);
+
+      res.json({
+        success: true,
+        message: "Order successfully synced to eCount ERP",
+        order: syncResult.updatedOrder,
+        erp: syncResult.erp
+      });
+    } catch (error) {
+      const orderId = req.params.orderId;
+      const message = error instanceof Error ? error.message : 'Unknown ERP error';
+
+      console.error(`❌ Admin ERP sync failed for order ${orderId}:`, error);
+
+      try {
+        await markOrderEcountSyncFailed(orderId, error);
+      } catch (updateError) {
+        console.error('Failed to update order error status:', updateError);
+      }
+
+      res.status(502).json({
+        success: false,
+        message: "Failed to sync order to eCount ERP",
+        error: message,
+      });
     }
   });
 

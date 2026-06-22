@@ -840,11 +840,12 @@ class EcountApiService {
       
       // UPLOAD_SER_NO must be SMALLINT(4,0) - simple 1-4 digit number (per API docs)
       // Use simple incrementing counter (will reset daily, which is fine)
-      const sequenceNumber = Math.floor(Math.random() * 9999).toString(); // 1-4 digits
+      const sequenceNumber = (Math.floor(Math.random() * 9999) + 1).toString(); // 1-4 digits
       
       // Map customer to eCount CUST code - use correct Phomas Online Store customer
-      const customerCode = userProfile?.ecountCustCode || "10839";
-      const customerName = userProfile?.name || "Online Store Sales";
+      const customerCode = userProfile?.ecountCustCode || ECOUNT_CONFIG.customerCode || "10839";
+      const customerName = userProfile?.ecountCustName || "Online Store Sales";
+      const receiverName = userProfile?.name || customerName;
       
       console.log(`🧾 Submitting sale to eCount ERP: Order ${order.orderNumber} with ${orderItems.length} items`);
       
@@ -918,7 +919,7 @@ class EcountApiService {
               CUST_DES: customerName,
               VAT_EXPT: "0",
               DELIVERY_ADDR: "Online Store Purchase",
-              RECEIVER: userProfile?.name || "Online Customer",
+              RECEIVER: receiverName,
               RECEIVER_TEL: userProfile?.phone || "",
               REF_DES: `WEB-${order.orderNumber}` // For traceability and idempotency
             },
@@ -968,26 +969,27 @@ class EcountApiService {
       }
       
       // 🚀 FIXED SALES ORDER API - Transform to SaleOrderList format (per documentation)
+      const warehouseCode = ECOUNT_CONFIG.warehouseCode || "00001";
       const saleOrderPayload = {
         "SaleOrderList": mappedItems.map(item => ({
           "BulkDatas": {
-            "IO_DATE": "",
+            "IO_DATE": currentDate,
             "UPLOAD_SER_NO": sequenceNumber,
-            "CUST": "10839", // FIXED: Use correct customer code
-            "CUST_DES": "Online Store Sales", // FIXED: Use correct customer name
+            "CUST": customerCode,
+            "CUST_DES": customerName,
             "EMP_CD": "",
-            "WH_CD": "00001",
+            "WH_CD": warehouseCode,
             "IO_TYPE": "",
             "EXCHANGE_TYPE": "",
             "EXCHANGE_RATE": "",
             "PJT_CD": "",
             "DOC_NO": "",
             "TTL_CTT": "",
-            "REF_DES": "",
+            "REF_DES": `WEB-${order.orderNumber}`,
             "COLL_TERM": "",
             "AGREE_TERM": "",
             "TIME_DATE": "",
-            "REMARKS_WIN": "",
+            "REMARKS_WIN": `Online order ${order.orderNumber} - ${receiverName}`,
             "U_MEMO1": "",
             "U_MEMO2": "",
             "U_MEMO3": "",
@@ -1067,8 +1069,9 @@ class EcountApiService {
       
       console.log('🚀 NEW SALES ORDER API - Payload preview:', {
         orderNumber: order.orderNumber,
-        customerCode: "10839",
-        customerName: "Online Store Sales",
+        customerCode,
+        customerName,
+        warehouseCode,
         itemsCount: mappedItems.length,
         totalValue: mappedItems.reduce((sum, item) => sum + (item.quantity * item.price), 0),
         payloadSize: JSON.stringify(saleOrderPayload).length
@@ -1209,7 +1212,7 @@ class EcountApiService {
         console.log(`✅ NEW SALES ORDER successfully submitted to eCount ERP!`);
         console.log(`📄 ERP Document Number: ${docNo}`);
         console.log(`📅 ERP IO Date: ${ioDate}`);
-        console.log(`👤 Customer: 10839 "Online Store Sales"`);
+        console.log(`👤 Customer: ${customerCode} "${customerName}"`);
         console.log(`📊 Order Summary: ${mappedItems.length} items, Total Value: ${mappedItems.reduce((sum, item) => sum + (item.quantity * item.price), 0)}`);
         
         return { docNo, ioDate };
@@ -2051,7 +2054,9 @@ class EcountApiService {
       }
 
       const failedOrders = await storage.getAllOrders();
-      const actualFailedOrders = failedOrders.filter(order => order.status === 'failed');
+      const actualFailedOrders = failedOrders.filter(order =>
+        order.erpSyncStatus === 'failed' || order.erpSyncStatus === 'pending'
+      );
       if (actualFailedOrders.length === 0) {
         console.log('✅ No failed orders to retry');
         return;

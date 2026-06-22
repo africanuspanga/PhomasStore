@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/contexts/AuthContext";
 import { ecountService } from "@/services/ecountService";
-import { Users, Package, AlertTriangle, Clock, CheckCircle, Edit, Trash2, Plus, Upload, UserCheck, MessageCircle, Shield, Eye, EyeOff, Lock } from "lucide-react";
+import { Users, Package, AlertTriangle, Clock, CheckCircle, Edit, Trash2, Plus, Upload, UserCheck, MessageCircle, Shield, Eye, EyeOff, Lock, RefreshCw } from "lucide-react";
 import { format } from "date-fns";
 import { useLocation } from "wouter";
 import { AdminProductManager } from "@/components/AdminProductManager";
@@ -85,6 +85,31 @@ function OrdersManagement() {
       toast({
         title: "Status Update Failed",
         description: error instanceof Error ? error.message : "Failed to update order status",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const syncOrderMutation = useMutation({
+    mutationFn: async (orderId: string) => {
+      const res = await apiRequest("POST", `/api/admin/orders/${orderId}/sync`, {});
+      return await res.json() as { success: boolean; order: Order; message?: string };
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/orders"] });
+      setSelectedOrder((currentOrder) =>
+        currentOrder?.id === data.order.id ? data.order : currentOrder
+      );
+      toast({
+        title: "ERP Sync Complete",
+        description: `Order ${data.order.orderNumber} synced to eCount.`,
+      });
+    },
+    onError: (error) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/orders"] });
+      toast({
+        title: "ERP Sync Failed",
+        description: error instanceof Error ? error.message : "Failed to sync order to eCount",
         variant: "destructive",
       });
     },
@@ -338,6 +363,19 @@ function OrdersManagement() {
                         >
                           View Details
                         </Button>
+                        {order.erpSyncStatus !== 'synced' && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 px-2 text-xs"
+                            onClick={() => syncOrderMutation.mutate(order.id)}
+                            disabled={syncOrderMutation.isPending}
+                            data-testid={`button-sync-order-${order.id}`}
+                          >
+                            <RefreshCw className={`w-3 h-3 mr-1 ${syncOrderMutation.isPending ? "animate-spin" : ""}`} />
+                            Sync
+                          </Button>
+                        )}
                         <Button 
                           variant="ghost" 
                           size="sm"
@@ -591,7 +629,22 @@ function OrdersManagement() {
                         <p className="text-gray-500 mt-1">eCount Document: {selectedOrder.erpDocNumber}</p>
                       )}
                     </div>
-                    {getErpSyncBadge(selectedOrder.erpSyncStatus)}
+                    <div className="flex items-center gap-2">
+                      {getErpSyncBadge(selectedOrder.erpSyncStatus)}
+                      {selectedOrder.erpSyncStatus !== 'synced' && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => syncOrderMutation.mutate(selectedOrder.id)}
+                          disabled={syncOrderMutation.isPending}
+                          data-testid={`button-sync-selected-order-${selectedOrder.id}`}
+                        >
+                          <RefreshCw className={`w-4 h-4 mr-2 ${syncOrderMutation.isPending ? "animate-spin" : ""}`} />
+                          {syncOrderMutation.isPending ? "Syncing..." : "Sync"}
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 </div>
 

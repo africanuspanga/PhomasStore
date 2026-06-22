@@ -23,6 +23,7 @@ export default function AuthConfirm() {
         const queryParams = new URLSearchParams(window.location.search);
         const accessToken = hashParams.get('access_token');
         const refreshToken = hashParams.get('refresh_token');
+        const code = queryParams.get('code');
         const authType = hashParams.get('type') || queryParams.get('type');
         
         if (accessToken && refreshToken) {
@@ -47,6 +48,23 @@ export default function AuthConfirm() {
             // Redirect to home after successful confirmation
             setTimeout(() => setLocation('/'), 2000);
           }
+        } else if (code) {
+          console.log('🔐 Exchanging Supabase confirmation code');
+
+          const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+          if (error || !data.session) {
+            console.error('🔐 Failed to exchange confirmation code:', error);
+            setStatus('error');
+            return;
+          }
+
+          if (authType === "recovery") {
+            setStatus('recovery');
+            return;
+          }
+
+          setStatus('success');
+          setTimeout(() => setLocation('/'), 2000);
         } else {
           console.error('🔐 No tokens found in URL');
           setStatus('error');
