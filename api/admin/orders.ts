@@ -41,6 +41,9 @@ function normalizeOrder(row: any) {
     erpIoDate: row.erp_io_date || null,
     erpSyncStatus: row.erp_sync_status || "pending",
     erpSyncError: row.erp_sync_error || null,
+    erpSyncAttempts: Number(row.erp_sync_attempts || 0),
+    erpLastSyncAttemptAt: row.erp_last_sync_attempt_at || null,
+    erpNextSyncAttemptAt: row.erp_next_sync_attempt_at || null,
     createdAt: row.created_at || null,
   };
 }

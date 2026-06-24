@@ -64,6 +64,9 @@ export const orders = pgTable("orders", {
   erpIoDate: text("erp_io_date"), // IO_DATE from eCount SaveSale (YYYYMMDD format)
   erpSyncStatus: text("erp_sync_status").default("pending"), // "pending", "synced", "failed"
   erpSyncError: text("erp_sync_error"), // Error message if sync fails
+  erpSyncAttempts: integer("erp_sync_attempts").notNull().default(0),
+  erpLastSyncAttemptAt: timestamp("erp_last_sync_attempt_at"),
+  erpNextSyncAttemptAt: timestamp("erp_next_sync_attempt_at"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -167,6 +170,11 @@ export const insertOrderSchema = createInsertSchema(orders)
     createdAt: true,
     erpDocNumber: true,
     erpIoDate: true,
+    erpSyncStatus: true,
+    erpSyncError: true,
+    erpSyncAttempts: true,
+    erpLastSyncAttemptAt: true,
+    erpNextSyncAttemptAt: true,
   })
   .extend({
     paymentMethod: paymentMethodSchema.default("cash"),

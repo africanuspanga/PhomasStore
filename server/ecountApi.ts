@@ -267,10 +267,10 @@ class EcountApiService {
         }
         
         // If we get HTML redirect, likely auth issue - invalidate session and retry once
-        if (requiresAuth && this.session && contentType?.includes('text/html')) {
+        if (requiresAuth && this.session && contentType?.includes('text/html') && retryCount < MAX_RETRIES) {
           console.log('🔄 Detected HTML response - invalidating session and retrying...');
           this.session = null;
-          return this.ecountRequest(options);
+          return this.ecountRequest(options, retryCount + 1);
         }
         
         throw new Error(`Invalid response type: ${contentType} (Status: ${response.status})`);
@@ -278,16 +278,16 @@ class EcountApiService {
       
       const result = await response.json();
       
-      // Success - reset circuit breaker and backoff
-      this.handleSuccess(endpoint);
-      
       // Log detailed error for debugging
-      if (result.Status !== "200") {
+      if (!this.isSuccessfulResponse(result)) {
         console.error(`eCount API Error for ${endpoint}:`, {
           status: result.Status,
           error: result.Error,
           response: result
         });
+
+        const numericStatus = Number.parseInt(String(result.Status), 10);
+        this.handleFailure(endpoint, Number.isFinite(numericStatus) ? numericStatus : undefined, result);
         
         // CRITICAL FIX: Detect "Please login" errors (often come back as 500)
         const errorMessage = result.Error?.Message || result.Errors?.[0]?.Message || result.Data?.Message || '';
@@ -304,6 +304,9 @@ class EcountApiService {
             return this.ecountRequest(options, retryCount + 1);
           }
         }
+      } else {
+        // Success - reset circuit breaker and backoff
+        this.handleSuccess(endpoint);
       }
       
       return result;
@@ -633,6 +636,18 @@ class EcountApiService {
     };
   }
 
+  private getSaleOrderUploadSerial(order: Order): string {
+    const seed = `${order.id}:${order.orderNumber}`;
+    let hash = 0;
+
+    for (let index = 0; index < seed.length; index++) {
+      hash = ((hash << 5) - hash) + seed.charCodeAt(index);
+      hash |= 0;
+    }
+
+    return String((Math.abs(hash) % 9999) + 1).padStart(4, '0');
+  }
+
   private normalizeInventoryRows(rows: any[]): EcountInventory[] {
     const groupedInventory = new Map<string, { row: EcountInventory; quantity: number; sourceRows: number }>();
     let skippedForWarehouse = 0;
@@ -838,9 +853,9 @@ class EcountApiService {
       // eCount requires YYYYMMDD format for IO_DATE (STRING(8) per API docs)
       const currentDate = new Date().toISOString().slice(0, 10).replace(/-/g, ''); // YYYYMMDD format
       
-      // UPLOAD_SER_NO must be SMALLINT(4,0) - simple 1-4 digit number (per API docs)
-      // Use simple incrementing counter (will reset daily, which is fine)
-      const sequenceNumber = (Math.floor(Math.random() * 9999) + 1).toString(); // 1-4 digits
+      // UPLOAD_SER_NO must be SMALLINT(4,0). Keep it deterministic per order so retries
+      // reuse the same upload serial instead of risking duplicate ERP orders.
+      const sequenceNumber = this.getSaleOrderUploadSerial(order);
       
       // Map customer to eCount CUST code - use correct Phomas Online Store customer
       const customerCode = userProfile?.ecountCustCode || ECOUNT_CONFIG.customerCode || "10839";

@@ -3,7 +3,7 @@ import { randomUUID } from "crypto";
 import * as fs from "fs";
 import * as path from "path";
 import { createClient } from '@supabase/supabase-js';
-import { eq, desc, inArray } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, lte, or } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import { getProductCodeLookupCandidates, normalizeProductCode } from "./productCode.js";
@@ -42,6 +42,7 @@ export interface IStorage {
   getOrdersByUserId(userId: string): Promise<Order[]>;
   getAllOrders(): Promise<Order[]>;
   getFailedOrders(): Promise<Order[]>;
+  getOrdersNeedingErpSync(limit?: number): Promise<Order[]>;
   deleteOrder(orderId: string): Promise<boolean>;
   updateOrderStatus(orderId: string, status: string): Promise<Order>;
   updateOrderErpInfo(orderId: string, erpInfo: {
@@ -49,6 +50,9 @@ export interface IStorage {
     erpIoDate?: string;
     erpSyncStatus?: string;
     erpSyncError?: string | null;
+    erpSyncAttempts?: number;
+    erpLastSyncAttemptAt?: Date | null;
+    erpNextSyncAttemptAt?: Date | null;
   }): Promise<Order>;
 
   // Admin credential management
@@ -440,6 +444,9 @@ export class MemStorage implements IStorage {
       erpIoDate: null,
       erpSyncStatus: "pending",
       erpSyncError: null,
+      erpSyncAttempts: 0,
+      erpLastSyncAttemptAt: null,
+      erpNextSyncAttemptAt: null,
     };
     
     this.orders.set(id, order);
@@ -468,6 +475,24 @@ export class MemStorage implements IStorage {
     return Array.from(this.orders.values())
       .filter(order => order.erpSyncStatus === 'failed')
       .sort((a, b) => new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime());
+  }
+
+  async getOrdersNeedingErpSync(limit = 10): Promise<Order[]> {
+    const now = Date.now();
+    return Array.from(this.orders.values())
+      .filter(order => {
+        if (order.erpSyncStatus !== 'pending' && order.erpSyncStatus !== 'failed') {
+          return false;
+        }
+
+        if (!order.erpNextSyncAttemptAt) {
+          return true;
+        }
+
+        return new Date(order.erpNextSyncAttemptAt).getTime() <= now;
+      })
+      .sort((a, b) => new Date(a.createdAt!).getTime() - new Date(b.createdAt!).getTime())
+      .slice(0, limit);
   }
 
   async getOrderById(id: string): Promise<Order | undefined> {
@@ -504,6 +529,9 @@ export class MemStorage implements IStorage {
     erpIoDate?: string;
     erpSyncStatus?: string;
     erpSyncError?: string | null;
+    erpSyncAttempts?: number;
+    erpLastSyncAttemptAt?: Date | null;
+    erpNextSyncAttemptAt?: Date | null;
   }): Promise<Order> {
     const order = this.orders.get(orderId);
     if (!order) {
@@ -517,6 +545,9 @@ export class MemStorage implements IStorage {
       erpIoDate: erpInfo.erpIoDate !== undefined ? erpInfo.erpIoDate : order.erpIoDate,
       erpSyncStatus: erpInfo.erpSyncStatus !== undefined ? erpInfo.erpSyncStatus : order.erpSyncStatus,
       erpSyncError: erpInfo.erpSyncError !== undefined ? erpInfo.erpSyncError : order.erpSyncError,
+      erpSyncAttempts: erpInfo.erpSyncAttempts !== undefined ? erpInfo.erpSyncAttempts : order.erpSyncAttempts,
+      erpLastSyncAttemptAt: erpInfo.erpLastSyncAttemptAt !== undefined ? erpInfo.erpLastSyncAttemptAt : order.erpLastSyncAttemptAt,
+      erpNextSyncAttemptAt: erpInfo.erpNextSyncAttemptAt !== undefined ? erpInfo.erpNextSyncAttemptAt : order.erpNextSyncAttemptAt,
     };
 
     this.orders.set(orderId, updatedOrder);
@@ -938,6 +969,33 @@ export class DatabaseStorage implements IStorage {
     return this.memStorage.getFailedOrders();
   }
 
+  async getOrdersNeedingErpSync(limit = 10): Promise<Order[]> {
+    if (this.db) {
+      try {
+        const now = new Date();
+        const dueOrders = await this.db
+          .select()
+          .from(ordersTable)
+          .where(and(
+            inArray(ordersTable.erpSyncStatus, ['pending', 'failed']),
+            or(
+              isNull(ordersTable.erpNextSyncAttemptAt),
+              lte(ordersTable.erpNextSyncAttemptAt, now)
+            )
+          ))
+          .orderBy(asc(ordersTable.createdAt))
+          .limit(limit);
+
+        return dueOrders;
+      } catch (error) {
+        console.error('❌ Database error getting orders needing ERP sync:', error);
+        return [];
+      }
+    }
+
+    return this.memStorage.getOrdersNeedingErpSync(limit);
+  }
+
   async deleteOrder(orderId: string): Promise<boolean> {
     if (this.db) {
       try {
@@ -996,17 +1054,33 @@ export class DatabaseStorage implements IStorage {
     erpIoDate?: string;
     erpSyncStatus?: string;
     erpSyncError?: string | null;
+    erpSyncAttempts?: number;
+    erpLastSyncAttemptAt?: Date | null;
+    erpNextSyncAttemptAt?: Date | null;
   }): Promise<Order> {
     if (this.db) {
       try {
+        const updateData: Partial<typeof ordersTable.$inferInsert> = {};
+
+        if (erpInfo.erpDocNumber !== undefined) updateData.erpDocNumber = erpInfo.erpDocNumber;
+        if (erpInfo.erpIoDate !== undefined) updateData.erpIoDate = erpInfo.erpIoDate;
+        if (erpInfo.erpSyncStatus !== undefined) updateData.erpSyncStatus = erpInfo.erpSyncStatus;
+        if (erpInfo.erpSyncError !== undefined) updateData.erpSyncError = erpInfo.erpSyncError;
+        if (erpInfo.erpSyncAttempts !== undefined) updateData.erpSyncAttempts = erpInfo.erpSyncAttempts;
+        if (erpInfo.erpLastSyncAttemptAt !== undefined) updateData.erpLastSyncAttemptAt = erpInfo.erpLastSyncAttemptAt;
+        if (erpInfo.erpNextSyncAttemptAt !== undefined) updateData.erpNextSyncAttemptAt = erpInfo.erpNextSyncAttemptAt;
+
+        if (Object.keys(updateData).length === 0) {
+          const existingOrder = await this.getOrderById(orderId);
+          if (!existingOrder) {
+            throw new Error(`Order with ID ${orderId} not found`);
+          }
+          return existingOrder;
+        }
+
         const [updatedOrder] = await this.db
           .update(ordersTable)
-          .set({
-            erpDocNumber: erpInfo.erpDocNumber,
-            erpIoDate: erpInfo.erpIoDate,
-            erpSyncStatus: erpInfo.erpSyncStatus,
-            erpSyncError: erpInfo.erpSyncError,
-          })
+          .set(updateData)
           .where(eq(ordersTable.id, orderId))
           .returning();
         

@@ -13,6 +13,7 @@ import {
   loginSchema,
   orderItemsSchema,
   supabaseSignUpSchema,
+  type Order,
 } from "../shared/schema.js";
 import {
   calculateOrderTotal,
@@ -47,8 +48,15 @@ const resolvedSupabaseServiceKey =
 const ORDER_NOTIFICATION_EMAIL = process.env.ORDER_NOTIFICATION_EMAIL || "orders@phomasdiagnosticstz.com";
 const ORDER_NOTIFICATION_FROM = process.env.ORDER_NOTIFICATION_FROM || "Phomas Diagnostics <onboarding@resend.dev>";
 const ORDER_SYNC_TIMEOUT_MS = Number.parseInt(process.env.ORDER_SYNC_TIMEOUT_MS || "12000", 10);
+const ORDER_SYNC_BATCH_SIZE = Number.parseInt(process.env.ORDER_SYNC_BATCH_SIZE || "2", 10);
+const ORDER_SYNC_RETRY_BASE_DELAY_MS = Number.parseInt(process.env.ORDER_SYNC_RETRY_BASE_DELAY_MS || `${5 * 60 * 1000}`, 10);
+const ORDER_SYNC_RETRY_MAX_DELAY_MS = Number.parseInt(process.env.ORDER_SYNC_RETRY_MAX_DELAY_MS || `${60 * 60 * 1000}`, 10);
+const ORDER_SYNC_RETRY_SPACING_MS = Number.parseInt(process.env.ORDER_SYNC_RETRY_SPACING_MS || "22000", 10);
+const ORDER_SYNC_MAX_ATTEMPTS = Number.parseInt(process.env.ORDER_SYNC_MAX_ATTEMPTS || "0", 10);
+const ORDER_SYNC_CRON_SECRET = process.env.ORDER_SYNC_CRON_SECRET || process.env.CRON_SECRET;
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const ORDER_STATUS_VALUES = ["processing", "shipped", "delivered", "completed", "cancelled"] as const;
+const appIsDevelopment = () => process.env.NODE_ENV !== 'production';
 
 const resolveCloudinaryCredentials = () => {
   const cloudinaryUrl = process.env.CLOUDINARY_URL;
@@ -812,14 +820,43 @@ const buildOrderEcountUserProfile = (order: any) => ({
   phone: order.customerPhone || '',
 });
 
-const syncOrderToEcount = async (order: any) => {
+const sanitizePositiveInt = (value: number, fallback: number) =>
+  Number.isFinite(value) && value > 0 ? value : fallback;
+
+const getRetryDelayMs = (attempts: number) => {
+  const safeAttempts = Math.max(0, attempts - 1);
+  const baseDelay = sanitizePositiveInt(ORDER_SYNC_RETRY_BASE_DELAY_MS, 5 * 60 * 1000);
+  const maxDelay = sanitizePositiveInt(ORDER_SYNC_RETRY_MAX_DELAY_MS, 60 * 60 * 1000);
+  return Math.min(maxDelay, baseDelay * (2 ** safeAttempts));
+};
+
+const getOrderSyncBatchSize = (requestedLimit?: unknown) => {
+  const parsedLimit = Number.parseInt(String(requestedLimit ?? ""), 10);
+  const configuredLimit = sanitizePositiveInt(ORDER_SYNC_BATCH_SIZE, 2);
+  return Math.min(sanitizePositiveInt(parsedLimit, configuredLimit), 10);
+};
+
+const syncOrderToEcount = async (order: Order) => {
+  const attemptNumber = (order.erpSyncAttempts || 0) + 1;
+  const attemptStartedAt = new Date();
+
+  await storage.updateOrderErpInfo(order.id, {
+    erpSyncStatus: 'pending',
+    erpSyncAttempts: attemptNumber,
+    erpLastSyncAttemptAt: attemptStartedAt,
+    erpNextSyncAttemptAt: null
+  });
+
   const erpResult = await ecountApi.submitSaleOrder(order, buildOrderEcountUserProfile(order));
 
   const updatedOrder = await storage.updateOrderErpInfo(order.id, {
     erpDocNumber: erpResult.docNo,
     erpIoDate: erpResult.ioDate,
     erpSyncStatus: 'synced',
-    erpSyncError: null
+    erpSyncError: null,
+    erpSyncAttempts: attemptNumber,
+    erpLastSyncAttemptAt: attemptStartedAt,
+    erpNextSyncAttemptAt: null
   });
 
   console.log(`✅ Order ${order.orderNumber} successfully synced to eCount ERP`);
@@ -836,10 +873,87 @@ const syncOrderToEcount = async (order: any) => {
 };
 
 const markOrderEcountSyncFailed = async (orderId: string, error: unknown) => {
+  const currentOrder = await storage.getOrderById(orderId);
+  const attempts = currentOrder?.erpSyncAttempts || 0;
+  const nextSyncAttemptAt = new Date(Date.now() + getRetryDelayMs(attempts));
+
   await storage.updateOrderErpInfo(orderId, {
     erpSyncStatus: 'failed',
-    erpSyncError: error instanceof Error ? error.message : 'Unknown ERP error'
+    erpSyncError: error instanceof Error ? error.message : 'Unknown ERP error',
+    erpNextSyncAttemptAt: nextSyncAttemptAt
   });
+};
+
+const processEcountOrderSyncQueue = async (source: string, requestedLimit?: unknown) => {
+  const limit = getOrderSyncBatchSize(requestedLimit);
+  const dueOrders = await storage.getOrdersNeedingErpSync(limit);
+  const spacingMs = sanitizePositiveInt(ORDER_SYNC_RETRY_SPACING_MS, 22000);
+
+  const summary = {
+    source,
+    checked: dueOrders.length,
+    synced: 0,
+    failed: 0,
+    skipped: 0,
+    results: [] as Array<{
+      orderId: string;
+      orderNumber: string;
+      status: 'synced' | 'failed' | 'skipped';
+      message?: string;
+      nextSyncAttemptAt?: string | null;
+    }>
+  };
+
+  for (let index = 0; index < dueOrders.length; index++) {
+    const order = dueOrders[index];
+    const attempts = order.erpSyncAttempts || 0;
+
+    if (ORDER_SYNC_MAX_ATTEMPTS > 0 && attempts >= ORDER_SYNC_MAX_ATTEMPTS) {
+      summary.skipped++;
+      summary.results.push({
+        orderId: order.id,
+        orderNumber: order.orderNumber,
+        status: 'skipped',
+        message: `Max ERP sync attempts reached (${ORDER_SYNC_MAX_ATTEMPTS})`,
+        nextSyncAttemptAt: order.erpNextSyncAttemptAt
+          ? new Date(order.erpNextSyncAttemptAt).toISOString()
+          : null
+      });
+      continue;
+    }
+
+    try {
+      const syncResult = await syncOrderToEcount(order);
+      summary.synced++;
+      summary.results.push({
+        orderId: order.id,
+        orderNumber: order.orderNumber,
+        status: 'synced',
+        message: syncResult.erp.docNumber
+      });
+    } catch (syncError) {
+      summary.failed++;
+      console.error(`❌ ERP queue sync failed for ${order.orderNumber}:`, syncError);
+      await markOrderEcountSyncFailed(order.id, syncError);
+
+      const failedOrder = await storage.getOrderById(order.id);
+      summary.results.push({
+        orderId: order.id,
+        orderNumber: order.orderNumber,
+        status: 'failed',
+        message: syncError instanceof Error ? syncError.message : 'Unknown ERP error',
+        nextSyncAttemptAt: failedOrder?.erpNextSyncAttemptAt
+          ? new Date(failedOrder.erpNextSyncAttemptAt).toISOString()
+          : null
+      });
+    }
+
+    if (index < dueOrders.length - 1) {
+      await new Promise(resolve => setTimeout(resolve, spacingMs));
+    }
+  }
+
+  return summary;
 };
 
 // Helper functions for product transformation
@@ -943,7 +1057,55 @@ const requireAdminAuth = async (req: Request, res: Response, next: NextFunction)
   }
 };
 
+const requireOrderSyncCronAuth = (req: Request, res: Response, next: NextFunction) => {
+  if (appIsDevelopment()) {
+    return next();
+  }
+
+  if (!ORDER_SYNC_CRON_SECRET) {
+    return res.status(503).json({
+      message: "Order sync cron secret is not configured on the server"
+    });
+  }
+
+  const authHeader = req.headers.authorization;
+  const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
+  const headerSecret = req.headers['x-cron-secret'];
+  const providedSecret = bearerToken || (Array.isArray(headerSecret) ? headerSecret[0] : headerSecret);
+
+  if (providedSecret !== ORDER_SYNC_CRON_SECRET) {
+    return res.status(401).json({ message: "Invalid order sync cron token" });
+  }
+
+  next();
+};
+
 export async function registerRoutes(app: Express): Promise<Server> {
+  const runOrderSyncQueueHandler = async (req: Request, res: Response) => {
+    try {
+      const summary = await processEcountOrderSyncQueue(
+        req.method === "GET" ? "cron:get" : "cron:post",
+        req.query.limit || req.body?.limit
+      );
+
+      res.json({
+        success: true,
+        message: `ERP order sync queue processed: ${summary.synced} synced, ${summary.failed} failed, ${summary.skipped} skipped`,
+        data: summary
+      });
+    } catch (error) {
+      console.error('❌ ERP order sync queue failed:', error);
+      res.status(500).json({
+        success: false,
+        message: "Failed to process ERP order sync queue",
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  };
+
+  app.get("/api/cron/ecount-order-sync", requireOrderSyncCronAuth, runOrderSyncQueueHandler);
+  app.post("/api/cron/ecount-order-sync", requireOrderSyncCronAuth, runOrderSyncQueueHandler);
+
   // Customer registration endpoint using Supabase
   app.post("/api/auth/register", async (req, res) => {
     try {
@@ -1674,6 +1836,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(orders);
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch all orders", error });
+    }
+  });
+
+  app.post("/api/admin/orders/sync-pending", requireAdminAuth, async (req, res) => {
+    try {
+      const summary = await processEcountOrderSyncQueue("admin:sync-pending", req.body?.limit);
+
+      res.json({
+        success: true,
+        message: `ERP sync queue processed: ${summary.synced} synced, ${summary.failed} failed, ${summary.skipped} skipped`,
+        data: summary
+      });
+    } catch (error) {
+      console.error('❌ Admin ERP sync queue failed:', error);
+      res.status(502).json({
+        success: false,
+        message: "Failed to process ERP sync queue",
+        error: error instanceof Error ? error.message : 'Unknown ERP error'
+      });
     }
   });
 

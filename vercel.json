@@ -37,6 +37,12 @@
       "maxDuration": 60
     }
   },
+  "crons": [
+    {
+      "path": "/api/cron/ecount-order-sync",
+      "schedule": "0 21 * * *"
+    }
+  ],
   "routes": [
     {
       "src": "/api/health",

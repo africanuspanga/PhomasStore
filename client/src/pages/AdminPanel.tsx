@@ -115,6 +115,32 @@ function OrdersManagement() {
     },
   });
 
+  const syncPendingOrdersMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/admin/orders/sync-pending", { limit: 2 });
+      return await res.json() as {
+        success: boolean;
+        message: string;
+        data?: { synced: number; failed: number; skipped: number };
+      };
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/orders"] });
+      toast({
+        title: "ERP Queue Processed",
+        description: data.message,
+      });
+    },
+    onError: (error) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/orders"] });
+      toast({
+        title: "ERP Queue Failed",
+        description: error instanceof Error ? error.message : "Failed to process ERP queue",
+        variant: "destructive",
+      });
+    },
+  });
+
   function normalizeOrderStatus(status?: string | null) {
     const normalizedStatus = (status || "").trim().toLowerCase();
     return normalizedStatus === "complete" ? "completed" : normalizedStatus;
@@ -140,6 +166,8 @@ function OrdersManagement() {
   const handleOrderStatusChange = (order: Order, status: string) => {
     updateOrderStatusMutation.mutate({ orderId: order.id, status });
   };
+
+  const ordersNeedingErpSync = orders.filter((order) => order.erpSyncStatus !== "synced").length;
 
   const getStatusColor = (status: string) => {
     switch (normalizeOrderStatus(status)) {
@@ -231,9 +259,23 @@ function OrdersManagement() {
       <CardHeader>
         <div className="flex items-center justify-between">
           <CardTitle>All Customer Orders</CardTitle>
-          <Badge variant="outline" className="text-sm">
-            {orders.length} Total Orders
-          </Badge>
+          <div className="flex items-center gap-2">
+            {ordersNeedingErpSync > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => syncPendingOrdersMutation.mutate()}
+                disabled={syncPendingOrdersMutation.isPending}
+                data-testid="button-sync-pending-orders"
+              >
+                <RefreshCw className={`w-3 h-3 mr-1 ${syncPendingOrdersMutation.isPending ? "animate-spin" : ""}`} />
+                {syncPendingOrdersMutation.isPending ? "Retrying..." : `Retry ERP (${ordersNeedingErpSync})`}
+              </Button>
+            )}
+            <Badge variant="outline" className="text-sm">
+              {orders.length} Total Orders
+            </Badge>
+          </div>
         </div>
         <p className="text-sm text-gray-600 mt-2">
           Track which customer placed which order (all orders use eCount customer code 10839)

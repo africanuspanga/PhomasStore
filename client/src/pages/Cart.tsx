@@ -875,9 +875,9 @@ export default function Cart() {
                   <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
                 </svg>
               </div>
-              <h3 className="text-xl font-semibold text-gray-800 mb-2">Order Sent Successfully!</h3>
+              <h3 className="text-xl font-semibold text-gray-800 mb-2">Order Completed!</h3>
               <p className="text-gray-600 mb-2">
-                Your order has been sent to Phomas for processing.
+                Your order has been received and ERP sync is running automatically.
               </p>
               <p className="text-sm text-gray-500 mb-4">
                 Payment: {paymentMethod ? getPaymentMethodLabel(paymentMethod) : "Not set"} | Fulfillment:{" "}
