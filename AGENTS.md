@@ -29,6 +29,7 @@ npm run build
 npm run start
 npm run db:push
 npm run sync:ecount-inventory
+npm run sync:ecount-orders
 ```
 
 Notes:
@@ -101,6 +102,8 @@ Required or commonly used server variables:
 - `ECOUNT_MAX_ERRORS`: default `8`.
 - `ECOUNT_LOCK_DURATION_MIN`: default `45`.
 - `ECOUNT_TEST_API_KEY`: only for diagnostic/test endpoints.
+- `ECOUNT_ORDER_SYNC_MODE`: set to `external`/`vps`/`static-ip` on Vercel when ECOUNT only allows the DigitalOcean static IP. Vercel also defaults to external mode unless this is explicitly set to `direct`.
+- `ECOUNT_ORDER_SYNC_VIA_VPS`: optional boolean alternative; set to `true` to force external/VPS order sync.
 
 Client-side Vite variables:
 
@@ -116,6 +119,9 @@ ERP retry tuning:
 - `ORDER_SYNC_RETRY_MAX_DELAY_MS`: default 1 hour.
 - `ORDER_SYNC_RETRY_SPACING_MS`: default 22 seconds.
 - `ORDER_SYNC_MAX_ATTEMPTS`: default `0`, meaning unlimited retries.
+- `ECOUNT_ORDER_SYNC_LIMIT`: VPS order worker batch size; default `1`.
+- `ECOUNT_ORDER_SYNC_SPACING_MS`: delay between orders in the VPS worker; default 22 seconds.
+- `ECOUNT_ORDER_SYNC_CLAIM_LOCK_MS`: temporary claim window for the VPS worker; default 15 minutes.
 
 ## Database Model
 
@@ -259,6 +265,7 @@ Inventory/product fetch:
 
 - Uses `/OAPI/V2/InventoryBalance/GetListInventoryBalanceStatus`.
 - Inventory calls are cached/rate limited because ECOUNT limits this endpoint.
+- In production, live inventory should be pulled by `npm run sync:ecount-inventory` from the static-IP DigitalOcean VPS when ECOUNT IP allowlisting is enabled. Vercel then serves product/inventory data from Postgres.
 
 Order sync:
 
@@ -268,6 +275,7 @@ Order sync:
 - Uses `ECOUNT_WAREHOUSE_CODE` defaulting to `00001` in some paths.
 - Requires every ordered product to have an Excel/ProductMapping match.
 - Uses deterministic 4-digit `UPLOAD_SER_NO` derived from the local order, so retries reuse the same serial instead of randomizing.
+- When ECOUNT IP allowlisting is enabled, Vercel must not send order sync calls directly. Set `ECOUNT_ORDER_SYNC_MODE=external` on Vercel and run `npm run sync:ecount-orders` from the static-IP DigitalOcean VPS. The Vercel app queues orders in Postgres; the VPS worker logs in to ECOUNT and marks each order synced/failed.
 
 Error control:
 
@@ -279,7 +287,8 @@ Error control:
 The current ERP sync design is durable:
 
 - New order saves first and returns success.
-- Background sync attempts ECOUNT.
+- In direct mode, background sync attempts ECOUNT from the app server.
+- In external/VPS mode, background handling only queues the order; the static-IP VPS worker submits it to ECOUNT.
 - Failed sync updates `erp_sync_status = failed`, stores `erp_sync_error`, increments attempts, and sets `erp_next_sync_attempt_at`.
 - Due pending/failed orders are selected by `storage.getOrdersNeedingErpSync`.
 
@@ -290,6 +299,8 @@ Retry entry points:
 - Single-order admin button: `POST /api/admin/orders/:orderId/sync`.
 
 Manual admin queue sync currently processes only one order per click. This is intentional to avoid Cloudflare/Vercel 502 timeouts and to respect ECOUNT save rate limits. The admin UI button says `Sync Next ERP (N)`.
+
+In external/VPS mode, those route handlers do not call ECOUNT. They clear the selected order's retry delay and leave it as `pending`, so the next VPS worker run can submit it from the allowlisted static IP.
 
 ## Notifications
 

@@ -93,7 +93,7 @@ function OrdersManagement() {
   const syncOrderMutation = useMutation({
     mutationFn: async (orderId: string) => {
       const res = await apiRequest("POST", `/api/admin/orders/${orderId}/sync`, {});
-      return await res.json() as { success: boolean; order: Order; message?: string };
+      return await res.json() as { success: boolean; order: Order; message?: string; queued?: boolean };
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/orders"] });
@@ -101,8 +101,10 @@ function OrdersManagement() {
         currentOrder?.id === data.order.id ? data.order : currentOrder
       );
       toast({
-        title: "ERP Sync Complete",
-        description: `Order ${data.order.orderNumber} synced to eCount.`,
+        title: data.queued ? "ERP Sync Queued" : "ERP Sync Complete",
+        description: data.queued
+          ? data.message || `Order ${data.order.orderNumber} queued for static-IP VPS sync.`
+          : `Order ${data.order.orderNumber} synced to eCount.`,
       });
     },
     onError: (error) => {
@@ -121,13 +123,14 @@ function OrdersManagement() {
       return await res.json() as {
         success: boolean;
         message: string;
-        data?: { synced: number; failed: number; skipped: number };
+        queued?: boolean;
+        data?: { synced: number; failed: number; queued?: number; skipped: number };
       };
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/orders"] });
       toast({
-        title: "ERP Queue Processed",
+        title: data.queued ? "ERP Sync Queued" : "ERP Queue Processed",
         description: data.message,
       });
     },

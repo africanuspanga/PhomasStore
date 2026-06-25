@@ -54,9 +54,21 @@ const ORDER_SYNC_RETRY_MAX_DELAY_MS = Number.parseInt(process.env.ORDER_SYNC_RET
 const ORDER_SYNC_RETRY_SPACING_MS = Number.parseInt(process.env.ORDER_SYNC_RETRY_SPACING_MS || "22000", 10);
 const ORDER_SYNC_MAX_ATTEMPTS = Number.parseInt(process.env.ORDER_SYNC_MAX_ATTEMPTS || "0", 10);
 const ORDER_SYNC_CRON_SECRET = process.env.ORDER_SYNC_CRON_SECRET || process.env.CRON_SECRET;
+const ORDER_SYNC_RUNNER = (process.env.ECOUNT_ORDER_SYNC_MODE || process.env.ORDER_SYNC_MODE || "").trim().toLowerCase();
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const ORDER_STATUS_VALUES = ["processing", "shipped", "delivered", "completed", "cancelled"] as const;
 const appIsDevelopment = () => process.env.NODE_ENV !== 'production';
+const isExternalOrderSyncEnabled = () => {
+  if (["direct", "server", "vercel"].includes(ORDER_SYNC_RUNNER)) {
+    return false;
+  }
+
+  return (
+    ["external", "vps", "static-ip", "static_ip"].includes(ORDER_SYNC_RUNNER) ||
+    process.env.ECOUNT_ORDER_SYNC_VIA_VPS === "true" ||
+    process.env.VERCEL === "1"
+  );
+};
 
 const resolveCloudinaryCredentials = () => {
   const cloudinaryUrl = process.env.CLOUDINARY_URL;
@@ -872,6 +884,27 @@ const syncOrderToEcount = async (order: Order) => {
   };
 };
 
+const queueOrderForExternalEcountSync = async (order: Order) => {
+  const updatedOrder = await storage.updateOrderErpInfo(order.id, {
+    erpSyncStatus: 'pending',
+    erpSyncError: null,
+    erpNextSyncAttemptAt: null
+  });
+
+  console.log(`📮 Order ${order.orderNumber} queued for static-IP VPS eCount sync`);
+
+  return {
+    updatedOrder,
+    erp: {
+      docNumber: updatedOrder.erpDocNumber || null,
+      ioDate: updatedOrder.erpIoDate || null,
+      syncStatus: updatedOrder.erpSyncStatus || 'pending'
+    },
+    queued: true,
+    message: "Order queued for static-IP VPS eCount sync"
+  };
+};
+
 const markOrderEcountSyncFailed = async (orderId: string, error: unknown) => {
   const currentOrder = await storage.getOrderById(orderId);
   const attempts = currentOrder?.erpSyncAttempts || 0;
@@ -884,6 +917,18 @@ const markOrderEcountSyncFailed = async (orderId: string, error: unknown) => {
   });
 };
 
+const getNextOrderForExternalEcountQueue = async () => {
+  const dueOrders = await storage.getOrdersNeedingErpSync(1);
+  if (dueOrders[0]) {
+    return dueOrders[0];
+  }
+
+  const allOrders = await storage.getAllOrders();
+  return allOrders
+    .filter(order => (order.erpSyncStatus || 'pending') !== 'synced')
+    .sort((a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime())[0];
+};
+
 const processEcountOrderSyncQueue = async (source: string, requestedLimit?: unknown) => {
   const limit = getOrderSyncBatchSize(requestedLimit);
   const dueOrders = await storage.getOrdersNeedingErpSync(limit);
@@ -894,15 +939,31 @@ const processEcountOrderSyncQueue = async (source: string, requestedLimit?: unkn
     checked: dueOrders.length,
     synced: 0,
     failed: 0,
+    queued: 0,
     skipped: 0,
     results: [] as Array<{
       orderId: string;
       orderNumber: string;
-      status: 'synced' | 'failed' | 'skipped';
+      status: 'synced' | 'failed' | 'skipped' | 'queued';
       message?: string;
       nextSyncAttemptAt?: string | null;
     }>
   };
+
+  if (isExternalOrderSyncEnabled()) {
+    for (const order of dueOrders) {
+      await queueOrderForExternalEcountSync(order);
+      summary.queued++;
+      summary.results.push({
+        orderId: order.id,
+        orderNumber: order.orderNumber,
+        status: 'queued',
+        message: "Waiting for static-IP VPS order sync worker"
+      });
+    }
+
+    return summary;
+  }
 
   for (let index = 0; index < dueOrders.length; index++) {
     const order = dueOrders[index];
@@ -1090,7 +1151,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({
         success: true,
-        message: `ERP order sync queue processed: ${summary.synced} synced, ${summary.failed} failed, ${summary.skipped} skipped`,
+        message: `ERP order sync queue processed: ${summary.synced} synced, ${summary.failed} failed, ${summary.queued} queued, ${summary.skipped} skipped`,
         data: summary
       });
     } catch (error) {
@@ -1704,14 +1765,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       runBackgroundTask(`order notification ${order.orderNumber}`, () => sendOrderNotificationSafely(order));
 
-      runBackgroundTask(`eCount sync ${order.orderNumber}`, async () => {
-        try {
-          await syncOrderToEcount(order);
-        } catch (ecountError) {
-          console.error('❌ Failed to sync order to eCount ERP:', ecountError);
-          await markOrderEcountSyncFailed(order.id, ecountError);
-        }
-      });
+      if (isExternalOrderSyncEnabled()) {
+        runBackgroundTask(`queue eCount sync ${order.orderNumber}`, async () => {
+          await queueOrderForExternalEcountSync(order);
+        });
+      } else {
+        runBackgroundTask(`eCount sync ${order.orderNumber}`, async () => {
+          try {
+            await syncOrderToEcount(order);
+          } catch (ecountError) {
+            console.error('❌ Failed to sync order to eCount ERP:', ecountError);
+            await markOrderEcountSyncFailed(order.id, ecountError);
+          }
+        });
+      }
     } catch (error) {
       console.error('❌ Failed to create order:', error);
       res.status(400).json({ 
@@ -1749,6 +1816,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       
+      if (isExternalOrderSyncEnabled()) {
+        const queuedResult = await queueOrderForExternalEcountSync(order);
+
+        return res.json({
+          success: true,
+          queued: true,
+          message: queuedResult.message,
+          order: queuedResult.updatedOrder,
+          erp: queuedResult.erp
+        });
+      }
+
       const syncResult = await syncOrderToEcount(order);
       
       console.log(`✅ Manual ERP sync successful for order ${order.orderNumber}`);
@@ -1841,11 +1920,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/admin/orders/sync-pending", requireAdminAuth, enforceSaveRateLimit, async (req, res) => {
     try {
+      if (isExternalOrderSyncEnabled()) {
+        const order = await getNextOrderForExternalEcountQueue();
+
+        if (!order) {
+          return res.json({
+            success: true,
+            queued: false,
+            message: "No orders need ERP sync",
+            data: {
+              source: "admin:sync-pending",
+              checked: 0,
+              synced: 0,
+              failed: 0,
+              queued: 0,
+              skipped: 0,
+              results: []
+            }
+          });
+        }
+
+        const queuedResult = await queueOrderForExternalEcountSync(order);
+
+        return res.json({
+          success: true,
+          queued: true,
+          message: `Order ${order.orderNumber} queued for static-IP VPS eCount sync`,
+          order: queuedResult.updatedOrder,
+          data: {
+            source: "admin:sync-pending",
+            checked: 1,
+            synced: 0,
+            failed: 0,
+            queued: 1,
+            skipped: 0,
+            results: [{
+              orderId: order.id,
+              orderNumber: order.orderNumber,
+              status: "queued",
+              message: "Waiting for static-IP VPS order sync worker"
+            }]
+          }
+        });
+      }
+
       const summary = await processEcountOrderSyncQueue("admin:sync-pending", 1);
 
       res.json({
         success: true,
-        message: `ERP sync processed: ${summary.synced} synced, ${summary.failed} failed, ${summary.skipped} skipped`,
+        message: `ERP sync processed: ${summary.synced} synced, ${summary.failed} failed, ${summary.queued} queued, ${summary.skipped} skipped`,
         data: summary
       });
     } catch (error) {
@@ -1877,6 +2000,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
             ioDate: order.erpIoDate,
             syncStatus: order.erpSyncStatus
           }
+        });
+      }
+
+      if (isExternalOrderSyncEnabled()) {
+        const queuedResult = await queueOrderForExternalEcountSync(order);
+
+        return res.json({
+          success: true,
+          queued: true,
+          message: queuedResult.message,
+          order: queuedResult.updatedOrder,
+          erp: queuedResult.erp
         });
       }
 
