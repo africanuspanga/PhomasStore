@@ -48,7 +48,7 @@ const resolvedSupabaseServiceKey =
 const ORDER_NOTIFICATION_EMAIL = process.env.ORDER_NOTIFICATION_EMAIL || "orders@phomasdiagnosticstz.com";
 const ORDER_NOTIFICATION_FROM = process.env.ORDER_NOTIFICATION_FROM || "Phomas Diagnostics <onboarding@resend.dev>";
 const ORDER_SYNC_TIMEOUT_MS = Number.parseInt(process.env.ORDER_SYNC_TIMEOUT_MS || "12000", 10);
-const ORDER_SYNC_BATCH_SIZE = Number.parseInt(process.env.ORDER_SYNC_BATCH_SIZE || "2", 10);
+const ORDER_SYNC_BATCH_SIZE = Number.parseInt(process.env.ORDER_SYNC_BATCH_SIZE || "1", 10);
 const ORDER_SYNC_RETRY_BASE_DELAY_MS = Number.parseInt(process.env.ORDER_SYNC_RETRY_BASE_DELAY_MS || `${5 * 60 * 1000}`, 10);
 const ORDER_SYNC_RETRY_MAX_DELAY_MS = Number.parseInt(process.env.ORDER_SYNC_RETRY_MAX_DELAY_MS || `${60 * 60 * 1000}`, 10);
 const ORDER_SYNC_RETRY_SPACING_MS = Number.parseInt(process.env.ORDER_SYNC_RETRY_SPACING_MS || "22000", 10);
@@ -1839,13 +1839,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/admin/orders/sync-pending", requireAdminAuth, async (req, res) => {
+  app.post("/api/admin/orders/sync-pending", requireAdminAuth, enforceSaveRateLimit, async (req, res) => {
     try {
-      const summary = await processEcountOrderSyncQueue("admin:sync-pending", req.body?.limit);
+      const summary = await processEcountOrderSyncQueue("admin:sync-pending", 1);
 
       res.json({
         success: true,
-        message: `ERP sync queue processed: ${summary.synced} synced, ${summary.failed} failed, ${summary.skipped} skipped`,
+        message: `ERP sync processed: ${summary.synced} synced, ${summary.failed} failed, ${summary.skipped} skipped`,
         data: summary
       });
     } catch (error) {

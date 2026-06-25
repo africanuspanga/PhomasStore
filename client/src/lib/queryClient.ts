@@ -27,6 +27,7 @@ async function getAuthToken(): Promise<string | null> {
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
     let errorMessage = res.statusText;
+    const contentType = res.headers.get("content-type") || "";
     
     try {
       // Clone the response so we can try different parsing methods
@@ -37,11 +38,27 @@ async function throwIfResNotOk(res: Response) {
       // If JSON parsing fails, try to get text
       try {
         const text = await res.text();
-        if (text) errorMessage = text;
+        const looksLikeHtml =
+          contentType.includes("text/html") ||
+          /<html|<!doctype|cloudflare|cf-error|cf-browser-status/i.test(text);
+
+        if (looksLikeHtml) {
+          if (res.status === 502 || res.status === 504) {
+            errorMessage = "The server timed out while contacting eCount. Please try syncing one order again in a minute.";
+          } else {
+            errorMessage = "The server returned an HTML error page instead of JSON. Please try again.";
+          }
+        } else if (text) {
+          errorMessage = text;
+        }
       } catch (textError) {
         // Use status text as last resort
         errorMessage = res.statusText;
       }
+    }
+
+    if (errorMessage.length > 280) {
+      errorMessage = `${errorMessage.slice(0, 277)}...`;
     }
     
     const error = new Error(`${res.status}: ${errorMessage}`);

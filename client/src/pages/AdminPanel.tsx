@@ -117,7 +117,7 @@ function OrdersManagement() {
 
   const syncPendingOrdersMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/admin/orders/sync-pending", { limit: 2 });
+      const res = await apiRequest("POST", "/api/admin/orders/sync-pending", { limit: 1 });
       return await res.json() as {
         success: boolean;
         message: string;
@@ -269,7 +269,7 @@ function OrdersManagement() {
                 data-testid="button-sync-pending-orders"
               >
                 <RefreshCw className={`w-3 h-3 mr-1 ${syncPendingOrdersMutation.isPending ? "animate-spin" : ""}`} />
-                {syncPendingOrdersMutation.isPending ? "Retrying..." : `Retry ERP (${ordersNeedingErpSync})`}
+                {syncPendingOrdersMutation.isPending ? "Syncing..." : `Sync Next ERP (${ordersNeedingErpSync})`}
               </Button>
             )}
             <Badge variant="outline" className="text-sm">
