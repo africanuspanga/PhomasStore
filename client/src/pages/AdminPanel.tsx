@@ -100,11 +100,17 @@ function OrdersManagement() {
       setSelectedOrder((currentOrder) =>
         currentOrder?.id === data.order.id ? data.order : currentOrder
       );
+      const erpStatus = data.order.erpSyncStatus || "pending";
       toast({
-        title: data.queued ? "ERP Sync Queued" : "ERP Sync Complete",
-        description: data.queued
-          ? data.message || `Order ${data.order.orderNumber} queued for static-IP VPS sync.`
-          : `Order ${data.order.orderNumber} synced to eCount.`,
+        title: erpStatus === "failed"
+          ? "ERP Sync Failed"
+          : erpStatus === "synced"
+            ? "ERP Sync Complete"
+            : "ERP Sync Queued",
+        description: data.message || (erpStatus === "synced"
+          ? `Order ${data.order.orderNumber} synced to eCount.`
+          : `Order ${data.order.orderNumber} queued for static-IP VPS sync.`),
+        variant: erpStatus === "failed" ? "destructive" : undefined,
       });
     },
     onError: (error) => {
@@ -124,14 +130,24 @@ function OrdersManagement() {
         success: boolean;
         message: string;
         queued?: boolean;
+        order?: Order;
         data?: { synced: number; failed: number; queued?: number; skipped: number };
       };
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/orders"] });
+      const failed = (data.data?.failed || 0) > 0 || data.order?.erpSyncStatus === "failed";
+      const synced = (data.data?.synced || 0) > 0 || data.order?.erpSyncStatus === "synced";
       toast({
-        title: data.queued ? "ERP Sync Queued" : "ERP Queue Processed",
+        title: failed
+          ? "ERP Sync Failed"
+          : synced
+            ? "ERP Sync Complete"
+            : data.queued
+              ? "ERP Sync Queued"
+              : "ERP Queue Processed",
         description: data.message,
+        variant: failed ? "destructive" : undefined,
       });
     },
     onError: (error) => {

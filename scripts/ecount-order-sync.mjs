@@ -460,7 +460,19 @@ async function submitSaleOrder(config, session, order, mappings) {
   };
 }
 
-async function getDueOrders(sql, limit) {
+async function getDueOrders(sql, limit, orderId = "") {
+  if (orderId) {
+    return await sql`
+      SELECT *
+      FROM public.orders
+      WHERE id = ${orderId}
+        AND COALESCE(erp_sync_status, 'pending') IN ('pending', 'failed')
+        AND (erp_next_sync_attempt_at IS NULL OR erp_next_sync_attempt_at <= now())
+      ORDER BY created_at ASC
+      LIMIT ${limit}
+    `;
+  }
+
   return await sql`
     SELECT *
     FROM public.orders
@@ -543,6 +555,7 @@ async function main() {
     customerCode: process.env.ECOUNT_CUSTOMER_CODE || DEFAULT_CUSTOMER_CODE,
     databaseUrl: requireEnv("DATABASE_URL"),
     limit: parsePositiveInt(process.env.ECOUNT_ORDER_SYNC_LIMIT, DEFAULT_BATCH_LIMIT),
+    orderId: String(process.env.ECOUNT_ORDER_SYNC_ORDER_ID || "").trim(),
     spacingMs: parsePositiveInt(process.env.ECOUNT_ORDER_SYNC_SPACING_MS, DEFAULT_SPACING_MS),
     claimLockMs: parsePositiveInt(process.env.ECOUNT_ORDER_SYNC_CLAIM_LOCK_MS, DEFAULT_CLAIM_LOCK_MS),
     retryBaseDelayMs: parsePositiveInt(process.env.ORDER_SYNC_RETRY_BASE_DELAY_MS, DEFAULT_RETRY_BASE_DELAY_MS),
@@ -565,7 +578,7 @@ async function main() {
 
     const [mappings, orders] = await Promise.all([
       loadProductMappings(sql),
-      getDueOrders(sql, config.limit),
+      getDueOrders(sql, config.limit, config.orderId),
     ]);
 
     summary.checked = orders.length;

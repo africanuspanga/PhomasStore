@@ -13,7 +13,8 @@
     "check": "tsc",
     "db:push": "drizzle-kit push",
     "sync:ecount-inventory": "node scripts/ecount-inventory-sync.mjs",
-    "sync:ecount-orders": "node scripts/ecount-order-sync.mjs"
+    "sync:ecount-orders": "node scripts/ecount-order-sync.mjs",
+    "serve:ecount-order-sync": "node scripts/ecount-order-sync-worker.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

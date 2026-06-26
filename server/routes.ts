@@ -55,9 +55,13 @@ const ORDER_SYNC_RETRY_SPACING_MS = Number.parseInt(process.env.ORDER_SYNC_RETRY
 const ORDER_SYNC_MAX_ATTEMPTS = Number.parseInt(process.env.ORDER_SYNC_MAX_ATTEMPTS || "0", 10);
 const ORDER_SYNC_CRON_SECRET = process.env.ORDER_SYNC_CRON_SECRET || process.env.CRON_SECRET;
 const ORDER_SYNC_RUNNER = (process.env.ECOUNT_ORDER_SYNC_MODE || process.env.ORDER_SYNC_MODE || "").trim().toLowerCase();
+const ORDER_SYNC_WORKER_URL = (process.env.ECOUNT_ORDER_SYNC_WORKER_URL || process.env.ORDER_SYNC_WORKER_URL || "").trim();
+const ORDER_SYNC_WORKER_SECRET = process.env.ECOUNT_ORDER_SYNC_WORKER_SECRET || process.env.ORDER_SYNC_WORKER_SECRET;
+const ORDER_SYNC_WORKER_TIMEOUT_MS = Number.parseInt(process.env.ECOUNT_ORDER_SYNC_WORKER_TIMEOUT_MS || "50000", 10);
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const ORDER_STATUS_VALUES = ["processing", "shipped", "delivered", "completed", "cancelled"] as const;
 const appIsDevelopment = () => process.env.NODE_ENV !== 'production';
+const envFlagEnabled = (value?: string) => ["1", "true", "yes", "on"].includes((value || "").trim().toLowerCase());
 const isExternalOrderSyncEnabled = () => {
   if (["direct", "server", "vercel"].includes(ORDER_SYNC_RUNNER)) {
     return false;
@@ -65,8 +69,7 @@ const isExternalOrderSyncEnabled = () => {
 
   return (
     ["external", "vps", "static-ip", "static_ip"].includes(ORDER_SYNC_RUNNER) ||
-    process.env.ECOUNT_ORDER_SYNC_VIA_VPS === "true" ||
-    process.env.VERCEL === "1"
+    envFlagEnabled(process.env.ECOUNT_ORDER_SYNC_VIA_VPS)
   );
 };
 
@@ -848,6 +851,128 @@ const getOrderSyncBatchSize = (requestedLimit?: unknown) => {
   return Math.min(sanitizePositiveInt(parsedLimit, configuredLimit), 10);
 };
 
+type ExternalOrderSyncWorkerResult = {
+  configured: boolean;
+  triggered: boolean;
+  ok: boolean;
+  status?: number;
+  message: string;
+  data?: any;
+};
+
+const getExternalOrderSyncWorkerUrl = () => {
+  if (!ORDER_SYNC_WORKER_URL) {
+    return null;
+  }
+
+  try {
+    const workerUrl = new URL(ORDER_SYNC_WORKER_URL);
+    if (!workerUrl.pathname || workerUrl.pathname === "/") {
+      workerUrl.pathname = "/sync";
+    }
+    return workerUrl.toString();
+  } catch (error) {
+    console.warn("⚠️ Invalid ECOUNT_ORDER_SYNC_WORKER_URL:", error);
+    return null;
+  }
+};
+
+const getExternalWorkerSummaryValue = (data: any, key: "checked" | "synced" | "failed" | "skipped") =>
+  Number(data?.data?.[key] ?? data?.[key] ?? 0) || 0;
+
+const triggerExternalOrderSyncWorker = async (
+  source: string,
+  options: { limit?: unknown; orderId?: string } = {}
+): Promise<ExternalOrderSyncWorkerResult> => {
+  const workerUrl = getExternalOrderSyncWorkerUrl();
+
+  if (!ORDER_SYNC_WORKER_URL) {
+    return {
+      configured: false,
+      triggered: false,
+      ok: false,
+      message: "Static-IP order sync worker trigger is not configured"
+    };
+  }
+
+  if (!workerUrl) {
+    return {
+      configured: true,
+      triggered: false,
+      ok: false,
+      message: "Static-IP order sync worker URL is invalid"
+    };
+  }
+
+  if (!ORDER_SYNC_WORKER_SECRET) {
+    return {
+      configured: true,
+      triggered: false,
+      ok: false,
+      message: "Static-IP order sync worker secret is not configured"
+    };
+  }
+
+  const timeoutMs = sanitizePositiveInt(ORDER_SYNC_WORKER_TIMEOUT_MS, 50000);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(workerUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        Authorization: `Bearer ${ORDER_SYNC_WORKER_SECRET}`,
+      },
+      body: JSON.stringify({
+        source,
+        limit: getOrderSyncBatchSize(options.limit ?? 1),
+        orderId: options.orderId,
+      }),
+      signal: controller.signal,
+    });
+
+    const text = await response.text();
+    let data: any = null;
+
+    try {
+      data = text ? JSON.parse(text) : null;
+    } catch {
+      data = null;
+    }
+
+    const summary = data?.data || data;
+    const message = data?.message ||
+      (response.ok
+        ? `Static-IP order sync worker processed: ${getExternalWorkerSummaryValue(data, "synced")} synced, ${getExternalWorkerSummaryValue(data, "failed")} failed`
+        : text.slice(0, 240) || `Static-IP order sync worker returned ${response.status}`);
+
+    return {
+      configured: true,
+      triggered: true,
+      ok: response.ok,
+      status: response.status,
+      message,
+      data: summary,
+    };
+  } catch (error) {
+    const timedOut = error instanceof Error && error.name === "AbortError";
+    return {
+      configured: true,
+      triggered: true,
+      ok: false,
+      message: timedOut
+        ? `Static-IP order sync worker timed out after ${timeoutMs}ms`
+        : error instanceof Error
+          ? error.message
+          : "Failed to trigger static-IP order sync worker",
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+};
+
 const syncOrderToEcount = async (order: Order) => {
   const attemptNumber = (order.erpSyncAttempts || 0) + 1;
   const attemptStartedAt = new Date();
@@ -905,6 +1030,39 @@ const queueOrderForExternalEcountSync = async (order: Order) => {
   };
 };
 
+const queueAndTriggerExternalEcountSync = async (order: Order, source: string) => {
+  const queuedResult = await queueOrderForExternalEcountSync(order);
+  const workerResult = await triggerExternalOrderSyncWorker(source, {
+    limit: 1,
+    orderId: order.id,
+  });
+  const refreshedOrder = await storage.getOrderById(order.id);
+  const updatedOrder = refreshedOrder || queuedResult.updatedOrder;
+  const syncStatus = updatedOrder.erpSyncStatus || 'pending';
+  const workerData = workerResult.data || {};
+  const workerError = workerData?.results?.[0]?.error || workerData?.error;
+
+  let message = queuedResult.message;
+
+  if (syncStatus === 'synced') {
+    message = `Order ${updatedOrder.orderNumber} synced to eCount from static-IP VPS`;
+  } else if (syncStatus === 'failed') {
+    message = workerError || updatedOrder.erpSyncError || workerResult.message || `Order ${updatedOrder.orderNumber} failed to sync from static-IP VPS`;
+  } else if (workerResult.triggered && workerResult.ok) {
+    message = workerResult.message;
+  } else if (workerResult.configured) {
+    message = `Order ${updatedOrder.orderNumber} queued, but static-IP VPS worker was not triggered: ${workerResult.message}`;
+  }
+
+  return {
+    ...queuedResult,
+    updatedOrder,
+    worker: workerResult,
+    queued: syncStatus === 'pending',
+    message,
+  };
+};
+
 const markOrderEcountSyncFailed = async (orderId: string, error: unknown) => {
   const currentOrder = await storage.getOrderById(orderId);
   const attempts = currentOrder?.erpSyncAttempts || 0;
@@ -941,6 +1099,7 @@ const processEcountOrderSyncQueue = async (source: string, requestedLimit?: unkn
     failed: 0,
     queued: 0,
     skipped: 0,
+    worker: null as ExternalOrderSyncWorkerResult | null,
     results: [] as Array<{
       orderId: string;
       orderNumber: string;
@@ -960,6 +1119,30 @@ const processEcountOrderSyncQueue = async (source: string, requestedLimit?: unkn
         status: 'queued',
         message: "Waiting for static-IP VPS order sync worker"
       });
+    }
+
+    if (dueOrders.length > 0) {
+      const workerResult = await triggerExternalOrderSyncWorker(source, { limit });
+      summary.worker = workerResult;
+
+      if (workerResult.ok && workerResult.data) {
+        const workerResults = Array.isArray(workerResult.data.results) ? workerResult.data.results : [];
+        summary.checked = getExternalWorkerSummaryValue(workerResult, "checked");
+        summary.synced = getExternalWorkerSummaryValue(workerResult, "synced");
+        summary.failed = getExternalWorkerSummaryValue(workerResult, "failed");
+        summary.skipped = getExternalWorkerSummaryValue(workerResult, "skipped");
+        summary.queued = Math.max(0, dueOrders.length - summary.synced - summary.failed - summary.skipped);
+
+        if (workerResults.length > 0) {
+          summary.results = workerResults.map((result: any) => ({
+            orderId: String(result.orderId || ""),
+            orderNumber: String(result.orderNumber || ""),
+            status: ["synced", "failed", "skipped", "queued"].includes(result.status) ? result.status : "skipped",
+            message: result.erpDocNumber || result.error || result.message,
+            nextSyncAttemptAt: result.nextAttemptAt || result.nextSyncAttemptAt || null,
+          }));
+        }
+      }
     }
 
     return summary;
@@ -1940,25 +2123,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
         }
 
-        const queuedResult = await queueOrderForExternalEcountSync(order);
+        const externalResult = await queueAndTriggerExternalEcountSync(order, "admin:sync-pending");
+        const syncStatus = externalResult.updatedOrder.erpSyncStatus || 'pending';
 
         return res.json({
           success: true,
-          queued: true,
-          message: `Order ${order.orderNumber} queued for static-IP VPS eCount sync`,
-          order: queuedResult.updatedOrder,
+          queued: externalResult.queued,
+          message: externalResult.message,
+          order: externalResult.updatedOrder,
           data: {
             source: "admin:sync-pending",
             checked: 1,
-            synced: 0,
-            failed: 0,
-            queued: 1,
+            synced: syncStatus === 'synced' ? 1 : 0,
+            failed: syncStatus === 'failed' ? 1 : 0,
+            queued: syncStatus === 'pending' ? 1 : 0,
             skipped: 0,
+            worker: externalResult.worker,
             results: [{
               orderId: order.id,
               orderNumber: order.orderNumber,
-              status: "queued",
-              message: "Waiting for static-IP VPS order sync worker"
+              status: syncStatus,
+              message: externalResult.message
             }]
           }
         });
@@ -2004,14 +2189,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       if (isExternalOrderSyncEnabled()) {
-        const queuedResult = await queueOrderForExternalEcountSync(order);
+        const externalResult = await queueAndTriggerExternalEcountSync(order, "admin:single-order-sync");
 
         return res.json({
           success: true,
-          queued: true,
-          message: queuedResult.message,
-          order: queuedResult.updatedOrder,
-          erp: queuedResult.erp
+          queued: externalResult.queued,
+          message: externalResult.message,
+          order: externalResult.updatedOrder,
+          erp: {
+            docNumber: externalResult.updatedOrder.erpDocNumber || null,
+            ioDate: externalResult.updatedOrder.erpIoDate || null,
+            syncStatus: externalResult.updatedOrder.erpSyncStatus || 'pending'
+          },
+          worker: externalResult.worker
         });
       }
 

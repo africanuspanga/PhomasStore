@@ -30,6 +30,7 @@ npm run start
 npm run db:push
 npm run sync:ecount-inventory
 npm run sync:ecount-orders
+npm run serve:ecount-order-sync
 ```
 
 Notes:
@@ -102,8 +103,12 @@ Required or commonly used server variables:
 - `ECOUNT_MAX_ERRORS`: default `8`.
 - `ECOUNT_LOCK_DURATION_MIN`: default `45`.
 - `ECOUNT_TEST_API_KEY`: only for diagnostic/test endpoints.
-- `ECOUNT_ORDER_SYNC_MODE`: set to `external`/`vps`/`static-ip` on Vercel when ECOUNT only allows the DigitalOcean static IP. Vercel also defaults to external mode unless this is explicitly set to `direct`.
+- `ECOUNT_ORDER_SYNC_MODE`: set to `external`/`vps`/`static-ip` on Vercel when ECOUNT only allows the DigitalOcean static IP. Leave unset or set to `direct` when admin/manual sync should call ECOUNT from the app server.
 - `ECOUNT_ORDER_SYNC_VIA_VPS`: optional boolean alternative; set to `true` to force external/VPS order sync.
+- `ECOUNT_ORDER_SYNC_WORKER_URL`: optional URL for Vercel/admin/cron to trigger the static-IP VPS order worker, for example `http://164.92.205.5:8787/sync`. Only use this in external/VPS mode.
+- `ECOUNT_ORDER_SYNC_WORKER_SECRET`: shared bearer token required by the static-IP VPS order worker trigger.
+- `ECOUNT_ORDER_SYNC_WORKER_TIMEOUT_MS`: Vercel wait time for the VPS worker trigger; default 50 seconds.
+- `ECOUNT_ORDER_SYNC_WORKER_PORT`: VPS worker listen port for `npm run serve:ecount-order-sync`; default `8787`.
 
 Client-side Vite variables:
 
@@ -275,7 +280,7 @@ Order sync:
 - Uses `ECOUNT_WAREHOUSE_CODE` defaulting to `00001` in some paths.
 - Requires every ordered product to have an Excel/ProductMapping match.
 - Uses deterministic 4-digit `UPLOAD_SER_NO` derived from the local order, so retries reuse the same serial instead of randomizing.
-- When ECOUNT IP allowlisting is enabled, Vercel must not send order sync calls directly. Set `ECOUNT_ORDER_SYNC_MODE=external` on Vercel and run `npm run sync:ecount-orders` from the static-IP DigitalOcean VPS. The Vercel app queues orders in Postgres; the VPS worker logs in to ECOUNT and marks each order synced/failed.
+- When ECOUNT IP allowlisting is enabled, Vercel must not send order sync calls directly. Set `ECOUNT_ORDER_SYNC_MODE=external` on Vercel and run `npm run sync:ecount-orders` on a schedule from the static-IP DigitalOcean VPS, or run `npm run serve:ecount-order-sync` on the VPS and configure Vercel's `ECOUNT_ORDER_SYNC_WORKER_URL`/`ECOUNT_ORDER_SYNC_WORKER_SECRET` so admin manual sync can trigger the VPS. The VPS worker logs in to ECOUNT and marks each order synced/failed in Postgres.
 
 Error control:
 
@@ -288,7 +293,7 @@ The current ERP sync design is durable:
 
 - New order saves first and returns success.
 - In direct mode, background sync attempts ECOUNT from the app server.
-- In external/VPS mode, background handling only queues the order; the static-IP VPS worker submits it to ECOUNT.
+- In external/VPS mode, background handling queues the order; the static-IP VPS worker submits it to ECOUNT. Outside explicit external/VPS mode, admin manual sync and cron sync call ECOUNT directly from the app server.
 - Failed sync updates `erp_sync_status = failed`, stores `erp_sync_error`, increments attempts, and sets `erp_next_sync_attempt_at`.
 - Due pending/failed orders are selected by `storage.getOrdersNeedingErpSync`.
 
@@ -300,7 +305,7 @@ Retry entry points:
 
 Manual admin queue sync currently processes only one order per click. This is intentional to avoid Cloudflare/Vercel 502 timeouts and to respect ECOUNT save rate limits. The admin UI button says `Sync Next ERP (N)`.
 
-In external/VPS mode, those route handlers do not call ECOUNT. They clear the selected order's retry delay and leave it as `pending`, so the next VPS worker run can submit it from the allowlisted static IP.
+In external/VPS mode, those route handlers do not call ECOUNT. They clear the selected order's retry delay and leave it as `pending`. If `ECOUNT_ORDER_SYNC_WORKER_URL` and `ECOUNT_ORDER_SYNC_WORKER_SECRET` are configured, the handlers also call the VPS worker trigger, which runs `scripts/ecount-order-sync.mjs` from the allowlisted static IP and returns the synced/failed result. If the worker URL is not configured, the next scheduled VPS worker run must submit the order.
 
 ## Notifications
 
