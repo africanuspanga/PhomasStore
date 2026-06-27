@@ -880,6 +880,11 @@ const getExternalOrderSyncWorkerUrl = () => {
 const getExternalWorkerSummaryValue = (data: any, key: "checked" | "synced" | "failed" | "skipped") =>
   Number(data?.data?.[key] ?? data?.[key] ?? 0) || 0;
 
+const getExternalWorkerSetupMessage = (workerResult: ExternalOrderSyncWorkerResult) =>
+  workerResult.configured
+    ? workerResult.message
+    : `${workerResult.message}. Set ECOUNT_ORDER_SYNC_WORKER_URL and ECOUNT_ORDER_SYNC_WORKER_SECRET on Vercel, then redeploy.`;
+
 const triggerExternalOrderSyncWorker = async (
   source: string,
   options: { limit?: unknown; orderId?: string } = {}
@@ -1041,6 +1046,7 @@ const queueAndTriggerExternalEcountSync = async (order: Order, source: string) =
   const syncStatus = updatedOrder.erpSyncStatus || 'pending';
   const workerData = workerResult.data || {};
   const workerError = workerData?.results?.[0]?.error || workerData?.error;
+  const workerChecked = getExternalWorkerSummaryValue(workerResult, "checked");
 
   let message = queuedResult.message;
 
@@ -1048,8 +1054,14 @@ const queueAndTriggerExternalEcountSync = async (order: Order, source: string) =
     message = `Order ${updatedOrder.orderNumber} synced to eCount from static-IP VPS`;
   } else if (syncStatus === 'failed') {
     message = workerError || updatedOrder.erpSyncError || workerResult.message || `Order ${updatedOrder.orderNumber} failed to sync from static-IP VPS`;
+  } else if (!workerResult.triggered) {
+    message = `Order ${updatedOrder.orderNumber} queued, but static-IP VPS worker was not triggered: ${getExternalWorkerSetupMessage(workerResult)}`;
+  } else if (workerResult.ok && workerChecked === 0) {
+    message = `Order ${updatedOrder.orderNumber} queued, but the static-IP VPS worker did not find it. Check that the VPS DATABASE_URL points to the same database as Vercel.`;
   } else if (workerResult.triggered && workerResult.ok) {
     message = workerResult.message;
+  } else if (workerResult.triggered) {
+    message = `Order ${updatedOrder.orderNumber} queued, but the static-IP VPS worker failed: ${workerResult.message}`;
   } else if (workerResult.configured) {
     message = `Order ${updatedOrder.orderNumber} queued, but static-IP VPS worker was not triggered: ${workerResult.message}`;
   }
@@ -1949,8 +1961,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       runBackgroundTask(`order notification ${order.orderNumber}`, () => sendOrderNotificationSafely(order));
 
       if (isExternalOrderSyncEnabled()) {
-        runBackgroundTask(`queue eCount sync ${order.orderNumber}`, async () => {
-          await queueOrderForExternalEcountSync(order);
+        runBackgroundTask(`queue and trigger eCount sync ${order.orderNumber}`, async () => {
+          const externalResult = await queueAndTriggerExternalEcountSync(order, "order:create");
+          if (externalResult.worker?.triggered) {
+            console.log(`📮 Static-IP VPS worker result for ${order.orderNumber}: ${externalResult.message}`);
+          }
         });
       } else {
         runBackgroundTask(`eCount sync ${order.orderNumber}`, async () => {

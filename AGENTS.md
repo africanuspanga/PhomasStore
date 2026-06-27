@@ -293,7 +293,7 @@ The current ERP sync design is durable:
 
 - New order saves first and returns success.
 - In direct mode, background sync attempts ECOUNT from the app server.
-- In external/VPS mode, background handling queues the order; the static-IP VPS worker submits it to ECOUNT. Outside explicit external/VPS mode, admin manual sync and cron sync call ECOUNT directly from the app server.
+- In external/VPS mode, background handling queues the order and triggers the static-IP VPS worker when `ECOUNT_ORDER_SYNC_WORKER_URL` and `ECOUNT_ORDER_SYNC_WORKER_SECRET` are configured. The worker submits it to ECOUNT. Outside explicit external/VPS mode, admin manual sync and cron sync call ECOUNT directly from the app server.
 - Failed sync updates `erp_sync_status = failed`, stores `erp_sync_error`, increments attempts, and sets `erp_next_sync_attempt_at`.
 - Due pending/failed orders are selected by `storage.getOrdersNeedingErpSync`.
 
@@ -305,7 +305,7 @@ Retry entry points:
 
 Manual admin queue sync currently processes only one order per click. This is intentional to avoid Cloudflare/Vercel 502 timeouts and to respect ECOUNT save rate limits. The admin UI button says `Sync Next ERP (N)`.
 
-In external/VPS mode, those route handlers do not call ECOUNT. They clear the selected order's retry delay and leave it as `pending`. If `ECOUNT_ORDER_SYNC_WORKER_URL` and `ECOUNT_ORDER_SYNC_WORKER_SECRET` are configured, the handlers also call the VPS worker trigger, which runs `scripts/ecount-order-sync.mjs` from the allowlisted static IP and returns the synced/failed result. If the worker URL is not configured, the next scheduled VPS worker run must submit the order.
+In external/VPS mode, app routes do not call ECOUNT directly. They clear the selected order's retry delay and leave it as `pending`. If `ECOUNT_ORDER_SYNC_WORKER_URL` and `ECOUNT_ORDER_SYNC_WORKER_SECRET` are configured, the route also calls the VPS worker trigger, which runs `scripts/ecount-order-sync.mjs` from the allowlisted static IP and returns the synced/failed result. If the worker URL or secret is not configured, responses should say the worker was not triggered instead of only saying the order was queued.
 
 ## Notifications
 
