@@ -7,6 +7,7 @@ const DEFAULT_RETRY_BASE_DELAY_MS = 5 * 60 * 1000;
 const DEFAULT_RETRY_MAX_DELAY_MS = 60 * 60 * 1000;
 const DEFAULT_SPACING_MS = 22 * 1000;
 const DEFAULT_CLAIM_LOCK_MS = 15 * 60 * 1000;
+const DEFAULT_ORDER_DATE_TIME_ZONE = "Africa/Dar_es_Salaam";
 
 function parseEnvFile(filePath) {
   const env = {};
@@ -67,6 +68,55 @@ function requireEnv(key) {
 function parsePositiveInt(value, fallback) {
   const parsed = Number.parseInt(String(value ?? ""), 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function normalizeIoDateMode(value) {
+  return String(value || "blank").trim().toLowerCase() === "order-date" ? "order-date" : "blank";
+}
+
+function formatEcountDate(dateLike = new Date(), timeZone = DEFAULT_ORDER_DATE_TIME_ZONE) {
+  const date = dateLike instanceof Date ? dateLike : new Date(dateLike);
+  const safeDate = Number.isNaN(date.getTime()) ? new Date() : date;
+
+  const buildDate = (zone) => {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: zone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(safeDate);
+    const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+    return `${values.year}${values.month}${values.day}`;
+  };
+
+  let formatted;
+  try {
+    formatted = buildDate(timeZone);
+  } catch {
+    formatted = buildDate("UTC");
+  }
+
+  if (!/^\d{8}$/.test(formatted)) {
+    throw new Error(`Unable to format eCount date as YYYYMMDD: ${formatted}`);
+  }
+
+  return formatted;
+}
+
+function getSaleOrderIoDates(order, config) {
+  const orderDate = formatEcountDate(order.created_at || new Date(), config.orderDateTimeZone);
+
+  if (config.ioDateMode === "order-date") {
+    return {
+      payloadIoDate: orderDate,
+      recordedIoDate: orderDate,
+    };
+  }
+
+  return {
+    payloadIoDate: "",
+    recordedIoDate: formatEcountDate(new Date(), config.orderDateTimeZone),
+  };
 }
 
 function normalizeProductCode(code) {
@@ -264,7 +314,7 @@ function buildSaleOrderPayload(order, mappings, config) {
   const items = parseOrderItems(order);
   const unmapped = [];
   const mappedItems = [];
-  const currentDate = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+  const ioDates = getSaleOrderIoDates(order, config);
   const uploadSerial = getSaleOrderUploadSerial(order);
   const customerCode = config.customerCode;
   const customerName = "Online Store Sales";
@@ -296,13 +346,15 @@ function buildSaleOrderPayload(order, mappings, config) {
   }
 
   return {
-    ioDate: currentDate,
+    ioDate: ioDates.recordedIoDate,
+    submittedIoDate: ioDates.payloadIoDate,
+    ioDateMode: config.ioDateMode,
     itemCount: mappedItems.length,
     totalValue: mappedItems.reduce((sum, item) => sum + (item.quantity * item.price), 0),
     payload: {
       SaleOrderList: mappedItems.map((item) => ({
         BulkDatas: {
-          IO_DATE: currentDate,
+          IO_DATE: ioDates.payloadIoDate,
           UPLOAD_SER_NO: uploadSerial,
           CUST: customerCode,
           CUST_DES: customerName,
@@ -410,17 +462,54 @@ function getEcountErrorMessage(result) {
     "Unknown Sales Order API error";
 }
 
-function getValidationMessages(result) {
-  if (!Array.isArray(result?.Data?.ResultDetails)) {
+function parseResultDetails(value) {
+  if (!value) {
     return [];
   }
 
-  return result.Data.ResultDetails.map((detail) => {
-    if (typeof detail === "object" && detail?.Message) {
-      return detail.Message;
+  if (Array.isArray(value)) {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return [];
     }
 
-    return JSON.stringify(detail);
+    try {
+      return parseResultDetails(JSON.parse(trimmed));
+    } catch {
+      return [trimmed];
+    }
+  }
+
+  return [value];
+}
+
+function getValidationMessages(result) {
+  return parseResultDetails(result?.Data?.ResultDetails).map((detail) => {
+    if (typeof detail === "string") {
+      return detail;
+    }
+
+    const errors = parseResultDetails(detail?.Errors)
+      .map((error) => {
+        if (typeof error === "string") {
+          return error;
+        }
+
+        const column = error?.ColCd ? `${error.ColCd}: ` : "";
+        return `${column}${error?.Message || JSON.stringify(error)}`;
+      })
+      .filter(Boolean)
+      .join(", ");
+
+    if (detail?.TotalError && errors) {
+      return `${detail.TotalError} (${errors})`;
+    }
+
+    return detail?.Message || detail?.TotalError || JSON.stringify(detail);
   });
 }
 
@@ -443,7 +532,7 @@ async function submitSaleOrder(config, session, order, mappings) {
 
   if ((result.json?.Data?.FailCnt || 0) > 0) {
     const messages = getValidationMessages(result.json);
-    throw new Error(`eCount validation error (${result.json.Data.FailCnt} items failed): ${messages.join("; ") || "eCount validation failed"}`);
+    throw new Error(`eCount validation error (${result.json.Data.FailCnt} items failed): ${messages.join("; ") || "eCount validation failed"}. Sent IO_DATE=${saleOrder.submittedIoDate || "(blank; eCount current date)"}`);
   }
 
   const docNo =
@@ -560,6 +649,8 @@ async function main() {
     claimLockMs: parsePositiveInt(process.env.ECOUNT_ORDER_SYNC_CLAIM_LOCK_MS, DEFAULT_CLAIM_LOCK_MS),
     retryBaseDelayMs: parsePositiveInt(process.env.ORDER_SYNC_RETRY_BASE_DELAY_MS, DEFAULT_RETRY_BASE_DELAY_MS),
     retryMaxDelayMs: parsePositiveInt(process.env.ORDER_SYNC_RETRY_MAX_DELAY_MS, DEFAULT_RETRY_MAX_DELAY_MS),
+    orderDateTimeZone: process.env.ECOUNT_ORDER_DATE_TIMEZONE || DEFAULT_ORDER_DATE_TIME_ZONE,
+    ioDateMode: normalizeIoDateMode(process.env.ECOUNT_ORDER_IO_DATE_MODE),
   };
 
   const sql = postgres(config.databaseUrl, { prepare: false });

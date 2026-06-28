@@ -61,7 +61,7 @@ export const orders = pgTable("orders", {
   customerAddress: text("customer_address").default(""),
   // eCount ERP Integration fields
   erpDocNumber: text("erp_doc_number"), // DOC_NO from eCount SaveSale response
-  erpIoDate: text("erp_io_date"), // IO_DATE from eCount SaveSale (YYYYMMDD format)
+  erpIoDate: text("erp_io_date"), // Recorded eCount order date estimate (YYYYMMDD format)
   erpSyncStatus: text("erp_sync_status").default("pending"), // "pending", "synced", "failed"
   erpSyncError: text("erp_sync_error"), // Error message if sync fails
   erpSyncAttempts: integer("erp_sync_attempts").notNull().default(0),

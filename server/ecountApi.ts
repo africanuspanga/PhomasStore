@@ -12,6 +12,9 @@ const ECOUNT_CONFIG = {
   customerCode: process.env.ECOUNT_CUSTOMER_CODE || "10839",
 };
 
+const ECOUNT_ORDER_DATE_TIME_ZONE = process.env.ECOUNT_ORDER_DATE_TIMEZONE || "Africa/Dar_es_Salaam";
+const ECOUNT_ORDER_IO_DATE_MODE = (process.env.ECOUNT_ORDER_IO_DATE_MODE || "blank").trim().toLowerCase();
+
 const authKeyLength = ECOUNT_CONFIG.authKey?.length ?? 0;
 const authKeyPreview = authKeyLength > 0
   ? `${ECOUNT_CONFIG.authKey.substring(0, Math.min(8, authKeyLength))}...${ECOUNT_CONFIG.authKey.substring(Math.max(authKeyLength - 4, 0))}`
@@ -22,6 +25,55 @@ console.log(`🔑 Using AUTH_KEY: ${authKeyPreview} (length: ${authKeyLength})`)
 
 if (!ECOUNT_CONFIG.companyCode || !ECOUNT_CONFIG.authKey || !ECOUNT_CONFIG.userId || !ECOUNT_CONFIG.zone || !ECOUNT_CONFIG.warehouseCode) {
   console.warn('⚠️ eCount environment variables are incomplete. eCount product/order routes may fail, but non-eCount routes should still work.');
+}
+
+function formatEcountDate(dateLike: unknown = new Date(), timeZone = ECOUNT_ORDER_DATE_TIME_ZONE): string {
+  const date = dateLike instanceof Date ? dateLike : new Date(dateLike as any);
+  const safeDate = Number.isNaN(date.getTime()) ? new Date() : date;
+
+  const buildDate = (zone: string) => {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: zone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(safeDate);
+
+    const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+    return `${values.year}${values.month}${values.day}`;
+  };
+
+  let formatted: string;
+  try {
+    formatted = buildDate(timeZone);
+  } catch {
+    formatted = buildDate("UTC");
+  }
+
+  if (!/^\d{8}$/.test(formatted)) {
+    throw new Error(`Unable to format eCount date as YYYYMMDD: ${formatted}`);
+  }
+
+  return formatted;
+}
+
+function getSaleOrderIoDates(order: Order) {
+  const mode = ECOUNT_ORDER_IO_DATE_MODE === "order-date" ? "order-date" : "blank";
+  const orderDate = formatEcountDate(order.createdAt || new Date());
+
+  if (mode === "order-date") {
+    return {
+      mode,
+      payloadIoDate: orderDate,
+      recordedIoDate: orderDate,
+    };
+  }
+
+  return {
+    mode,
+    payloadIoDate: "",
+    recordedIoDate: formatEcountDate(new Date()),
+  };
 }
 
 const TEST_BASE_URL = "https://sboapi{ZONE}.ecount.com";
@@ -576,6 +628,57 @@ class EcountApiService {
     return Number.isFinite(parsed) ? parsed : null;
   }
 
+  private parseResultDetails(value: unknown): any[] {
+    if (!value) {
+      return [];
+    }
+
+    if (Array.isArray(value)) {
+      return value;
+    }
+
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      if (!trimmed) {
+        return [];
+      }
+
+      try {
+        return this.parseResultDetails(JSON.parse(trimmed));
+      } catch {
+        return [trimmed];
+      }
+    }
+
+    return [value];
+  }
+
+  private getValidationMessages(result: any): string[] {
+    return this.parseResultDetails(result?.Data?.ResultDetails).map((detail) => {
+      if (typeof detail === "string") {
+        return detail;
+      }
+
+      const errors = this.parseResultDetails(detail?.Errors)
+        .map((error) => {
+          if (typeof error === "string") {
+            return error;
+          }
+
+          const column = error?.ColCd ? `${error.ColCd}: ` : "";
+          return `${column}${error?.Message || JSON.stringify(error)}`;
+        })
+        .filter(Boolean)
+        .join(", ");
+
+      if (detail?.TotalError && errors) {
+        return `${detail.TotalError} (${errors})`;
+      }
+
+      return detail?.Message || detail?.TotalError || JSON.stringify(detail);
+    });
+  }
+
   private getInventoryProductCode(row: EcountInventory): string {
     return String(
       row.PROD_CD ||
@@ -850,8 +953,9 @@ class EcountApiService {
   async submitSaleOrder(order: Order, userProfile?: any): Promise<{ docNo: string, ioDate: string }> {
     try {
       const orderItems = JSON.parse(order.items);
-      // eCount requires YYYYMMDD format for IO_DATE (STRING(8) per API docs)
-      const currentDate = new Date().toISOString().slice(0, 10).replace(/-/g, ''); // YYYYMMDD format
+      const ioDates = getSaleOrderIoDates(order);
+      const currentDate = ioDates.recordedIoDate;
+      const payloadIoDate = ioDates.payloadIoDate;
       
       // UPLOAD_SER_NO must be SMALLINT(4,0). Keep it deterministic per order so retries
       // reuse the same upload serial instead of risking duplicate ERP orders.
@@ -923,72 +1027,22 @@ class EcountApiService {
       
       console.log(`🎯 All ${mappedItems.length} products successfully mapped for eCount submission`);
       
-      // Build correct SaleList structure as per user's provided format
-      const salesPayload = {
-        SaleList: [
-          {
-            Sale: {
-              UPLOAD_SER_NO: `SO_${order.orderNumber}_${currentDate}`,
-              IO_DATE: currentDate,
-              CUST: customerCode,
-              CUST_DES: customerName,
-              VAT_EXPT: "0",
-              DELIVERY_ADDR: "Online Store Purchase",
-              RECEIVER: receiverName,
-              RECEIVER_TEL: userProfile?.phone || "",
-              REF_DES: `WEB-${order.orderNumber}` // For traceability and idempotency
-            },
-            DetailList: mappedItems.map(item => ({
-              WH_CD: "00001", // CORRECTED: Use actual warehouse code (00009 was just documentation example)
-              PROD_CD: item.ecountProdCd,
-              PROD_DES: item.name,
-              QTY: item.quantity,
-              PRICE: item.price,
-              PROD_DES_L: ""
-            }))
-          }
-        ]
-      };
-      
       // ENHANCED LOGGING: Log the actual payload being sent for debugging
       console.log('📋 SaveSale API payload summary:');
       console.log(`  - Order: ${order.orderNumber}`);
       console.log(`  - Customer: ${customerCode} (${customerName})`);
+      console.log(`  - IO_DATE mode: ${ioDates.mode}, payload: ${payloadIoDate || "(blank; eCount current date)"}`);
       console.log(`  - Items: ${mappedItems.length}`);
       mappedItems.forEach((item, idx) => {
         console.log(`    ${idx + 1}. ${item.ecountProdCd} "${item.name}" x${item.quantity} @ ${item.price} (${item.matchRule})`);
       });
-      
-      // Debug: Log sale header and first item details
-      if (salesPayload.SaleList.length > 0) {
-        const sale = salesPayload.SaleList[0];
-        console.log('🔍 Sale header preview:', {
-          UPLOAD_SER_NO: sale.Sale.UPLOAD_SER_NO,
-          IO_DATE: sale.Sale.IO_DATE,
-          CUST: sale.Sale.CUST,
-          CUST_DES: sale.Sale.CUST_DES,
-          VAT_EXPT: sale.Sale.VAT_EXPT
-        });
-        
-        if (sale.DetailList.length > 0) {
-          const firstItem = sale.DetailList[0];
-          console.log('🔍 First item detail preview:', {
-            WH_CD: firstItem.WH_CD,
-            PROD_CD: firstItem.PROD_CD,
-            PROD_DES: firstItem.PROD_DES,
-            QTY: firstItem.QTY,
-            PRICE: firstItem.PRICE,
-            PROD_DES_L: firstItem.PROD_DES_L
-          });
-        }
-      }
       
       // 🚀 FIXED SALES ORDER API - Transform to SaleOrderList format (per documentation)
       const warehouseCode = ECOUNT_CONFIG.warehouseCode || "00001";
       const saleOrderPayload = {
         "SaleOrderList": mappedItems.map(item => ({
           "BulkDatas": {
-            "IO_DATE": currentDate,
+            "IO_DATE": payloadIoDate,
             "UPLOAD_SER_NO": sequenceNumber,
             "CUST": customerCode,
             "CUST_DES": customerName,
@@ -1081,6 +1135,19 @@ class EcountApiService {
           }
         }))
       };
+
+      const firstBulkData = saleOrderPayload.SaleOrderList[0]?.BulkDatas;
+      if (firstBulkData) {
+        console.log('🔍 SaleOrder BulkDatas preview:', {
+          IO_DATE: firstBulkData.IO_DATE || "(blank; eCount current date)",
+          UPLOAD_SER_NO: firstBulkData.UPLOAD_SER_NO,
+          CUST: firstBulkData.CUST,
+          WH_CD: firstBulkData.WH_CD,
+          PROD_CD: firstBulkData.PROD_CD,
+          QTY: firstBulkData.QTY,
+          PRICE: firstBulkData.PRICE
+        });
+      }
       
       console.log('🚀 NEW SALES ORDER API - Payload preview:', {
         orderNumber: order.orderNumber,
@@ -1181,23 +1248,13 @@ class EcountApiService {
         // CRITICAL: Check if any items failed validation
         if (result.Data?.FailCnt > 0) {
           console.error('❌ eCount API rejected order - validation failed');
-          
-          // Extract specific error messages from ResultDetails
-          let errorMessages = [];
-          if (result.Data.ResultDetails && Array.isArray(result.Data.ResultDetails)) {
-            errorMessages = result.Data.ResultDetails.map((detail: any) => {
-              if (typeof detail === 'object' && detail.Message) {
-                return detail.Message;
-              }
-              return JSON.stringify(detail);
-            });
-          }
-          
+
+          const errorMessages = this.getValidationMessages(result);
           const errorSummary = errorMessages.length > 0 
             ? errorMessages.join('; ') 
             : 'eCount validation failed - check Web Uploader configuration';
           
-          throw new Error(`eCount validation error (${result.Data.FailCnt} items failed): ${errorSummary}`);
+          throw new Error(`eCount validation error (${result.Data.FailCnt} items failed): ${errorSummary}. Sent IO_DATE=${payloadIoDate || '(blank; eCount current date)'}`);
         }
         
         // Only proceed if all items succeeded
@@ -1242,7 +1299,7 @@ class EcountApiService {
       console.error(`  ❌ Error Message: ${errorMsg}`);
       console.error(`  📄 Order Number: ${order.orderNumber}`);
       console.error(`  🔢 Items Count: ${mappedItems.length}`);
-      console.error(`  📰 Payload Size: ${JSON.stringify(salesPayload).length} bytes`);
+      console.error(`  📰 Payload Size: ${JSON.stringify(saleOrderPayload).length} bytes`);
       
       // Log detailed error information for debugging
       if (result.Error) {
