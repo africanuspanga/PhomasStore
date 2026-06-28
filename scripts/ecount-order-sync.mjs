@@ -354,7 +354,7 @@ function buildSaleOrderPayload(order, mappings, config) {
     payload: {
       SaleOrderList: mappedItems.map((item) => ({
         BulkDatas: {
-          IO_DATE: ioDates.payloadIoDate,
+          ...(ioDates.payloadIoDate ? { IO_DATE: ioDates.payloadIoDate } : {}),
           UPLOAD_SER_NO: uploadSerial,
           CUST: customerCode,
           CUST_DES: customerName,
@@ -532,7 +532,7 @@ async function submitSaleOrder(config, session, order, mappings) {
 
   if ((result.json?.Data?.FailCnt || 0) > 0) {
     const messages = getValidationMessages(result.json);
-    throw new Error(`eCount validation error (${result.json.Data.FailCnt} items failed): ${messages.join("; ") || "eCount validation failed"}. Sent IO_DATE=${saleOrder.submittedIoDate || "(blank; eCount current date)"}`);
+    throw new Error(`eCount validation error (${result.json.Data.FailCnt} items failed): ${messages.join("; ") || "eCount validation failed"}. Sent IO_DATE=${saleOrder.submittedIoDate || "(omitted; eCount current date)"}`);
   }
 
   const docNo =

@@ -109,7 +109,7 @@ Required or commonly used server variables:
 - `ECOUNT_ORDER_SYNC_WORKER_SECRET`: shared bearer token required by the static-IP VPS order worker trigger.
 - `ECOUNT_ORDER_SYNC_WORKER_TIMEOUT_MS`: Vercel wait time for the VPS worker trigger; default 50 seconds.
 - `ECOUNT_ORDER_SYNC_WORKER_PORT`: VPS worker listen port for `npm run serve:ecount-order-sync`; default `8787`.
-- `ECOUNT_ORDER_IO_DATE_MODE`: defaults to `blank`. For SaleOrder sync, blank `IO_DATE` lets ECOUNT use its current date, which the ECOUNT API docs allow and avoids `IO_DATE` `Date(Format)` validation failures. Set to `order-date` only if ECOUNT must receive the original order date as `YYYYMMDD`.
+- `ECOUNT_ORDER_IO_DATE_MODE`: defaults to `blank`. For SaleOrder sync, blank mode omits `IO_DATE` from the payload so ECOUNT can use its current date; this avoids `IO_DATE` `Date(Format)` validation failures caused by sending an explicit empty date value. Set to `order-date` only if ECOUNT must receive the original order date as `YYYYMMDD`.
 - `ECOUNT_ORDER_DATE_TIMEZONE`: timezone used when recording or sending generated `YYYYMMDD` order dates; defaults to `Africa/Dar_es_Salaam`.
 
 Client-side Vite variables:
@@ -282,7 +282,7 @@ Order sync:
 - Uses `ECOUNT_WAREHOUSE_CODE` defaulting to `00001` in some paths.
 - Requires every ordered product to have an Excel/ProductMapping match.
 - Uses deterministic 4-digit `UPLOAD_SER_NO` derived from the local order, so retries reuse the same serial instead of randomizing.
-- Sends blank `IO_DATE` by default for `SaleOrder/SaveSaleOrder` because the ECOUNT docs say blank uses the current date and this avoids `Date(Format)` rejections. Set `ECOUNT_ORDER_IO_DATE_MODE=order-date` to send a generated `YYYYMMDD` date instead.
+- Omits `IO_DATE` by default for `SaleOrder/SaveSaleOrder` because ECOUNT can use the current date and this avoids `Date(Format)` rejections caused by explicit empty date values. Set `ECOUNT_ORDER_IO_DATE_MODE=order-date` to send a generated `YYYYMMDD` date instead.
 - When ECOUNT IP allowlisting is enabled, Vercel must not send order sync calls directly. Set `ECOUNT_ORDER_SYNC_MODE=external` on Vercel and run `npm run sync:ecount-orders` on a schedule from the static-IP DigitalOcean VPS, or run `npm run serve:ecount-order-sync` on the VPS and configure Vercel's `ECOUNT_ORDER_SYNC_WORKER_URL`/`ECOUNT_ORDER_SYNC_WORKER_SECRET` so admin manual sync can trigger the VPS. The VPS worker logs in to ECOUNT and marks each order synced/failed in Postgres.
 
 Error control:

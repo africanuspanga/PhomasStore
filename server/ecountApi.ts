@@ -1031,7 +1031,7 @@ class EcountApiService {
       console.log('📋 SaveSale API payload summary:');
       console.log(`  - Order: ${order.orderNumber}`);
       console.log(`  - Customer: ${customerCode} (${customerName})`);
-      console.log(`  - IO_DATE mode: ${ioDates.mode}, payload: ${payloadIoDate || "(blank; eCount current date)"}`);
+      console.log(`  - IO_DATE mode: ${ioDates.mode}, payload: ${payloadIoDate || "(omitted; eCount current date)"}`);
       console.log(`  - Items: ${mappedItems.length}`);
       mappedItems.forEach((item, idx) => {
         console.log(`    ${idx + 1}. ${item.ecountProdCd} "${item.name}" x${item.quantity} @ ${item.price} (${item.matchRule})`);
@@ -1042,7 +1042,7 @@ class EcountApiService {
       const saleOrderPayload = {
         "SaleOrderList": mappedItems.map(item => ({
           "BulkDatas": {
-            "IO_DATE": payloadIoDate,
+            ...(payloadIoDate ? { "IO_DATE": payloadIoDate } : {}),
             "UPLOAD_SER_NO": sequenceNumber,
             "CUST": customerCode,
             "CUST_DES": customerName,
@@ -1139,7 +1139,7 @@ class EcountApiService {
       const firstBulkData = saleOrderPayload.SaleOrderList[0]?.BulkDatas;
       if (firstBulkData) {
         console.log('🔍 SaleOrder BulkDatas preview:', {
-          IO_DATE: firstBulkData.IO_DATE || "(blank; eCount current date)",
+          IO_DATE: firstBulkData.IO_DATE || "(omitted; eCount current date)",
           UPLOAD_SER_NO: firstBulkData.UPLOAD_SER_NO,
           CUST: firstBulkData.CUST,
           WH_CD: firstBulkData.WH_CD,
@@ -1254,7 +1254,7 @@ class EcountApiService {
             ? errorMessages.join('; ') 
             : 'eCount validation failed - check Web Uploader configuration';
           
-          throw new Error(`eCount validation error (${result.Data.FailCnt} items failed): ${errorSummary}. Sent IO_DATE=${payloadIoDate || '(blank; eCount current date)'}`);
+          throw new Error(`eCount validation error (${result.Data.FailCnt} items failed): ${errorSummary}. Sent IO_DATE=${payloadIoDate || '(omitted; eCount current date)'}`);
         }
         
         // Only proceed if all items succeeded
