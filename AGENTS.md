@@ -107,7 +107,7 @@ Required or commonly used server variables:
 - `ECOUNT_ORDER_SYNC_VIA_VPS`: optional boolean alternative; set to `true` to force external/VPS order sync.
 - `ECOUNT_ORDER_SYNC_WORKER_URL`: optional URL for Vercel/admin/cron to trigger the static-IP VPS order worker, for example `http://164.92.205.5:8787/sync`. Only use this in external/VPS mode.
 - `ECOUNT_ORDER_SYNC_WORKER_SECRET`: shared bearer token required by the static-IP VPS order worker trigger.
-- `ECOUNT_ORDER_SYNC_WORKER_TIMEOUT_MS`: Vercel wait time for the VPS worker trigger; default 50 seconds.
+- `ECOUNT_ORDER_SYNC_WORKER_TIMEOUT_MS`: wait time for background VPS worker trigger attempts; default 50 seconds.
 - `ECOUNT_ORDER_SYNC_WORKER_PORT`: VPS worker listen port for `npm run serve:ecount-order-sync`; default `8787`.
 - `ECOUNT_ORDER_IO_DATE_MODE`: defaults to `blank`. For SaleOrder sync, blank mode omits `IO_DATE` from the payload so ECOUNT can use its current date; this avoids `IO_DATE` `Date(Format)` validation failures caused by sending an explicit empty date value. Set to `order-date` only if ECOUNT must receive the original order date as `YYYYMMDD`.
 - `ECOUNT_ORDER_DATE_TIMEZONE`: timezone used when recording or sending generated `YYYYMMDD` order dates; defaults to `Africa/Dar_es_Salaam`.
@@ -120,7 +120,7 @@ Client-side Vite variables:
 
 ERP retry tuning:
 
-- `ORDER_SYNC_TIMEOUT_MS`: currently defined but the immediate order route now responds before ERP sync completes.
+- `ORDER_SYNC_TIMEOUT_MS`: max wait for direct-mode admin manual ERP sync feedback before the route returns `202` and lets the sync continue in the background; default 12 seconds.
 - `ORDER_SYNC_BATCH_SIZE`: default `1`.
 - `ORDER_SYNC_RETRY_BASE_DELAY_MS`: default 5 minutes.
 - `ORDER_SYNC_RETRY_MAX_DELAY_MS`: default 1 hour.
@@ -295,7 +295,7 @@ Error control:
 The current ERP sync design is durable:
 
 - New order saves first and returns success.
-- In direct mode, background sync attempts ECOUNT from the app server.
+- In direct mode, background order-created sync attempts ECOUNT from the app server; admin manual sync waits only up to `ORDER_SYNC_TIMEOUT_MS` before returning `202` while the sync continues.
 - In external/VPS mode, background handling queues the order and triggers the static-IP VPS worker when `ECOUNT_ORDER_SYNC_WORKER_URL` and `ECOUNT_ORDER_SYNC_WORKER_SECRET` are configured. The worker submits it to ECOUNT. Outside explicit external/VPS mode, admin manual sync and cron sync call ECOUNT directly from the app server.
 - Failed sync updates `erp_sync_status = failed`, stores `erp_sync_error`, increments attempts, and sets `erp_next_sync_attempt_at`.
 - Due pending/failed orders are selected by `storage.getOrdersNeedingErpSync`.
@@ -308,7 +308,7 @@ Retry entry points:
 
 Manual admin queue sync currently processes only one order per click. This is intentional to avoid Cloudflare/Vercel 502 timeouts and to respect ECOUNT save rate limits. The admin UI button says `Sync Next ERP (N)`.
 
-In external/VPS mode, app routes do not call ECOUNT directly. They clear the selected order's retry delay and leave it as `pending`. If `ECOUNT_ORDER_SYNC_WORKER_URL` and `ECOUNT_ORDER_SYNC_WORKER_SECRET` are configured, the route also calls the VPS worker trigger, which runs `scripts/ecount-order-sync.mjs` from the allowlisted static IP and returns the synced/failed result. If the worker URL or secret is not configured, responses should say the worker was not triggered instead of only saying the order was queued.
+In external/VPS mode, app routes do not call ECOUNT directly. They clear the selected order's retry delay and leave it as `pending`. Admin manual sync routes return immediately after queueing the order and schedule the VPS worker trigger in the background, so the UI is not held open while the worker runs. If the worker URL or secret is not configured, responses should say the worker was not triggered instead of only saying the order was queued. Customer order creation already uses this queue/background-trigger pattern.
 
 ## Notifications
 

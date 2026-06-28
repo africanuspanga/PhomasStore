@@ -805,6 +805,9 @@ const withTimeout = async <T,>(promise: Promise<T>, timeoutMs: number): Promise<
   }
 };
 
+const isTimeoutResult = <T,>(value: T | { timedOut: true }): value is { timedOut: true } =>
+  typeof value === "object" && value !== null && "timedOut" in value;
+
 const runBackgroundTask = (label: string, task: () => Promise<void>) => {
   const promise = new Promise<void>((resolve) => {
     const startTask = () => {
@@ -885,12 +888,7 @@ const getExternalWorkerSetupMessage = (workerResult: ExternalOrderSyncWorkerResu
     ? workerResult.message
     : `${workerResult.message}. Set ECOUNT_ORDER_SYNC_WORKER_URL and ECOUNT_ORDER_SYNC_WORKER_SECRET on Vercel, then redeploy.`;
 
-const triggerExternalOrderSyncWorker = async (
-  source: string,
-  options: { limit?: unknown; orderId?: string } = {}
-): Promise<ExternalOrderSyncWorkerResult> => {
-  const workerUrl = getExternalOrderSyncWorkerUrl();
-
+const getExternalOrderSyncWorkerReadiness = (): ExternalOrderSyncWorkerResult => {
   if (!ORDER_SYNC_WORKER_URL) {
     return {
       configured: false,
@@ -900,7 +898,7 @@ const triggerExternalOrderSyncWorker = async (
     };
   }
 
-  if (!workerUrl) {
+  if (!getExternalOrderSyncWorkerUrl()) {
     return {
       configured: true,
       triggered: false,
@@ -916,6 +914,25 @@ const triggerExternalOrderSyncWorker = async (
       ok: false,
       message: "Static-IP order sync worker secret is not configured"
     };
+  }
+
+  return {
+    configured: true,
+    triggered: false,
+    ok: true,
+    message: "Static-IP order sync worker trigger is configured"
+  };
+};
+
+const triggerExternalOrderSyncWorker = async (
+  source: string,
+  options: { limit?: unknown; orderId?: string } = {}
+): Promise<ExternalOrderSyncWorkerResult> => {
+  const workerUrl = getExternalOrderSyncWorkerUrl();
+  const readiness = getExternalOrderSyncWorkerReadiness();
+
+  if (!readiness.ok || !workerUrl || !ORDER_SYNC_WORKER_SECRET) {
+    return readiness;
   }
 
   const timeoutMs = sanitizePositiveInt(ORDER_SYNC_WORKER_TIMEOUT_MS, 50000);
@@ -1072,6 +1089,44 @@ const queueAndTriggerExternalEcountSync = async (order: Order, source: string) =
     worker: workerResult,
     queued: syncStatus === 'pending',
     message,
+  };
+};
+
+const queueAndStartExternalEcountSync = async (order: Order, source: string) => {
+  const queuedResult = await queueOrderForExternalEcountSync(order);
+  const readiness = getExternalOrderSyncWorkerReadiness();
+
+  if (!readiness.ok) {
+    return {
+      ...queuedResult,
+      worker: readiness,
+      queued: true,
+      message: `Order ${queuedResult.updatedOrder.orderNumber} queued, but static-IP VPS worker was not triggered: ${getExternalWorkerSetupMessage(readiness)}`,
+    };
+  }
+
+  runBackgroundTask(`trigger static-IP VPS eCount sync ${order.orderNumber}`, async () => {
+    const workerResult = await triggerExternalOrderSyncWorker(source, {
+      limit: 1,
+      orderId: order.id,
+    });
+
+    if (workerResult.ok) {
+      console.log(`📮 Static-IP VPS worker accepted ${order.orderNumber}: ${workerResult.message}`);
+    } else {
+      console.error(`📮 Static-IP VPS worker trigger failed for ${order.orderNumber}: ${workerResult.message}`);
+    }
+  });
+
+  return {
+    ...queuedResult,
+    worker: {
+      ...readiness,
+      triggered: true,
+      message: "Static-IP VPS worker trigger started in the background",
+    },
+    queued: true,
+    message: `Order ${queuedResult.updatedOrder.orderNumber} queued. Static-IP VPS sync started in the background; refresh orders in a few seconds for the ERP result.`,
   };
 };
 
@@ -2138,7 +2193,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
         }
 
-        const externalResult = await queueAndTriggerExternalEcountSync(order, "admin:sync-pending");
+        const externalResult = await queueAndStartExternalEcountSync(order, "admin:sync-pending");
         const syncStatus = externalResult.updatedOrder.erpSyncStatus || 'pending';
 
         return res.json({
@@ -2164,7 +2219,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      const summary = await processEcountOrderSyncQueue("admin:sync-pending", 1);
+      const summaryPromise = processEcountOrderSyncQueue("admin:sync-pending", 1);
+      const summaryResult = await withTimeout(summaryPromise, sanitizePositiveInt(ORDER_SYNC_TIMEOUT_MS, 12000));
+
+      if (isTimeoutResult(summaryResult)) {
+        summaryPromise.catch((error) => {
+          console.error("❌ Admin ERP sync queue finished with an error after timeout:", error);
+        });
+
+        return res.status(202).json({
+          success: true,
+          queued: true,
+          message: "ERP sync is still running in the background. Refresh orders in a minute for the result.",
+          data: {
+            source: "admin:sync-pending",
+            checked: 1,
+            synced: 0,
+            failed: 0,
+            queued: 1,
+            skipped: 0,
+            results: []
+          }
+        });
+      }
+
+      const summary = summaryResult;
 
       res.json({
         success: true,
@@ -2204,7 +2283,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       if (isExternalOrderSyncEnabled()) {
-        const externalResult = await queueAndTriggerExternalEcountSync(order, "admin:single-order-sync");
+        const externalResult = await queueAndStartExternalEcountSync(order, "admin:single-order-sync");
 
         return res.json({
           success: true,
@@ -2220,7 +2299,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      const syncResult = await syncOrderToEcount(order);
+      const syncPromise = syncOrderToEcount(order);
+      const syncResult = await withTimeout(syncPromise, sanitizePositiveInt(ORDER_SYNC_TIMEOUT_MS, 12000));
+
+      if (isTimeoutResult(syncResult)) {
+        syncPromise.catch(async (error) => {
+          console.error(`❌ Admin ERP sync failed after timeout for order ${order.id}:`, error);
+          try {
+            await markOrderEcountSyncFailed(order.id, error);
+          } catch (updateError) {
+            console.error('Failed to update order error status after timeout:', updateError);
+          }
+        });
+
+        const updatedOrder = await storage.getOrderById(order.id);
+
+        return res.status(202).json({
+          success: true,
+          queued: true,
+          message: `Order ${order.orderNumber} ERP sync is still running in the background. Refresh orders in a minute for the result.`,
+          order: updatedOrder || order,
+          erp: {
+            docNumber: updatedOrder?.erpDocNumber || order.erpDocNumber || null,
+            ioDate: updatedOrder?.erpIoDate || order.erpIoDate || null,
+            syncStatus: updatedOrder?.erpSyncStatus || order.erpSyncStatus || 'pending'
+          }
+        });
+      }
 
       res.json({
         success: true,

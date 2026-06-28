@@ -33,6 +33,8 @@ interface AdminPanelUser extends Omit<User, 'password'> {
 }
 
 const ORDER_STATUS_OPTIONS = ["processing", "shipped", "delivered", "completed", "cancelled"] as const;
+const ERP_SYNC_REQUEST_TIMEOUT_MS = 65000;
+const ERP_SYNC_TIMEOUT_MESSAGE = "ERP sync is taking too long, so the button was released. The order may still be queued; refresh orders in a minute.";
 
 // Orders Management Component - shows all orders with customer attribution
 function OrdersManagement() {
@@ -44,6 +46,15 @@ function OrdersManagement() {
     queryKey: ["/api/admin/orders"],
     queryFn: () => ecountService.getAllOrders(),
   });
+
+  const refreshOrders = () => {
+    queryClient.invalidateQueries({ queryKey: ["/api/admin/orders"] });
+  };
+
+  const scheduleQueuedSyncRefresh = () => {
+    window.setTimeout(refreshOrders, 8000);
+    window.setTimeout(refreshOrders, 25000);
+  };
 
   const deleteOrderMutation = useMutation({
     mutationFn: async (orderId: string) => {
@@ -92,15 +103,21 @@ function OrdersManagement() {
 
   const syncOrderMutation = useMutation({
     mutationFn: async (orderId: string) => {
-      const res = await apiRequest("POST", `/api/admin/orders/${orderId}/sync`, {});
+      const res = await apiRequest("POST", `/api/admin/orders/${orderId}/sync`, {}, {
+        timeoutMs: ERP_SYNC_REQUEST_TIMEOUT_MS,
+        timeoutMessage: ERP_SYNC_TIMEOUT_MESSAGE,
+      });
       return await res.json() as { success: boolean; order: Order; message?: string; queued?: boolean };
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/orders"] });
+      refreshOrders();
       setSelectedOrder((currentOrder) =>
         currentOrder?.id === data.order.id ? data.order : currentOrder
       );
       const erpStatus = data.order.erpSyncStatus || "pending";
+      if (data.queued || erpStatus === "pending") {
+        scheduleQueuedSyncRefresh();
+      }
       toast({
         title: erpStatus === "failed"
           ? "ERP Sync Failed"
@@ -125,7 +142,10 @@ function OrdersManagement() {
 
   const syncPendingOrdersMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/admin/orders/sync-pending", { limit: 1 });
+      const res = await apiRequest("POST", "/api/admin/orders/sync-pending", { limit: 1 }, {
+        timeoutMs: ERP_SYNC_REQUEST_TIMEOUT_MS,
+        timeoutMessage: ERP_SYNC_TIMEOUT_MESSAGE,
+      });
       return await res.json() as {
         success: boolean;
         message: string;
@@ -135,9 +155,12 @@ function OrdersManagement() {
       };
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/orders"] });
+      refreshOrders();
       const failed = (data.data?.failed || 0) > 0 || data.order?.erpSyncStatus === "failed";
       const synced = (data.data?.synced || 0) > 0 || data.order?.erpSyncStatus === "synced";
+      if (data.queued || data.order?.erpSyncStatus === "pending") {
+        scheduleQueuedSyncRefresh();
+      }
       toast({
         title: failed
           ? "ERP Sync Failed"

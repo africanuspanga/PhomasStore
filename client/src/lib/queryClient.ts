@@ -67,12 +67,22 @@ async function throwIfResNotOk(res: Response) {
   }
 }
 
+type ApiRequestOptions = {
+  timeoutMs?: number;
+  timeoutMessage?: string;
+  signal?: AbortSignal;
+};
+
 export async function apiRequest(
   method: string,
   url: string,
   data?: unknown | undefined,
+  options: ApiRequestOptions = {},
 ): Promise<Response> {
   const headers: Record<string, string> = {};
+  const controller = options.timeoutMs || options.signal ? new AbortController() : null;
+  let timeout: ReturnType<typeof setTimeout> | null = null;
+  const abortFromCaller = () => controller?.abort();
   
   if (data && !(data instanceof FormData)) {
     headers["Content-Type"] = "application/json";
@@ -83,16 +93,45 @@ export async function apiRequest(
   if (token) {
     headers["Authorization"] = `Bearer ${token}`;
   }
-  
-  const res = await fetch(url, {
-    method,
-    headers,
-    body: data instanceof FormData ? data : (data ? JSON.stringify(data) : undefined),
-    credentials: "include",
-  });
 
-  await throwIfResNotOk(res);
-  return res;
+  if (controller && options.signal) {
+    if (options.signal.aborted) {
+      controller.abort();
+    } else {
+      options.signal.addEventListener("abort", abortFromCaller, { once: true });
+    }
+  }
+
+  if (controller && options.timeoutMs) {
+    timeout = setTimeout(() => controller.abort(), options.timeoutMs);
+  }
+
+  try {
+    const res = await fetch(url, {
+      method,
+      headers,
+      body: data instanceof FormData ? data : (data ? JSON.stringify(data) : undefined),
+      credentials: "include",
+      signal: controller?.signal,
+    });
+
+    await throwIfResNotOk(res);
+    return res;
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new Error(options.timeoutMessage || "The request timed out. Please try again.");
+    }
+
+    throw error;
+  } finally {
+    if (timeout) {
+      clearTimeout(timeout);
+    }
+
+    if (controller && options.signal) {
+      options.signal.removeEventListener("abort", abortFromCaller);
+    }
+  }
 }
 
 type UnauthorizedBehavior = "returnNull" | "throw";
