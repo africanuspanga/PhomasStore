@@ -129,6 +129,28 @@ function runOrderSync({ limit, orderId }) {
   });
 }
 
+function summarizeRunResult(result) {
+  return result.summary || {
+    ok: true,
+    checked: 0,
+    synced: 0,
+    failed: 0,
+    skipped: 0,
+    results: [],
+  };
+}
+
+function logRunSummary(prefix, summary) {
+  const results = Array.isArray(summary.results) ? summary.results : [];
+  const resultText = results
+    .map((result) => `${result.orderNumber || result.orderId || "unknown"}:${result.status || "unknown"}`)
+    .join(", ");
+
+  console.log(
+    `${prefix} checked=${summary.checked || 0} synced=${summary.synced || 0} failed=${summary.failed || 0} skipped=${summary.skipped || 0}${resultText ? ` results=[${resultText}]` : ""}`
+  );
+}
+
 if (!workerSecret) {
   console.error("Missing ECOUNT_ORDER_SYNC_WORKER_SECRET. Refusing to start order sync worker HTTP server.");
   process.exit(1);
@@ -136,6 +158,7 @@ if (!workerSecret) {
 
 const server = createServer(async (req, res) => {
   const requestUrl = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
+  let keepActiveRunAfterResponse = false;
 
   if (req.method === "GET" && requestUrl.pathname === "/health") {
     sendJson(res, 200, {
@@ -173,17 +196,48 @@ const server = createServer(async (req, res) => {
     const body = await readJsonBody(req);
     const limit = Math.min(parsePositiveInt(body.limit, 1), 10);
     const orderId = String(body.orderId || "").trim();
+    const source = String(body.source || "unknown").trim();
+    const waitForResult = body.waitForResult !== false && body.wait !== false && body.async !== true;
 
-    activeRun = runOrderSync({ limit, orderId });
-    const result = await activeRun;
-    const summary = result.summary || {
-      ok: true,
-      checked: 0,
-      synced: 0,
-      failed: 0,
-      skipped: 0,
-      results: [],
-    };
+    console.log(`[sync] accepted source=${source} orderId=${orderId || "(next due)"} limit=${limit} waitForResult=${waitForResult}`);
+
+    const run = runOrderSync({ limit, orderId });
+    activeRun = run;
+
+    if (!waitForResult) {
+      keepActiveRunAfterResponse = true;
+      run
+        .then((result) => {
+          logRunSummary("[sync] completed", summarizeRunResult(result));
+        })
+        .catch((error) => {
+          console.error(`[sync] failed source=${source} orderId=${orderId || "(next due)"}:`, error instanceof Error ? error.message : error);
+        })
+        .finally(() => {
+          if (activeRun === run) {
+            activeRun = null;
+          }
+        });
+
+      sendJson(res, 202, {
+        ok: true,
+        accepted: true,
+        message: "Order sync worker accepted the request and is running it in the background",
+        data: {
+          checked: 0,
+          synced: 0,
+          failed: 0,
+          skipped: 0,
+          queued: 1,
+          results: orderId ? [{ orderId, status: "queued" }] : [],
+        },
+      });
+      return;
+    }
+
+    const result = await run;
+    const summary = summarizeRunResult(result);
+    logRunSummary("[sync] completed", summary);
 
     sendJson(res, 200, {
       ok: true,
@@ -191,6 +245,7 @@ const server = createServer(async (req, res) => {
       data: summary,
     });
   } catch (error) {
+    console.error("[sync] request failed:", error instanceof Error ? error.message : error);
     sendJson(res, 502, {
       ok: false,
       message: "Order sync worker failed",
@@ -199,7 +254,9 @@ const server = createServer(async (req, res) => {
       stderr: error?.stderr ? String(error.stderr).slice(-1200) : undefined,
     });
   } finally {
-    activeRun = null;
+    if (!keepActiveRunAfterResponse && activeRun) {
+      activeRun = null;
+    }
   }
 });
 

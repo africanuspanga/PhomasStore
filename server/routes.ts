@@ -926,7 +926,7 @@ const getExternalOrderSyncWorkerReadiness = (): ExternalOrderSyncWorkerResult =>
 
 const triggerExternalOrderSyncWorker = async (
   source: string,
-  options: { limit?: unknown; orderId?: string } = {}
+  options: { limit?: unknown; orderId?: string; waitForResult?: boolean } = {}
 ): Promise<ExternalOrderSyncWorkerResult> => {
   const workerUrl = getExternalOrderSyncWorkerUrl();
   const readiness = getExternalOrderSyncWorkerReadiness();
@@ -951,6 +951,7 @@ const triggerExternalOrderSyncWorker = async (
         source,
         limit: getOrderSyncBatchSize(options.limit ?? 1),
         orderId: options.orderId,
+        waitForResult: options.waitForResult !== false,
       }),
       signal: controller.signal,
     });
@@ -1105,28 +1106,26 @@ const queueAndStartExternalEcountSync = async (order: Order, source: string) => 
     };
   }
 
-  runBackgroundTask(`trigger static-IP VPS eCount sync ${order.orderNumber}`, async () => {
-    const workerResult = await triggerExternalOrderSyncWorker(source, {
-      limit: 1,
-      orderId: order.id,
-    });
-
-    if (workerResult.ok) {
-      console.log(`📮 Static-IP VPS worker accepted ${order.orderNumber}: ${workerResult.message}`);
-    } else {
-      console.error(`📮 Static-IP VPS worker trigger failed for ${order.orderNumber}: ${workerResult.message}`);
-    }
+  const workerResult = await triggerExternalOrderSyncWorker(source, {
+    limit: 1,
+    orderId: order.id,
+    waitForResult: false,
   });
+
+  let message = `Order ${queuedResult.updatedOrder.orderNumber} queued.`;
+  if (!workerResult.triggered) {
+    message = `Order ${queuedResult.updatedOrder.orderNumber} queued, but static-IP VPS worker was not triggered: ${getExternalWorkerSetupMessage(workerResult)}`;
+  } else if (workerResult.ok) {
+    message = `Order ${queuedResult.updatedOrder.orderNumber} queued and accepted by the static-IP VPS worker. Refresh orders in a few seconds for the ERP result.`;
+  } else {
+    message = `Order ${queuedResult.updatedOrder.orderNumber} queued, but static-IP VPS worker did not accept the trigger: ${workerResult.message}`;
+  }
 
   return {
     ...queuedResult,
-    worker: {
-      ...readiness,
-      triggered: true,
-      message: "Static-IP VPS worker trigger started in the background",
-    },
+    worker: workerResult,
     queued: true,
-    message: `Order ${queuedResult.updatedOrder.orderNumber} queued. Static-IP VPS sync started in the background; refresh orders in a few seconds for the ERP result.`,
+    message,
   };
 };
 

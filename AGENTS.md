@@ -308,7 +308,7 @@ Retry entry points:
 
 Manual admin queue sync currently processes only one order per click. This is intentional to avoid Cloudflare/Vercel 502 timeouts and to respect ECOUNT save rate limits. The admin UI button says `Sync Next ERP (N)`.
 
-In external/VPS mode, app routes do not call ECOUNT directly. They clear the selected order's retry delay and leave it as `pending`. Admin manual sync routes return immediately after queueing the order and schedule the VPS worker trigger in the background, so the UI is not held open while the worker runs. If the worker URL or secret is not configured, responses should say the worker was not triggered instead of only saying the order was queued. Customer order creation already uses this queue/background-trigger pattern.
+In external/VPS mode, app routes do not call ECOUNT directly. They clear the selected order's retry delay and leave it as `pending`. Admin manual sync routes return after the static-IP VPS worker accepts the trigger, but they do not wait for the full ECOUNT sync to finish. The VPS worker supports async trigger mode and logs `[sync] accepted`, `[sync] completed`, or `[sync] failed` lines so PM2 logs can prove whether Vercel reached the VPS. If the worker URL or secret is not configured, responses should say the worker was not triggered instead of only saying the order was queued. Customer order creation already uses this queue/background-trigger pattern.
 
 ## Notifications
 
