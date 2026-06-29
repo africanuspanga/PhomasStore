@@ -13,6 +13,9 @@ interface ProductGridProps {
   isLoading?: boolean;
 }
 
+const catalogGridClass =
+  "grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-4 min-[1800px]:grid-cols-7";
+
 export function ProductGrid({ products, isLoading }: ProductGridProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
@@ -52,22 +55,22 @@ export function ProductGrid({ products, isLoading }: ProductGridProps) {
 
   if (isLoading) {
     return (
-      <div className="p-6">
-        <div className="mb-8">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+      <div className="p-4 xl:p-5">
+        <div className="mb-4">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div className="flex-1 max-w-md h-10 bg-gray-200 rounded-lg animate-pulse" />
-            <div className="flex items-center space-x-4">
+            <div className="flex items-center gap-3">
               <div className="w-24 h-10 bg-gray-200 rounded-lg animate-pulse" />
               <div className="w-32 h-10 bg-gray-200 rounded-lg animate-pulse" />
             </div>
           </div>
         </div>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {Array.from({ length: 8 }).map((_, i) => (
-            <div key={i} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-              <div className="w-full h-48 bg-gray-200 animate-pulse" />
-              <div className="p-4 space-y-3">
+        <div className={catalogGridClass}>
+          {Array.from({ length: 14 }).map((_, i) => (
+            <div key={i} className="overflow-hidden rounded-lg border border-gray-200 bg-white">
+              <div className="w-full h-24 bg-gray-200 animate-pulse" />
+              <div className="p-3 space-y-2">
                 <div className="h-4 bg-gray-200 rounded animate-pulse" />
                 <div className="h-3 bg-gray-200 rounded animate-pulse w-3/4" />
                 <div className="h-3 bg-gray-200 rounded animate-pulse w-1/2" />
@@ -85,15 +88,15 @@ export function ProductGrid({ products, isLoading }: ProductGridProps) {
   }
 
   return (
-    <div className="p-6">
+    <div className="p-4 xl:p-5">
       {/* Search and Controls */}
-      <div className="mb-8">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+      <div className="mb-4">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <SearchBar onSearch={setSearchQuery} />
           
-          <div className="flex items-center space-x-4">
+          <div className="flex flex-wrap items-center gap-3">
             {/* View Mode Toggle */}
-            <div className="flex items-center space-x-2 bg-white border border-gray-300 rounded-lg p-1">
+            <div className="flex items-center gap-1 rounded-lg border border-gray-300 bg-white p-1">
               <Button
                 variant={viewMode === "grid" ? "default" : "ghost"}
                 size="sm"
@@ -118,7 +121,7 @@ export function ProductGrid({ products, isLoading }: ProductGridProps) {
             
             {/* Category Filter */}
             <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-              <SelectTrigger className="w-48">
+              <SelectTrigger className="w-44">
                 <SelectValue placeholder="All Categories" />
               </SelectTrigger>
               <SelectContent>
@@ -143,8 +146,8 @@ export function ProductGrid({ products, isLoading }: ProductGridProps) {
       ) : (
         <div className={cn(
           viewMode === "grid" 
-            ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
-            : "space-y-4"
+            ? catalogGridClass
+            : "space-y-3"
         )}>
           {filteredProducts.map(product => (
             <ProductCard

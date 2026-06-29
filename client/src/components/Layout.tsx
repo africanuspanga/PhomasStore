@@ -3,11 +3,12 @@ import { useCart } from "@/contexts/CartContext";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ShoppingCart, LogOut, Menu } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { Sidebar } from "./Sidebar";
 import logoImage from "@assets/Screenshot 2025-07-31 at 21.36.28_1753988684264.png";
 import { CustomerAssistance } from "./CustomerAssistance";
+import { cn } from "@/lib/utils";
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -18,6 +19,20 @@ export function Layout({ children }: LayoutProps) {
   const { itemCount } = useCart();
   const [location] = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
+  useEffect(() => {
+    const savedPreference = localStorage.getItem("phomas_sidebar_collapsed");
+    setSidebarCollapsed(savedPreference === "true");
+  }, []);
+
+  const toggleSidebarCollapsed = () => {
+    setSidebarCollapsed((current) => {
+      const next = !current;
+      localStorage.setItem("phomas_sidebar_collapsed", String(next));
+      return next;
+    });
+  };
 
   const handleLogout = () => {
     logout();
@@ -76,10 +91,20 @@ export function Layout({ children }: LayoutProps) {
 
       <div className="flex">
         {/* Sidebar */}
-        <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+        <Sidebar
+          open={sidebarOpen}
+          onClose={() => setSidebarOpen(false)}
+          collapsed={sidebarCollapsed}
+          onToggleCollapse={toggleSidebarCollapsed}
+        />
 
         {/* Main Content */}
-        <main className="flex-1 md:ml-64 mt-0">
+        <main
+          className={cn(
+            "mt-0 flex-1 transition-[margin] duration-200 ease-in-out",
+            sidebarCollapsed ? "md:ml-[4.5rem]" : "md:ml-64"
+          )}
+        >
           {!isAdmin && <CustomerAssistance />}
           {children}
         </main>

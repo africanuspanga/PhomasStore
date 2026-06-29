@@ -14,7 +14,7 @@ export function CustomerAssistance() {
     <>
       {showTopAssistance && (
         <div className="sticky top-16 z-30 border-b border-emerald-100 bg-white">
-          <div className="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
+          <div className="mx-auto flex max-w-7xl flex-col gap-2 px-4 py-2 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
             <div>
               <p className="text-sm font-semibold text-gray-900">Shopping assistance</p>
               <p className="text-xs text-gray-600">Phomas Diagnostics support is available while you shop.</p>
