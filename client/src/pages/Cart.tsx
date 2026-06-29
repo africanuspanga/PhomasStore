@@ -1,14 +1,15 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useCart } from "@/contexts/CartContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { ecountService } from "@/services/ecountService";
-import { ShoppingCart, ArrowLeft, Plus, Minus, Trash2, Send, AlertTriangle, Snowflake } from "lucide-react";
+import { ShoppingCart, ArrowLeft, Plus, Minus, Trash2, Send, AlertTriangle, Snowflake, History } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
@@ -24,6 +25,7 @@ import type {
   DeliveryArea,
   DeliveryOption,
   IcePackSize,
+  Order,
   OrderItem,
   PaymentMethod,
   ProductWithInventory,
@@ -44,7 +46,21 @@ const getDeliveryOptionLabel = (deliveryOption: DeliveryOption) =>
   deliveryOption === "delivery" ? "Delivery" : "Pickup";
 
 const formatTzs = (value: number) => Math.round(value).toLocaleString();
+const CHECKOUT_REQUEST_TIMEOUT_MS = 20000;
+const CHECKOUT_TIMEOUT_MESSAGE = "Checkout confirmation is taking longer than expected.";
+const CHECKOUT_RECOVERY_DELAYS_MS = [1500, 5000, 10000];
+const CHECKOUT_RECOVERY_LOOKBACK_MS = 2 * 60 * 1000;
 type IcePackSelection = "" | "yes" | "no";
+type CheckoutRecoveryState = {
+  status: "checking" | "unconfirmed";
+  title: string;
+  message: string;
+};
+type CheckoutAttemptSnapshot = {
+  startedAt: number;
+  items: OrderItem[];
+  total: string;
+};
 
 export default function Cart() {
   const { items, updateQuantity, removeItem, clearCart, subtotal } = useCart();
@@ -62,12 +78,15 @@ export default function Cart() {
   const [icePackSize, setIcePackSize] = useState<IcePackSize>("small");
   const [icePackQuantity, setIcePackQuantity] = useState(1);
   const [deliveryAddressInput, setDeliveryAddressInput] = useState("");
+  const [checkoutRecovery, setCheckoutRecovery] = useState<CheckoutRecoveryState | null>(null);
+  const checkoutAttemptRef = useRef<CheckoutAttemptSnapshot | null>(null);
   const tax = 0;
 
   const accountCustomerName = user?.name?.trim() || user?.companyName?.trim() || "";
   const accountCustomerCompany = user?.companyName?.trim() || user?.name?.trim() || "";
   const accountCustomerEmail = user?.email?.trim() || "";
   const accountCustomerPhone = user?.phone?.trim() || "";
+  const authUserId = user?.userId || user?.id;
   const deliveryAddress = deliveryAddressInput.trim();
   const icePackRequired = icePackSelection === "yes";
   const needsDeliveryAddress = deliveryOption === "delivery";
@@ -78,6 +97,7 @@ export default function Cart() {
   const isMissingCustomerPhone = !accountCustomerPhone;
   const isMissingDeliveryAddress = needsDeliveryAddress && !deliveryAddress;
   const isMissingDeliveryArea = needsDeliveryAddress && !deliveryArea;
+  const isCheckingTimedOutOrder = checkoutRecovery?.status === "checking";
   const requiresOnlinePaymentConfirmation = paymentMethod === "online_now";
   const transportCost = getTransportCost(deliveryOption, deliveryArea || undefined);
   const normalizedIcePackQuantity = Math.max(1, icePackQuantity || 1);
@@ -126,6 +146,116 @@ export default function Cart() {
     updateQuantity(productId, newQuantity);
   };
 
+  const getCurrentOrderItems = (): OrderItem[] =>
+    items.map((item) => ({
+      productId: item.productId,
+      name: item.name,
+      price: item.price,
+      quantity: item.quantity,
+      referenceNumber: item.referenceNumber,
+    }));
+
+  const normalizeOrderTotal = (value: string | number | null | undefined) =>
+    (Number.parseFloat(String(value ?? "0")) || 0).toFixed(2);
+
+  const parseOrderItems = (value: string): OrderItem[] => {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  };
+
+  const orderMatchesAttempt = (order: Order, attempt: CheckoutAttemptSnapshot) => {
+    const orderCreatedAt = order.createdAt ? new Date(order.createdAt).getTime() : 0;
+    const isTooOld =
+      Number.isFinite(orderCreatedAt) &&
+      orderCreatedAt > 0 &&
+      orderCreatedAt < attempt.startedAt - CHECKOUT_RECOVERY_LOOKBACK_MS;
+
+    if (isTooOld || normalizeOrderTotal(order.total) !== attempt.total) {
+      return false;
+    }
+
+    const orderItems = parseOrderItems(order.items);
+    if (orderItems.length !== attempt.items.length) {
+      return false;
+    }
+
+    return attempt.items.every((attemptItem) =>
+      orderItems.some(
+        (orderItem) =>
+          orderItem.productId === attemptItem.productId &&
+          Number(orderItem.quantity) === Number(attemptItem.quantity)
+      )
+    );
+  };
+
+  const wait = (delayMs: number) => new Promise((resolve) => window.setTimeout(resolve, delayMs));
+
+  const completeCheckout = (order: Order) => {
+    setOrderNumber(order.orderNumber);
+    setCheckoutRecovery(null);
+    setShowSuccessModal(true);
+    clearCart();
+    queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+    if (authUserId) {
+      queryClient.invalidateQueries({ queryKey: ["/api/orders/user", authUserId] });
+    }
+  };
+
+  const recoverTimedOutOrder = async () => {
+    const attempt = checkoutAttemptRef.current;
+
+    if (!attempt || !authUserId) {
+      setCheckoutRecovery({
+        status: "unconfirmed",
+        title: "Order status not confirmed",
+        message: "The order may have been received. Check Order History before submitting again.",
+      });
+      return;
+    }
+
+    let lastError: unknown = null;
+
+    for (const delayMs of CHECKOUT_RECOVERY_DELAYS_MS) {
+      await wait(delayMs);
+
+      try {
+        const orders = await ecountService.getOrdersByUserId(authUserId);
+        const matchingOrder = [...orders]
+          .sort(
+            (a, b) =>
+              new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+          )
+          .find((order) => orderMatchesAttempt(order, attempt));
+
+        if (matchingOrder) {
+          completeCheckout(matchingOrder);
+          toast({
+            title: "Order received",
+            description: `Order ${matchingOrder.orderNumber} was confirmed after a connection delay.`,
+          });
+          return;
+        }
+      } catch (error) {
+        lastError = error;
+      }
+    }
+
+    setCheckoutRecovery({
+      status: "unconfirmed",
+      title: "Order status not confirmed",
+      message: lastError
+        ? "Order History could not be loaded. Check Order History before submitting again."
+        : "No matching order appeared yet. Check Order History before submitting again.",
+    });
+  };
+
+  const isCheckoutTimeoutError = (message: string) =>
+    message === CHECKOUT_TIMEOUT_MESSAGE || message.includes("request timed out");
+
   const sendToEcountMutation = useMutation({
     mutationFn: async () => {
       if (!paymentMethod || !deliveryOption) {
@@ -133,15 +263,14 @@ export default function Cart() {
       }
 
       // Allow guest checkout - userId will be set by backend
-      const userId = user?.userId || user?.id || "guest-user";
+      const userId = authUserId || "guest-user";
 
-      const orderItems: OrderItem[] = items.map((item) => ({
-        productId: item.productId,
-        name: item.name,
-        price: item.price,
-        quantity: item.quantity,
-        referenceNumber: item.referenceNumber,
-      }));
+      const orderItems = getCurrentOrderItems();
+      checkoutAttemptRef.current = {
+        startedAt: Date.now(),
+        items: orderItems,
+        total: total.toFixed(2),
+      };
 
       return ecountService.placeOrder({
         userId,
@@ -163,19 +292,32 @@ export default function Cart() {
         customerPhone: accountCustomerPhone,
         customerCompany: accountCustomerCompany,
         customerAddress: deliveryOption === "delivery" ? deliveryAddress : "",
+      }, {
+        timeoutMs: CHECKOUT_REQUEST_TIMEOUT_MS,
+        timeoutMessage: CHECKOUT_TIMEOUT_MESSAGE,
       });
     },
     onSuccess: (data) => {
-      setOrderNumber(data.order.orderNumber);
-      setShowSuccessModal(true);
-      clearCart();
-      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      completeCheckout(data.order);
     },
     onError: (error) => {
       console.error("Order submission error:", error);
       const errorMessage = error instanceof Error ? error.message : String(error);
 
-      if (errorMessage.includes("412") || errorMessage.includes("rate limit")) {
+      if (isCheckoutTimeoutError(errorMessage)) {
+        setCheckoutRecovery({
+          status: "checking",
+          title: "Checking order status",
+          message: "The confirmation took too long, so we are checking whether the order was received.",
+        });
+        toast({
+          title: "Checking order status",
+          description: "Please wait while we confirm whether your order was received.",
+          duration: 10000,
+        });
+        void recoverTimedOutOrder();
+      } else if (errorMessage.includes("412") || errorMessage.includes("rate limit")) {
+        setCheckoutRecovery(null);
         toast({
           title: "System Busy",
           description: "eCount system is rate limited. Please wait 30 seconds and try again.",
@@ -183,6 +325,7 @@ export default function Cart() {
           duration: 10000,
         });
       } else if (errorMessage.includes("502")) {
+        setCheckoutRecovery(null);
         toast({
           title: "Order Saved Locally",
           description: "Your order is saved but couldn't sync to eCount right now. It will be retried automatically.",
@@ -190,6 +333,7 @@ export default function Cart() {
           duration: 10000,
         });
       } else {
+        setCheckoutRecovery(null);
         toast({
           title: "Order failed",
           description: errorMessage || "There was an error processing your order. Please try again.",
@@ -229,6 +373,10 @@ export default function Cart() {
   };
 
   const handleSendToEcount = () => {
+    if (isCheckingTimedOutOrder) {
+      return;
+    }
+
     if (items.length === 0) {
       toast({
         title: "Cart is empty",
@@ -292,6 +440,7 @@ export default function Cart() {
       return;
     }
 
+    setCheckoutRecovery(null);
     sendToEcountMutation.mutate();
   };
 
@@ -835,10 +984,33 @@ export default function Cart() {
                   </p>
                 )}
 
+                {checkoutRecovery && (
+                  <Alert className="mb-4 border-amber-200 bg-amber-50 text-amber-900">
+                    <AlertTriangle className="h-4 w-4 text-amber-700" />
+                    <AlertTitle>{checkoutRecovery.title}</AlertTitle>
+                    <AlertDescription>
+                      <p>{checkoutRecovery.message}</p>
+                      {checkoutRecovery.status === "unconfirmed" && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setLocation("/orders")}
+                          className="mt-3 border-amber-300 bg-white text-amber-900 hover:bg-amber-100"
+                        >
+                          <History className="h-4 w-4" />
+                          Check Order History
+                        </Button>
+                      )}
+                    </AlertDescription>
+                  </Alert>
+                )}
+
                 <Button
                   onClick={handleSendToEcount}
                   disabled={
                     sendToEcountMutation.isPending ||
+                    isCheckingTimedOutOrder ||
                     isMissingCustomerName ||
                     isMissingCustomerEmail ||
                     isMissingCustomerPhone ||
@@ -851,7 +1023,9 @@ export default function Cart() {
                   className="w-full bg-phomas-green hover:bg-phomas-green/90 py-4 text-lg font-semibold"
                   data-testid="button-place-order"
                 >
-                  {sendToEcountMutation.isPending ? (
+                  {isCheckingTimedOutOrder ? (
+                    "Checking order..."
+                  ) : sendToEcountMutation.isPending ? (
                     "Processing..."
                   ) : (
                     <>

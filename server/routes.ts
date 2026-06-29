@@ -503,9 +503,31 @@ async function testInventoryWithKey(params: {
   }
 }
 
+const isCheckoutOrderRequest = (req: Request) =>
+  req.method === "POST" && req.path === "/api/orders";
+
+const getCheckoutRequestId = (req: Request) => {
+  if (!(req as any).checkoutRequestId) {
+    (req as any).checkoutRequestId = randomUUID().slice(0, 8);
+  }
+
+  return (req as any).checkoutRequestId;
+};
+
+const logCheckoutStage = (req: Request, stage: string, detail?: string) => {
+  if (!isCheckoutOrderRequest(req)) {
+    return;
+  }
+
+  const suffix = detail ? ` ${detail}` : "";
+  console.log(`[checkout:${getCheckoutRequestId(req)}] ${stage}${suffix}`);
+};
+
 // Authentication middleware - extracts user ID from Supabase token
 const requireAuth = async (req: Request, res: Response, next: NextFunction) => {
   const authHeader = req.headers.authorization;
+
+  logCheckoutStage(req, "auth:start", authHeader?.startsWith("Bearer ") ? "token=present" : "token=missing");
   
   // Try to get user ID from Supabase token if provided
   if (authHeader && authHeader.startsWith('Bearer ')) {
@@ -517,10 +539,12 @@ const requireAuth = async (req: Request, res: Response, next: NextFunction) => {
         (req as any).userEmail = user.email || 'unknown@phomas.com';
         (req as any).userMetadata = user.user_metadata || {};
         (req as any).userRole = user.user_metadata?.user_type === 'admin' ? 'admin' : 'client';
+        logCheckoutStage(req, "auth:success", `userId=${user.id}`);
         console.log(`🔐 Auth: User ${user.email} (${user.id}) authenticated`);
         return next();
       }
     } catch (err) {
+      logCheckoutStage(req, "auth:error", err instanceof Error ? err.message : "unknown");
       console.log('🔐 Auth: Supabase token validation failed, using guest');
     }
   }
@@ -530,6 +554,7 @@ const requireAuth = async (req: Request, res: Response, next: NextFunction) => {
   (req as any).userEmail = 'guest@phomas.com';
   (req as any).userMetadata = {};
   (req as any).userRole = 'client';
+  logCheckoutStage(req, "auth:fallback", "guest-user");
   next();
 };
 
@@ -1897,6 +1922,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Order routes - now with CORRECTED eCount sales integration
   app.post("/api/orders", requireAuth, enforceSaveRateLimit, async (req, res) => {
+    const checkoutStartedAt = Date.now();
+    logCheckoutStage(req, "route:start");
+    res.once("finish", () => {
+      logCheckoutStage(
+        req,
+        "response:finished",
+        `status=${res.statusCode} durationMs=${Date.now() - checkoutStartedAt}`
+      );
+    });
+
     try {
       const authenticatedUserId = (req as any).userId || req.body.userId || 'guest-user';
       const requestedDeliveryOption = req.body.deliveryOption || 'pickup';
@@ -1949,6 +1984,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const rawOrderItems =
         typeof req.body.items === "string" ? JSON.parse(req.body.items || "[]") : req.body.items || [];
       const orderItems = orderItemsSchema.parse(rawOrderItems);
+      logCheckoutStage(req, "items:validated", `count=${orderItems.length}`);
       const subtotal = sumOrderItemsSubtotal(orderItems);
       const tax = 0;
       const transportCost = getTransportCost(requestedDeliveryOption, deliveryArea);
@@ -2000,7 +2036,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const orderData = insertOrderSchema.parse(orderDataWithCustomer);
       
       // Create order in local storage first
+      const saveStartedAt = Date.now();
+      logCheckoutStage(req, "save:start", `userId=${authenticatedUserId}`);
       const order = await storage.createOrder(orderData);
+      logCheckoutStage(
+        req,
+        "save:success",
+        `order=${order.orderNumber} durationMs=${Date.now() - saveStartedAt}`
+      );
 
       res.status(201).json({
         success: true,
@@ -2011,6 +2054,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           syncStatus: order.erpSyncStatus || 'pending'
         }
       });
+      logCheckoutStage(
+        req,
+        "response:sent",
+        `order=${order.orderNumber} durationMs=${Date.now() - checkoutStartedAt}`
+      );
 
       runBackgroundTask(`order notification ${order.orderNumber}`, () => sendOrderNotificationSafely(order));
 
@@ -2031,7 +2079,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         });
       }
+      logCheckoutStage(
+        req,
+        "background:scheduled",
+        `order=${order.orderNumber} mode=${isExternalOrderSyncEnabled() ? "external" : "direct"}`
+      );
     } catch (error) {
+      logCheckoutStage(
+        req,
+        "route:error",
+        error instanceof Error ? error.message : "unknown"
+      );
       console.error('❌ Failed to create order:', error);
       res.status(400).json({ 
         message: "Failed to create order", 

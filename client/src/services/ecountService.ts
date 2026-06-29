@@ -1,4 +1,4 @@
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, type ApiRequestOptions } from "@/lib/queryClient";
 import type { ProductWithInventory, InsertUser, LoginUser, InsertOrder, Order, User } from "@shared/schema";
 
 // This service layer abstracts API calls for easy eCOUNT integration
@@ -33,8 +33,11 @@ export const ecountService = {
   },
 
   // Order operations
-  async placeOrder(orderData: InsertOrder): Promise<{ success: boolean; order: Order }> {
-    const response = await apiRequest("POST", "/api/orders", orderData);
+  async placeOrder(
+    orderData: InsertOrder,
+    options?: ApiRequestOptions,
+  ): Promise<{ success: boolean; order: Order }> {
+    const response = await apiRequest("POST", "/api/orders", orderData, options);
     return await response.json();
   },
 

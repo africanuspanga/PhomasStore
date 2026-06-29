@@ -67,7 +67,7 @@ async function throwIfResNotOk(res: Response) {
   }
 }
 
-type ApiRequestOptions = {
+export type ApiRequestOptions = {
   timeoutMs?: number;
   timeoutMessage?: string;
   signal?: AbortSignal;
