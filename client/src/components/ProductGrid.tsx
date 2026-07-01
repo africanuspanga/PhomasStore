@@ -14,7 +14,7 @@ interface ProductGridProps {
 }
 
 const catalogGridClass =
-  "grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-4 min-[1800px]:grid-cols-7";
+  "grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-3";
 
 export function ProductGrid({ products, isLoading }: ProductGridProps) {
   const [searchQuery, setSearchQuery] = useState("");
@@ -55,30 +55,30 @@ export function ProductGrid({ products, isLoading }: ProductGridProps) {
 
   if (isLoading) {
     return (
-      <div className="p-4 xl:p-5">
-        <div className="mb-4">
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div className="flex-1 max-w-md h-10 bg-gray-200 rounded-lg animate-pulse" />
-            <div className="flex items-center gap-3">
-              <div className="w-24 h-10 bg-gray-200 rounded-lg animate-pulse" />
-              <div className="w-32 h-10 bg-gray-200 rounded-lg animate-pulse" />
+      <div className="p-3 xl:p-4">
+        <div className="mb-3">
+          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+            <div className="h-9 flex-1 max-w-md rounded-lg bg-gray-200 animate-pulse" />
+            <div className="flex items-center gap-2">
+              <div className="h-9 w-20 rounded-lg bg-gray-200 animate-pulse" />
+              <div className="h-9 w-32 rounded-lg bg-gray-200 animate-pulse" />
             </div>
           </div>
         </div>
         
         <div className={catalogGridClass}>
-          {Array.from({ length: 14 }).map((_, i) => (
+          {Array.from({ length: 18 }).map((_, i) => (
             <div key={i} className="overflow-hidden rounded-lg border border-gray-200 bg-white">
-              <div className="w-full h-24 bg-gray-200 animate-pulse" />
-              <div className="p-3 space-y-2">
-                <div className="h-4 bg-gray-200 rounded animate-pulse" />
-                <div className="h-3 bg-gray-200 rounded animate-pulse w-3/4" />
-                <div className="h-3 bg-gray-200 rounded animate-pulse w-1/2" />
-                <div className="flex justify-between items-center">
-                  <div className="h-6 w-16 bg-gray-200 rounded animate-pulse" />
-                  <div className="h-6 w-12 bg-gray-200 rounded animate-pulse" />
+              <div className="h-20 w-full bg-gray-200 animate-pulse" />
+              <div className="space-y-2 p-2.5">
+                <div className="h-3.5 rounded bg-gray-200 animate-pulse" />
+                <div className="h-3 rounded bg-gray-200 animate-pulse" />
+                <div className="h-3 w-3/4 rounded bg-gray-200 animate-pulse" />
+                <div className="flex items-center justify-between">
+                  <div className="h-5 w-16 rounded bg-gray-200 animate-pulse" />
+                  <div className="h-5 w-12 rounded bg-gray-200 animate-pulse" />
                 </div>
-                <div className="h-10 bg-gray-200 rounded animate-pulse" />
+                <div className="h-8 rounded bg-gray-200 animate-pulse" />
               </div>
             </div>
           ))}
@@ -88,13 +88,13 @@ export function ProductGrid({ products, isLoading }: ProductGridProps) {
   }
 
   return (
-    <div className="p-4 xl:p-5">
+    <div className="p-3 xl:p-4">
       {/* Search and Controls */}
-      <div className="mb-4">
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+      <div className="mb-3">
+        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
           <SearchBar onSearch={setSearchQuery} />
           
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2">
             {/* View Mode Toggle */}
             <div className="flex items-center gap-1 rounded-lg border border-gray-300 bg-white p-1">
               <Button
@@ -102,6 +102,7 @@ export function ProductGrid({ products, isLoading }: ProductGridProps) {
                 size="sm"
                 onClick={() => setViewMode("grid")}
                 className={cn(
+                  "h-8 w-8 p-0",
                   viewMode === "grid" && "bg-gray-100 text-phomas-green"
                 )}
               >
@@ -112,6 +113,7 @@ export function ProductGrid({ products, isLoading }: ProductGridProps) {
                 size="sm"
                 onClick={() => setViewMode("list")}
                 className={cn(
+                  "h-8 w-8 p-0",
                   viewMode === "list" && "bg-gray-100 text-phomas-green"
                 )}
               >
@@ -121,7 +123,7 @@ export function ProductGrid({ products, isLoading }: ProductGridProps) {
             
             {/* Category Filter */}
             <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-              <SelectTrigger className="w-44">
+              <SelectTrigger className="h-9 w-40">
                 <SelectValue placeholder="All Categories" />
               </SelectTrigger>
               <SelectContent>

@@ -16,14 +16,14 @@ export function SearchBar({ onSearch, placeholder = "Search products by name or 
   };
 
   return (
-    <div className="relative flex-1 max-w-md">
+    <div className="relative max-w-md flex-1">
       <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
       <Input
         type="text"
         placeholder={placeholder}
         value={query}
         onChange={(e) => handleSearch(e.target.value)}
-        className="pl-10 focus:ring-2 focus:ring-phomas-green focus:border-transparent"
+        className="h-10 pl-10 focus:ring-2 focus:ring-phomas-green focus:border-transparent min-[900px]:h-9"
       />
     </div>
   );

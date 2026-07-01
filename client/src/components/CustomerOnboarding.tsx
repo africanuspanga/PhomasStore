@@ -56,7 +56,7 @@ export function CustomerOnboarding({ compact = false }: { compact?: boolean }) {
           setStepIndex(0);
           setOpen(true);
         }}
-        className={compact ? "h-9 px-2" : "h-9 border-phomas-green text-phomas-green hover:bg-green-50"}
+        className={compact ? "h-8 px-2 text-xs text-phomas-green hover:bg-green-50" : "h-9 border-phomas-green text-phomas-green hover:bg-green-50"}
         data-testid="button-open-customer-tour"
       >
         <PlayCircle className="h-4 w-4 mr-2" />
